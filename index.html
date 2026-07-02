@@ -372,6 +372,116 @@
       .navbar-custom .brand .brand-text .name { font-size: 1.1rem; }
       .navbar-custom .brand .brand-text .slogan-nav { font-size: 0.5rem; }
     }
+    /* ===== MENU PRINCIPAL ===== */
+.menu-wrapper {
+  min-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 40px 20px;
+  background: linear-gradient(135deg, #f4f7fc 0%, #e8edf9 100%);
+}
+
+.menu-header {
+  margin-bottom: 50px;
+}
+
+.menu-icon {
+  font-size: 4rem;
+  color: #213b7c;
+  background: rgba(33, 59, 124, 0.08);
+  padding: 20px;
+  border-radius: 50%;
+  margin-bottom: 10px;
+}
+
+.menu-title {
+  font-weight: 800;
+  font-size: 2.8rem;
+  color: #213b7c;
+  letter-spacing: -1px;
+  margin: 0;
+}
+
+.menu-slogan {
+  font-size: 1rem;
+  color: #41bae8;
+  font-weight: 600;
+  letter-spacing: 2px;
+  margin-top: 4px;
+}
+
+.menu-cards-container {
+  width: 100%;
+  max-width: 800px;
+}
+
+.menu-card {
+  cursor: pointer;
+  border: none;
+  border-radius: 24px;
+  box-shadow: 0 8px 30px rgba(33, 59, 124, 0.08);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  height: 100%;
+  padding: 20px;
+  background: #ffffff;
+}
+
+.menu-card:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 20px 50px rgba(33, 59, 124, 0.12);
+}
+
+.menu-card-icon {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: #e8edf9;
+  color: #213b7c;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 16px;
+  font-size: 2.2rem;
+  transition: 0.3s;
+}
+
+.menu-card:hover .menu-card-icon {
+  background: #213b7c;
+  color: #fff;
+}
+
+.menu-card .card-title {
+  font-weight: 700;
+  color: #1e293b;
+  font-size: 1.3rem;
+}
+
+.menu-card .card-text {
+  color: #64748b;
+  font-size: 0.95rem;
+  margin-bottom: 16px;
+}
+
+.menu-card .badge {
+  font-weight: 600;
+  padding: 6px 20px;
+  border-radius: 30px;
+  font-size: 0.8rem;
+}
+
+.bg-primary-custom {
+  background: #213b7c;
+  color: #fff;
+}
+
+/* Responsivo */
+@media (max-width: 768px) {
+  .menu-title { font-size: 2rem; }
+  .menu-icon { font-size: 3rem; padding: 16px; }
+  .menu-card-icon { width: 60px; height: 60px; font-size: 1.6rem; }
+}
   </style>
 </head>
 <body>
@@ -416,6 +526,45 @@
     </div>
   </div>
 
+  <!-- ==================== MENU PRINCIPAL ==================== -->
+<div id="menuPage" class="hidden">
+  <div class="menu-wrapper">
+    <div class="menu-header text-center">
+      <i class="fas fa-heartbeat menu-icon"></i>
+      <h1 class="menu-title">MÉTODOS</h1>
+      <p class="menu-slogan">ESPECIALISTA EM CUIDAR DE QUEM TRABALHA</p>
+    </div>
+    <div class="menu-cards-container">
+      <div class="row justify-content-center g-4">
+        <div class="col-md-5 col-lg-4">
+          <div class="card menu-card" data-target="faturamento">
+            <div class="card-body text-center">
+              <div class="menu-card-icon">
+                <i class="fas fa-file-invoice-dollar"></i>
+              </div>
+              <h5 class="card-title">Faturamento</h5>
+              <p class="card-text">Gerencie o faturamento mensal, dashboards e status de pagamento.</p>
+              <span class="badge bg-primary-custom">Acessar</span>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-5 col-lg-4">
+          <div class="card menu-card" data-target="esocial">
+            <div class="card-body text-center">
+              <div class="menu-card-icon" style="background: #e1f5fe; color: #41bae8;">
+                <i class="fas fa-upload"></i>
+              </div>
+              <h5 class="card-title">E-Social</h5>
+              <p class="card-text">Automatize o envio de eventos e-Social para seus colaboradores.</p>
+              <span class="badge bg-secondary">Em breve</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
   <!-- ==================== DASHBOARD ==================== -->
   <div id="dashboardPage" class="hidden dashboard-wrapper">
     <!-- Navbar -->
@@ -429,9 +578,12 @@
           </div>
         </a>
         <div class="user-info">
-          <span class="user-email" id="userEmail"></span>
-          <button class="btn btn-logout" id="logoutBtn"><i class="fas fa-sign-out-alt me-1"></i> Sair</button>
-        </div>
+        <button class="btn btn-outline-light btn-sm me-2" id="btnVoltarMenu" title="Voltar ao menu principal">
+          <i class="fas fa-arrow-left"></i> Voltar
+        </button>
+        <span class="user-email" id="userEmail"></span>
+        <button class="btn btn-logout" id="logoutBtn"><i class="fas fa-sign-out-alt me-1"></i> Sair</button>
+      </div>
       </div>
     </nav>
 
@@ -444,6 +596,11 @@
         <li class="nav-item" role="presentation">
           <button class="nav-link active" id="tab-relatorio" data-bs-toggle="tab" data-bs-target="#relatorio" type="button" role="tab">
             <i class="fas fa-chart-line"></i> Relatório
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link" id="tab-dashboard" data-bs-toggle="tab" data-bs-target="#dashboard" type="button" role="tab">
+            <i class="fas fa-chart-pie"></i> Dashboard
           </button>
         </li>
         <li class="nav-item" role="presentation">
@@ -519,6 +676,9 @@
             <div class="card-header d-flex justify-content-between align-items-center">
               <span><i class="fas fa-chart-line me-2 text-primary"></i> Faturamento por Unidade</span>
               <button class="btn btn-soft-primary" id="exportCsvBtn"><i class="fas fa-file-csv me-1"></i> CSV</button>
+              <button class="btn btn-outline-danger btn-sm" id="btnExcluirProcessamento" data-bs-toggle="modal" data-bs-target="#excluirModal">
+              <i class="fas fa-trash"></i> Excluir Processamento
+            </button>
             </div>
             <div class="card-body p-0">
               <div class="table-responsive">
@@ -541,6 +701,130 @@
             </div>
           </div>
         </div>
+
+        <!-- ====== ABA DASHBOARD ====== -->
+<div class="tab-pane fade" id="dashboard" role="tabpanel">
+  <!-- Filtros específicos do Dashboard -->
+  <div class="row g-3 align-items-end mb-4 mt-3">
+    <div class="col-md-4">
+      <label for="dashboardMonth" class="form-label fw-semibold">Mês</label>
+      <select id="dashboardMonth" class="form-select">
+        <option value="0">Todos</option>
+        <option value="1">Janeiro</option><option value="2">Fevereiro</option>
+        <option value="3">Março</option><option value="4">Abril</option>
+        <option value="5">Maio</option><option value="6">Junho</option>
+        <option value="7">Julho</option><option value="8">Agosto</option>
+        <option value="9">Setembro</option><option value="10">Outubro</option>
+        <option value="11">Novembro</option><option value="12">Dezembro</option>
+      </select>
+    </div>
+    <div class="col-md-4">
+      <label for="dashboardYear" class="form-label fw-semibold">Ano</label>
+      <select id="dashboardYear" class="form-select"></select>
+    </div>
+    <div class="col-md-4">
+      <button class="btn btn-primary-custom w-100" id="applyDashboardFilters"><i class="fas fa-filter me-1"></i> Atualizar Dashboard</button>
+    </div>
+  </div>
+
+  <!-- Cards de resumo -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-3">
+      <div class="card text-white bg-primary h-100">
+        <div class="card-body">
+          <h6 class="card-title"><i class="fas fa-stethoscope me-2"></i> Total de Exames</h6>
+          <h2 class="card-text" id="totalExames">0</h2>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card text-white bg-success h-100">
+        <div class="card-body">
+          <h6 class="card-title"><i class="fas fa-dollar-sign me-2"></i> Valor Total</h6>
+          <h2 class="card-text" id="valorTotal">R$ 0,00</h2>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card text-white bg-warning h-100">
+        <div class="card-body">
+          <h6 class="card-title"><i class="fas fa-users me-2"></i> Vidas</h6>
+          <h2 class="card-text" id="totalVidas">0</h2>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card text-white bg-info h-100">
+        <div class="card-body">
+          <h6 class="card-title"><i class="fas fa-file-invoice me-2"></i> Mensalidade</h6>
+          <h2 class="card-text" id="totalMensalidade">R$ 0,00</h2>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Exame Clínico vs Complementares -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-6">
+      <div class="card h-100">
+        <div class="card-header" style="background:#213b7c; color:#fff;">
+          <i class="fas fa-user-md me-2"></i> Exame Clínico
+        </div>
+        <div class="card-body">
+          <p><strong>Quantidade:</strong> <span id="clinicoQtd">0</span></p>
+          <p><strong>Valor:</strong> <span id="clinicoValor">R$ 0,00</span></p>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="card h-100">
+        <div class="card-header" style="background:#41bae8; color:#fff;">
+          <i class="fas fa-flask me-2"></i> Exames Complementares
+        </div>
+        <div class="card-body">
+          <p><strong>Quantidade:</strong> <span id="complementarQtd">0</span></p>
+          <p><strong>Valor:</strong> <span id="complementarValor">R$ 0,00</span></p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Comparativo visual -->
+  <div class="row mb-4">
+    <div class="col-md-12">
+      <div class="card">
+        <div class="card-header" style="background:#f59e0b; color:#fff;">
+          <i class="fas fa-chart-bar me-2"></i> Comparativo
+        </div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-4 text-center">
+              <h6>Valor Total</h6>
+              <h3 class="text-primary" id="comparativoTotal">R$ 0,00</h3>
+              <div class="progress" style="height: 10px;">
+                <div class="progress-bar bg-primary" id="barTotal" style="width: 100%;"></div>
+              </div>
+            </div>
+            <div class="col-md-4 text-center">
+              <h6>Mensalidade</h6>
+              <h3 class="text-info" id="comparativoMensalidade">R$ 0,00</h3>
+              <div class="progress" style="height: 10px;">
+                <div class="progress-bar bg-info" id="barMensalidade" style="width: 0%;"></div>
+              </div>
+            </div>
+            <div class="col-md-4 text-center">
+              <h6>Exames</h6>
+              <h3 class="text-success" id="comparativoDiferenca">R$ 0,00</h3>
+              <div class="progress" style="height: 10px;">
+                <div class="progress-bar bg-success" id="barDiferenca" style="width: 0%;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
         <!-- ====== ABA CADASTRO DE PREÇOS ====== -->
         <div class="tab-pane fade" id="cadastro" role="tabpanel">
@@ -760,6 +1044,43 @@
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Excluir Processamento -->
+<div class="modal fade" id="excluirModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Excluir Processamento</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p>Selecione o mês e ano para excluir todos os registros de faturamento.</p>
+        <div class="row">
+          <div class="col-6">
+            <label for="excluirMes" class="form-label">Mês</label>
+            <select id="excluirMes" class="form-select">
+              <option value="0">Selecione</option>
+              <option value="1">Janeiro</option><option value="2">Fevereiro</option>
+              <option value="3">Março</option><option value="4">Abril</option>
+              <option value="5">Maio</option><option value="6">Junho</option>
+              <option value="7">Julho</option><option value="8">Agosto</option>
+              <option value="9">Setembro</option><option value="10">Outubro</option>
+              <option value="11">Novembro</option><option value="12">Dezembro</option>
+            </select>
+          </div>
+          <div class="col-6">
+            <label for="excluirAno" class="form-label">Ano</label>
+            <select id="excluirAno" class="form-select"></select>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-danger" id="confirmarExcluir">Excluir</button>
       </div>
     </div>
   </div>

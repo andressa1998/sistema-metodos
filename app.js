@@ -9,7 +9,6 @@
   // ==================== EXAME CLÍNICO ====================
   'Avaliação Clínica Ocupacional (Anamnese e Exame físico)': 'exame_clinico',
   'Avaliação Clínica com ênfase Mental (Anamnese e Exame físico)': 'exame_clinico',
-  'Avaliação Psicossocial': 'exame_clinico',
 
   // ==================== AUDIOMETRIA ====================
   'Audiometria tonal ocupacional': 'audiometria',
@@ -31,7 +30,6 @@
 
   // ==================== HEMOGRAMA COMPLETO ====================
   'Hemograma com contagem de plaquetas ou frações (eritrograma, leucograma, plaquetas)': 'hemograma',
-  'Hemoglobina glicada (A1 total)': 'hemograma',
 
   // ==================== ANTI HBS ====================
   'Hepatite B - HBsAC (anti-HBs)': 'anti_hbs',
@@ -57,6 +55,7 @@
 
   // ==================== GLICOSE ====================
   'Glicemia': 'glicose',
+  'Hemoglobina glicada (A1 total)': 'glicose',
 
   // ==================== PESQUISA DE FUNGOS ====================
   'Fungos, pesquisa a fresco': 'pesquisa_fungos',
@@ -68,6 +67,28 @@
    'Visita Técnica': 'visita_tec',
    'Transporte': 'transporte',
 };
+
+// ========================= UNIDADES IGNORADAS (não são mais clientes) =========================
+const UNIDADES_IGNORADAS = [
+  'CAPANEMA MOVEIS',
+  'AF ACADEMIA CARATINGA',
+  'RAFAEL CRISTIAN DA SILVA',
+  'SANTOS & FILHOS MATERIAIS',
+  'SANTOS & SANTOS MATERIAIS DE CONSTRUCAO',
+  'UNIDADE DO FUNCIONARIO'
+];
+// Função para normalizar e verificar se a unidade está na lista de ignorados
+function isUnidadeIgnorada(nome) {
+  if (!nome) return false;
+  const normalizado = normalizarUnidade(nome);
+  return UNIDADES_IGNORADAS.some(ignorada => {
+    return normalizarUnidade(ignorada) === normalizado;
+  });
+}
+
+function formatarMoeda(valor) {
+  return valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
 
 // ========================= NORMALIZAÇÃO DE NOMES DE UNIDADES =========================
 function normalizarUnidade(nome) {
@@ -188,6 +209,7 @@ async function exportarPrecos() {
   document.addEventListener('DOMContentLoaded', function () {
     // ========================= REFERÊNCIAS AOS ELEMENTOS =========================
     const loginPage = document.getElementById('loginPage');
+    const menuPage = document.getElementById('menuPage');
     const dashboardPage = document.getElementById('dashboardPage');
     const loginForm = document.getElementById('loginForm');
     const registerForm = document.getElementById('registerForm');
@@ -235,25 +257,52 @@ async function exportarPrecos() {
 
     function mostrarPaginaLogin() {
       loginPage.classList.remove('hidden');
+      menuPage.classList.add('hidden');
       dashboardPage.classList.add('hidden');
     }
 
+    function mostrarMenu(user) {
+      loginPage.classList.add('hidden');
+      menuPage.classList.remove('hidden');
+      dashboardPage.classList.add('hidden');
+      userEmailSpan.textContent = user.email;
+      // Resetar status
+      statusFiltroAtual = 'todos';
+      document.querySelectorAll('[data-status]').forEach(b => b.classList.remove('active'));
+      const btnTodos = document.querySelector('[data-status="todos"]');
+      if (btnTodos) btnTodos.classList.add('active');
+    }
+
     function mostrarDashboard(user) {
-    loginPage.classList.add('hidden');
-    dashboardPage.classList.remove('hidden');
-    userEmailSpan.textContent = user.email;
-    statusFiltroAtual = 'todos';
-    // Marcar o botão "Todos" como ativo
-    document.querySelectorAll('[data-status]').forEach(b => b.classList.remove('active'));
-    const btnTodos = document.querySelector('[data-status="todos"]');
-    if (btnTodos) btnTodos.classList.add('active');
-    carregarRelatorio(0, 0, '', 'todos');
-    carregarPrecos();
-  }
+  loginPage.classList.add('hidden');
+  menuPage.classList.add('hidden');
+  dashboardPage.classList.remove('hidden');
+  document.getElementById('userEmail').textContent = user.email;
+  // Ativar a aba relatório
+  document.querySelector('#tab-relatorio').click();
+  // Carregar dados iniciais
+  carregarRelatorio(0, 0, '', 'todos');
+  carregarDadosDashboard(0, 0); // todos os meses
+  carregarPrecos();
+}
+
+    // ========================= EVENTOS DO MENU =========================
+    document.querySelectorAll('.menu-card').forEach(card => {
+      card.addEventListener('click', function() {
+        const target = this.dataset.target;
+        if (target === 'faturamento') {
+          mostrarDashboard((supabaseClient.auth.getUser())?.data?.user || { email: userEmailSpan.textContent });
+        }
+        // Futuramente: 'esocial'
+      });
+    });
+
+    // ========================= AUTENTICAÇÃO - SESSÃO =========================
+    let statusFiltroAtual = 'todos';
 
     supabaseClient.auth.getSession().then(({ data }) => {
       if (data.session) {
-        mostrarDashboard(data.session.user);
+        mostrarMenu(data.session.user);
       } else {
         mostrarPaginaLogin();
       }
@@ -266,7 +315,7 @@ async function exportarPrecos() {
       try {
         await fazerLogin(email, password);
         const user = (await supabaseClient.auth.getUser()).data.user;
-        mostrarDashboard(user);
+        mostrarMenu(user);
       } catch (err) {
         loginMessage.innerHTML = `<div class="alert alert-danger">${err.message}</div>`;
       }
@@ -510,12 +559,10 @@ async function exportarPrecos() {
 
     // ========================= PROCESSAMENTO DE UPLOAD (com substituição) =========================
 async function processarUpload(file, mesReferencia = 0, anoReferencia = 0) {
-  // Se não foi passado mês/ano, usa o mês atual
   const now = new Date();
   const mes = mesReferencia || now.getMonth() + 1;
   const ano = anoReferencia || now.getFullYear();
 
-  // ========================= 1. LER PLANILHA =========================
   const data = await file.arrayBuffer();
   const workbook = XLSX.read(data, { type: 'array' });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -537,8 +584,8 @@ async function processarUpload(file, mesReferencia = 0, anoReferencia = 0) {
 
   const dataRows = rows.slice(headerRowIndex + 1);
 
-  // ========================= 2. EXTRAIR UNIDADES E EXAMES DA PLANILHA =========================
-  const examesPorUnidade = {}; // { unidadeNormalizada: [ {exameNormalizado, preco, mes, ano} ] }
+  // Extrair unidades e exames, ignorando as da blacklist
+  const examesPorUnidade = {};
   const unidadesPlanilha = new Set();
 
   for (let row of dataRows) {
@@ -546,6 +593,9 @@ async function processarUpload(file, mesReferencia = 0, anoReferencia = 0) {
     const exameUpload = row[0]?.toString().trim();
     const unidadePlanilha = row[4]?.toString().trim();
     if (!exameUpload || !unidadePlanilha) continue;
+
+    // Ignorar se estiver na blacklist
+    if (isUnidadeIgnorada(unidadePlanilha)) continue;
 
     const exameNormalizado = normalizarNomeExame(exameUpload);
     if (!exameNormalizado) continue;
@@ -562,21 +612,20 @@ async function processarUpload(file, mesReferencia = 0, anoReferencia = 0) {
     });
   }
 
-  // ========================= 3. BUSCAR TODAS AS UNIDADES CADASTRADAS =========================
+  // Buscar todas as unidades cadastradas
   const { data: todasUnidades, error: unidadesError } = await supabaseClient
     .from('precos')
     .select('*');
 
   if (unidadesError) throw unidadesError;
 
-  // Mapa de normalização para encontrar a unidade cadastrada
   const mapaUnidades = {};
   todasUnidades.forEach(u => {
     const chave = normalizarUnidade(u.unidade);
     mapaUnidades[chave] = u;
   });
 
-  // ========================= 4. COLETAR UNIDADES NÃO ENCONTRADAS =========================
+  // Coletar unidades não encontradas (excluindo ignoradas)
   const unidadesNaoEncontradas = [];
   for (let chave of unidadesPlanilha) {
     if (!mapaUnidades[chave]) {
@@ -584,24 +633,23 @@ async function processarUpload(file, mesReferencia = 0, anoReferencia = 0) {
     }
   }
 
-  // ========================= 5. PREPARAR REGISTROS PARA TODAS AS UNIDADES =========================
+  // Preparar registros para todas as unidades cadastradas
   const registros = [];
 
   for (let chave in mapaUnidades) {
     const unidade = mapaUnidades[chave];
     const nomeUnidade = unidade.unidade;
 
-    // Inicializar detalhes e total
     const detalhes = {};
     let total = 0;
 
-    // Adicionar mensalidade (se houver)
+    // Mensalidade
     if (unidade.mensalidade && unidade.mensalidade > 0) {
       total += unidade.mensalidade;
       detalhes['mensalidade'] = { quantidade: 1, precoUnitario: unidade.mensalidade };
     }
 
-    // Adicionar vidas (se houver)
+    // Vidas
     if (unidade.vidas && unidade.qtd_vidas) {
       const valorVidas = unidade.vidas * unidade.qtd_vidas;
       total += valorVidas;
@@ -612,18 +660,11 @@ async function processarUpload(file, mesReferencia = 0, anoReferencia = 0) {
       };
     }
 
-    // Adicionar exames da planilha para esta unidade
+    // Exames da planilha
     if (examesPorUnidade[chave]) {
-      // Buscar preços dos exames
-      const examesList = examesPorUnidade[chave].map(e => e.exame);
-      // Precisamos buscar os preços individualmente
-      // Como já temos a unidade, podemos pegar o preço do campo correspondente
       for (let ex of examesPorUnidade[chave]) {
         const preco = unidade[ex.exame] || 0;
-        if (preco === 0) {
-          // Se for zero, alertamos (opcional)
-          continue;
-        }
+        if (preco === 0) continue;
         total += preco;
         if (!detalhes[ex.exame]) {
           detalhes[ex.exame] = { quantidade: 0, precoUnitario: preco };
@@ -632,11 +673,7 @@ async function processarUpload(file, mesReferencia = 0, anoReferencia = 0) {
       }
     }
 
-    // Se o total for zero, não geramos registro? Vamos gerar mesmo assim, com valor zero, para manter controle.
-    // Mas podemos gerar apenas se tiver pelo menos mensalidade, vidas ou exames.
-    // O ideal é gerar para todas, pois o usuário quer ver todas as unidades.
-
-    // Calcular data de vencimento
+    // Data de vencimento
     const diaVencimento = unidade.dia_vencimento || 10;
     const ultimoDia = new Date(ano, mes, 0).getDate();
     const diaFinal = Math.min(diaVencimento, ultimoDia);
@@ -657,8 +694,7 @@ async function processarUpload(file, mesReferencia = 0, anoReferencia = 0) {
 
   if (registros.length === 0) throw new Error('Nenhuma unidade cadastrada para gerar faturamento.');
 
-  // ========================= 6. SUBSTITUIR DADOS ANTIGOS =========================
-  // Deletar registros existentes para as mesmas unidades, mês e ano
+  // Deletar registros antigos
   const { error: deleteError } = await supabaseClient
     .from('faturamento')
     .delete()
@@ -669,7 +705,7 @@ async function processarUpload(file, mesReferencia = 0, anoReferencia = 0) {
     console.warn('Erro ao deletar registros antigos:', deleteError);
   }
 
-  // ========================= 7. INSERIR NOVOS REGISTROS =========================
+  // Inserir novos registros
   const { error: insertError } = await supabaseClient
     .from('faturamento')
     .insert(registros);
@@ -708,6 +744,9 @@ async function processarUpload(file, mesReferencia = 0, anoReferencia = 0) {
     mostrarAlerta('Erro ao carregar relatório: ' + error.message, 'danger');
     return;
   }
+
+  // Atualizar dashboards
+  atualizarDashboards(data);
 
   const tbody = document.getElementById('resultsBody');
   if (!data || data.length === 0) {
@@ -895,61 +934,144 @@ function mostrarDetalhes(unidade, mes, ano, detalhes) {
       </div>`;
     }
 
-    // ========================= EVENTOS DA INTERFACE =========================
-    document.getElementById('processUploadBtn').addEventListener('click', async () => {
-  const fileInput = document.getElementById('uploadFileInput');
-  const status = document.getElementById('uploadStatus');
-  const feedback = document.getElementById('uploadFeedback');
-
-  if (!fileInput.files || fileInput.files.length === 0) {
-    status.innerHTML = '<span class="text-warning">Selecione um arquivo.</span>';
-    feedback.innerHTML = '';
-    return;
-  }
-
-  // Ler mês/ano dos filtros
-  const mesFiltro = parseInt(document.getElementById('filterMonth').value) || 0;
-  const anoFiltro = parseInt(document.getElementById('filterYear').value) || 0;
-  const mesRef = mesFiltro || new Date().getMonth() + 1;
-  const anoRef = anoFiltro || new Date().getFullYear();
-
-  status.innerHTML = `<span class="text-info">Processando para ${mesRef}/${anoRef}...</span>`;
-  feedback.innerHTML = '';
-
-  try {
-    const result = await processarUpload(fileInput.files[0], mesRef, anoRef);
-    status.innerHTML = `<span class="text-success">✓ ${result.totalRegistros} unidades processadas. Total geral: R$ ${result.totalGeral.toFixed(2)}</span>`;
-
-    if (result.unidadesNaoEncontradas && result.unidadesNaoEncontradas.length > 0) {
-      let lista = result.unidadesNaoEncontradas.map(u => `<li class="list-unstyled">${u}</li>`).join('');
-      feedback.innerHTML = `
-        <div class="alert alert-warning alert-dismissible fade show" role="alert">
-          <strong><i class="fas fa-exclamation-triangle"></i> Unidades na planilha não encontradas no cadastro:</strong>
-          <ul class="mb-0 mt-1" style="list-style: none; padding-left: 0;">${lista}</ul>
-          <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        </div>
-      `;
+    document.getElementById('btnVoltarMenu').addEventListener('click', function() {
+  // Busca o usuário atual
+  supabaseClient.auth.getUser().then(({ data }) => {
+    if (data.user) {
+      mostrarMenu(data.user);
     } else {
-      feedback.innerHTML = '';
+      // Fallback: usa o email do span
+      const email = document.getElementById('userEmail').textContent;
+      mostrarMenu({ email: email });
     }
-
-    // Recarregar relatório com os mesmos filtros
-    const mesF = parseInt(document.getElementById('filterMonth').value);
-    const anoF = parseInt(document.getElementById('filterYear').value);
-    const unidadeF = document.getElementById('filterUnit').value.trim();
-    carregarRelatorio(mesF, anoF, unidadeF, statusFiltroAtual);
-  } catch (err) {
-    status.innerHTML = `<span class="text-danger">Erro: ${err.message}</span>`;
-    feedback.innerHTML = '';
-  }
+  });
 });
 
-    document.getElementById('applyFiltersBtn').addEventListener('click', () => {
-      const mes = parseInt(document.getElementById('filterMonth').value);
-      const ano = parseInt(document.getElementById('filterYear').value);
-      const unidade = document.getElementById('filterUnit').value.trim();
-      carregarRelatorio(mes, ano, unidade, statusFiltroAtual);
+    // ========================= DASHBOARDS =========================
+    function atualizarDashboards(dados) {
+  let totalExames = 0;
+  let valorTotal = 0;
+  let totalVidas = 0;
+  let totalMensalidade = 0;
+  let clinicoQtd = 0;
+  let clinicoValor = 0;
+  let complementarQtd = 0;
+  let complementarValor = 0;
+
+  dados.forEach(row => {
+    valorTotal += row.valor_total;
+    if (row.detalhes) {
+      for (let [nome, info] of Object.entries(row.detalhes)) {
+        let qtd = (typeof info === 'object' && info.quantidade !== undefined) ? info.quantidade : info;
+        let preco = (typeof info === 'object' && info.precoUnitario !== undefined) ? info.precoUnitario : 0;
+        if (nome === 'vidas (NR-1)') {
+          totalVidas += qtd;
+        } else if (nome === 'mensalidade') {
+          totalMensalidade += qtd * preco;
+        } else if (nome === 'exame_clinico') {
+          clinicoQtd += qtd;
+          clinicoValor += qtd * preco;
+        } else {
+          complementarQtd += qtd;
+          complementarValor += qtd * preco;
+        }
+        totalExames += qtd;
+      }
+    }
+  });
+
+  // Atualizar cards
+  document.getElementById('totalExames').textContent = totalExames;
+  document.getElementById('valorTotal').textContent = 'R$ ' + formatarMoeda(valorTotal);
+  document.getElementById('totalVidas').textContent = totalVidas;
+  document.getElementById('totalMensalidade').textContent = 'R$ ' + formatarMoeda(totalMensalidade);
+
+  document.getElementById('clinicoQtd').textContent = clinicoQtd;
+  document.getElementById('clinicoValor').textContent = 'R$ ' + formatarMoeda(clinicoValor);
+  document.getElementById('complementarQtd').textContent = complementarQtd;
+  document.getElementById('complementarValor').textContent = 'R$ ' + formatarMoeda(complementarValor);
+
+  // Comparativo com barras de progresso
+  document.getElementById('comparativoTotal').textContent = 'R$ ' + formatarMoeda(valorTotal);
+  document.getElementById('comparativoMensalidade').textContent = 'R$ ' + formatarMoeda(totalMensalidade);
+  const diferenca = valorTotal - totalMensalidade;
+  document.getElementById('comparativoDiferenca').textContent = 'R$ ' + formatarMoeda(diferenca);
+
+  // Barras de progresso (baseado no valor total)
+  const maxValor = Math.max(valorTotal, totalMensalidade, diferenca, 1);
+  document.getElementById('barTotal').style.width = (valorTotal / maxValor * 100) + '%';
+  document.getElementById('barMensalidade').style.width = (totalMensalidade / maxValor * 100) + '%';
+  document.getElementById('barDiferenca').style.width = (diferenca / maxValor * 100) + '%';
+}
+
+    // ========================= EVENTOS DA INTERFACE =========================
+    document.getElementById('processUploadBtn').addEventListener('click', async () => {
+      const fileInput = document.getElementById('uploadFileInput');
+      const status = document.getElementById('uploadStatus');
+      const feedback = document.getElementById('uploadFeedback');
+
+      if (!fileInput.files || fileInput.files.length === 0) {
+        status.innerHTML = '<span class="text-warning">Selecione um arquivo.</span>';
+        feedback.innerHTML = '';
+        return;
+      }
+
+      // Ler mês/ano dos filtros
+      const mesFiltro = parseInt(document.getElementById('filterMonth').value) || 0;
+      const anoFiltro = parseInt(document.getElementById('filterYear').value) || 0;
+      const mesRef = mesFiltro || new Date().getMonth() + 1;
+      const anoRef = anoFiltro || new Date().getFullYear();
+
+      status.innerHTML = `<span class="text-info">Processando para ${mesRef}/${anoRef}...</span>`;
+      feedback.innerHTML = '';
+
+      try {
+        const result = await processarUpload(fileInput.files[0], mesRef, anoRef);
+        status.innerHTML = `<span class="text-success">✓ ${result.totalRegistros} unidades processadas. Total geral: R$ ${result.totalGeral.toFixed(2)}</span>`;
+
+        if (result.unidadesNaoEncontradas && result.unidadesNaoEncontradas.length > 0) {
+          let lista = result.unidadesNaoEncontradas.map(u => `<li class="list-unstyled">${u}</li>`).join('');
+          feedback.innerHTML = `
+            <div class="alert alert-warning alert-dismissible fade show" role="alert">
+              <strong><i class="fas fa-exclamation-triangle"></i> Unidades na planilha não encontradas no cadastro:</strong>
+              <ul class="mb-0 mt-1" style="list-style: none; padding-left: 0;">${lista}</ul>
+              <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+          `;
+        } else {
+          feedback.innerHTML = '';
+        }
+
+        // Recarregar relatório com os mesmos filtros
+        const mesF = parseInt(document.getElementById('filterMonth').value);
+        const anoF = parseInt(document.getElementById('filterYear').value);
+        const unidadeF = document.getElementById('filterUnit').value.trim();
+        carregarRelatorio(mesF, anoF, unidadeF, statusFiltroAtual);
+      } catch (err) {
+        status.innerHTML = `<span class="text-danger">Erro: ${err.message}</span>`;
+        feedback.innerHTML = '';
+      }
     });
+
+    const dashboardTab = document.getElementById('dashboard');
+if (dashboardTab.classList.contains('show')) {
+  const mesF = parseInt(document.getElementById('filterMonth').value);
+  const anoF = parseInt(document.getElementById('filterYear').value);
+  const unidadeF = document.getElementById('filterUnit').value.trim();
+  carregarDadosDashboard(mesF, anoF, unidadeF);
+}
+
+    document.getElementById('applyFiltersBtn').addEventListener('click', () => {
+  const mes = parseInt(document.getElementById('filterMonth').value);
+  const ano = parseInt(document.getElementById('filterYear').value);
+  const unidade = document.getElementById('filterUnit').value.trim();
+  carregarRelatorio(mes, ano, unidade, statusFiltroAtual);
+  // Se a aba Dashboard estiver ativa, atualiza também
+  const dashboardTab = document.getElementById('dashboard');
+  if (dashboardTab.classList.contains('show')) {
+    carregarDadosDashboard(mes, ano, unidade);
+  }
+});
 
     // Filtros de status
     document.querySelectorAll('[data-status]').forEach(btn => {
@@ -966,6 +1088,82 @@ function mostrarDetalhes(unidade, mes, ano, detalhes) {
 
     document.getElementById('exportPrecosBtn').addEventListener('click', exportarPrecos);
 
+    // ========================= EXCLUSÃO DE PROCESSAMENTO =========================
+    function popularAnosExcluir() {
+      const select = document.getElementById('excluirAno');
+      const anoAtual = new Date().getFullYear();
+      for (let y = anoAtual; y >= anoAtual - 5; y--) {
+        const option = document.createElement('option');
+        option.value = y;
+        option.textContent = y;
+        select.appendChild(option);
+      }
+    }
+    popularAnosExcluir();
+
+    document.getElementById('confirmarExcluir').addEventListener('click', async function() {
+      const mes = parseInt(document.getElementById('excluirMes').value);
+      const ano = parseInt(document.getElementById('excluirAno').value);
+      if (!mes || !ano) {
+        mostrarAlerta('Selecione mês e ano.', 'warning');
+        return;
+      }
+      if (confirm(`Deseja realmente excluir todos os registros de ${mes}/${ano}?`)) {
+        try {
+          const { error } = await supabaseClient
+            .from('faturamento')
+            .delete()
+            .eq('mes', mes)
+            .eq('ano', ano);
+          if (error) throw error;
+          mostrarAlerta(`Registros de ${mes}/${ano} excluídos com sucesso.`, 'success');
+          const mesF = parseInt(document.getElementById('filterMonth').value);
+          const anoF = parseInt(document.getElementById('filterYear').value);
+          const unidadeF = document.getElementById('filterUnit').value.trim();
+          carregarRelatorio(mesF, anoF, unidadeF, statusFiltroAtual);
+          bootstrap.Modal.getInstance(document.getElementById('excluirModal')).hide();
+        } catch (err) {
+          mostrarAlerta('Erro ao excluir: ' + err.message, 'danger');
+        }
+      }
+    });
+
+    // ========================= OUTROS EVENTOS =========================
+    // Quando a aba Dashboard for mostrada, atualiza os dados
+document.getElementById('tab-dashboard').addEventListener('shown.bs.tab', function () {
+  const mes = parseInt(document.getElementById('filterMonth').value);
+  const ano = parseInt(document.getElementById('filterYear').value);
+  const unidade = document.getElementById('filterUnit').value.trim();
+  // Busca os dados com os filtros atuais (mas sem o filtro de status)
+  carregarDadosDashboard(mes, ano, unidade);
+});
+
+// Função separada para carregar apenas os dados do dashboard
+async function carregarDadosDashboard(mes = 0, ano = 0) {
+  let query = supabaseClient.from('faturamento').select('*');
+  if (mes > 0) query = query.eq('mes', mes);
+  if (ano > 0) query = query.eq('ano', ano);
+
+  const { data, error } = await query;
+  if (error) {
+    mostrarAlerta('Erro ao carregar dashboard: ' + error.message, 'danger');
+    return;
+  }
+  atualizarDashboards(data || []);
+}
+
+function popularAnosDashboard() {
+  const select = document.getElementById('dashboardYear');
+  const anoAtual = new Date().getFullYear();
+  for (let y = anoAtual; y >= anoAtual - 5; y--) {
+    const option = document.createElement('option');
+    option.value = y;
+    option.textContent = y;
+    select.appendChild(option);
+  }
+  select.value = anoAtual;
+}
+popularAnosDashboard();
     function popularAnos() {
       const select = document.getElementById('filterYear');
       const anoAtual = new Date().getFullYear();
@@ -978,6 +1176,12 @@ function mostrarDetalhes(unidade, mes, ano, detalhes) {
       select.value = anoAtual;
     }
     popularAnos();
+
+    document.getElementById('applyDashboardFilters').addEventListener('click', function() {
+      const mes = parseInt(document.getElementById('dashboardMonth').value);
+      const ano = parseInt(document.getElementById('dashboardYear').value);
+      carregarDadosDashboard(mes, ano);
+    });
 
     document.getElementById('exportCsvBtn').addEventListener('click', () => {
       const table = document.getElementById('resultsTable');
@@ -1000,8 +1204,6 @@ function mostrarDetalhes(unidade, mes, ano, detalhes) {
       link.click();
     });
 
-    // Carregar dados iniciais
-    carregarRelatorio();
-    // carregarPrecos() é chamado dentro do mostrarDashboard
+    // Carregar dados iniciais (será chamado ao clicar no card)
   });
 }
