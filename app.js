@@ -1203,6 +1203,7 @@ popularAnosDashboard();
       link.download = 'faturamento.csv';
       link.click();
     });
+    popularAnosDashboard();
 
     // Carregar dados iniciais (será chamado ao clicar no card)
   });
