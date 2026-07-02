@@ -274,17 +274,17 @@ async function exportarPrecos() {
     }
 
     function mostrarDashboard(user) {
-  loginPage.classList.add('hidden');
-  menuPage.classList.add('hidden');
-  dashboardPage.classList.remove('hidden');
-  document.getElementById('userEmail').textContent = user.email;
-  // Ativar a aba relatório
-  document.querySelector('#tab-relatorio').click();
-  // Carregar dados iniciais
-  carregarRelatorio(0, 0, '', 'todos');
-  carregarDadosDashboard(0, 0); // todos os meses
-  carregarPrecos();
-}
+      loginPage.classList.add('hidden');
+      menuPage.classList.add('hidden');
+      dashboardPage.classList.remove('hidden');
+      document.getElementById('userEmail').textContent = user.email;
+      // Ativar a aba relatório
+      document.querySelector('#tab-relatorio').click();
+      // Carregar dados iniciais
+      carregarRelatorio(0, 0, '', 'todos');
+      carregarDadosDashboard(0, 0);
+      carregarPrecos();
+    }
 
     // ========================= EVENTOS DO MENU =========================
     document.querySelectorAll('.menu-card').forEach(card => {
@@ -340,7 +340,7 @@ async function exportarPrecos() {
     });
 
     // ========================= CRUD PREÇOS =========================
-    let precosDataGlobal = []; // Guarda todos os registros para filtro
+    let precosDataGlobal = [];
 
     async function carregarPrecos() {
       const { data, error } = await supabaseClient
@@ -378,7 +378,6 @@ async function exportarPrecos() {
       });
       tbody.innerHTML = html;
 
-      // Eventos de editar/excluir
       document.querySelectorAll('.btn-edit').forEach(btn => {
         btn.addEventListener('click', () => {
           const id = parseInt(btn.dataset.id);
@@ -393,7 +392,6 @@ async function exportarPrecos() {
       });
     }
 
-    // Filtro em tempo real na tabela de preços
     document.getElementById('searchPreco').addEventListener('input', function () {
       const termo = this.value.toLowerCase().trim();
       if (!termo) {
@@ -557,7 +555,7 @@ async function exportarPrecos() {
       }
     });
 
-    // ========================= PROCESSAMENTO DE UPLOAD (com substituição) =========================
+    // ========================= PROCESSAMENTO DE UPLOAD =========================
 async function processarUpload(file, mesReferencia = 0, anoReferencia = 0) {
   const now = new Date();
   const mes = mesReferencia || now.getMonth() + 1;
@@ -568,7 +566,6 @@ async function processarUpload(file, mesReferencia = 0, anoReferencia = 0) {
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
   const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
 
-  // Encontrar cabeçalho
   let headerRowIndex = -1;
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
@@ -584,7 +581,6 @@ async function processarUpload(file, mesReferencia = 0, anoReferencia = 0) {
 
   const dataRows = rows.slice(headerRowIndex + 1);
 
-  // Extrair unidades e exames, ignorando as da blacklist
   const examesPorUnidade = {};
   const unidadesPlanilha = new Set();
 
@@ -594,7 +590,6 @@ async function processarUpload(file, mesReferencia = 0, anoReferencia = 0) {
     const unidadePlanilha = row[4]?.toString().trim();
     if (!exameUpload || !unidadePlanilha) continue;
 
-    // Ignorar se estiver na blacklist
     if (isUnidadeIgnorada(unidadePlanilha)) continue;
 
     const exameNormalizado = normalizarNomeExame(exameUpload);
@@ -612,7 +607,6 @@ async function processarUpload(file, mesReferencia = 0, anoReferencia = 0) {
     });
   }
 
-  // Buscar todas as unidades cadastradas
   const { data: todasUnidades, error: unidadesError } = await supabaseClient
     .from('precos')
     .select('*');
@@ -625,7 +619,6 @@ async function processarUpload(file, mesReferencia = 0, anoReferencia = 0) {
     mapaUnidades[chave] = u;
   });
 
-  // Coletar unidades não encontradas (excluindo ignoradas)
   const unidadesNaoEncontradas = [];
   for (let chave of unidadesPlanilha) {
     if (!mapaUnidades[chave]) {
@@ -633,7 +626,6 @@ async function processarUpload(file, mesReferencia = 0, anoReferencia = 0) {
     }
   }
 
-  // Preparar registros para todas as unidades cadastradas
   const registros = [];
 
   for (let chave in mapaUnidades) {
@@ -643,13 +635,11 @@ async function processarUpload(file, mesReferencia = 0, anoReferencia = 0) {
     const detalhes = {};
     let total = 0;
 
-    // Mensalidade
     if (unidade.mensalidade && unidade.mensalidade > 0) {
       total += unidade.mensalidade;
       detalhes['mensalidade'] = { quantidade: 1, precoUnitario: unidade.mensalidade };
     }
 
-    // Vidas
     if (unidade.vidas && unidade.qtd_vidas) {
       const valorVidas = unidade.vidas * unidade.qtd_vidas;
       total += valorVidas;
@@ -660,7 +650,6 @@ async function processarUpload(file, mesReferencia = 0, anoReferencia = 0) {
       };
     }
 
-    // Exames da planilha
     if (examesPorUnidade[chave]) {
       for (let ex of examesPorUnidade[chave]) {
         const preco = unidade[ex.exame] || 0;
@@ -673,7 +662,6 @@ async function processarUpload(file, mesReferencia = 0, anoReferencia = 0) {
       }
     }
 
-    // Data de vencimento
     const diaVencimento = unidade.dia_vencimento || 10;
     const ultimoDia = new Date(ano, mes, 0).getDate();
     const diaFinal = Math.min(diaVencimento, ultimoDia);
@@ -694,7 +682,6 @@ async function processarUpload(file, mesReferencia = 0, anoReferencia = 0) {
 
   if (registros.length === 0) throw new Error('Nenhuma unidade cadastrada para gerar faturamento.');
 
-  // Deletar registros antigos
   const { error: deleteError } = await supabaseClient
     .from('faturamento')
     .delete()
@@ -705,7 +692,6 @@ async function processarUpload(file, mesReferencia = 0, anoReferencia = 0) {
     console.warn('Erro ao deletar registros antigos:', deleteError);
   }
 
-  // Inserir novos registros
   const { error: insertError } = await supabaseClient
     .from('faturamento')
     .insert(registros);
@@ -729,7 +715,6 @@ async function processarUpload(file, mesReferencia = 0, anoReferencia = 0) {
   if (ano > 0) query = query.eq('ano', ano);
   if (unidadeFiltro) query = query.ilike('unidade', `%${unidadeFiltro}%`);
 
-  // Aplicar filtro de status
   if (status === 'pendentes') {
     query = query.eq('nota_emitida', false).eq('boleto_enviado', false).eq('pago', false);
   } else if (status === 'enviado') {
@@ -737,7 +722,6 @@ async function processarUpload(file, mesReferencia = 0, anoReferencia = 0) {
   } else if (status === 'pago') {
     query = query.eq('pago', true);
   }
-  // 'todos' não aplica filtro adicional
 
   const { data, error } = await query.order('ano', { ascending: false }).order('mes', { ascending: false });
   if (error) {
@@ -745,7 +729,6 @@ async function processarUpload(file, mesReferencia = 0, anoReferencia = 0) {
     return;
   }
 
-  // Atualizar dashboards
   atualizarDashboards(data);
 
   const tbody = document.getElementById('resultsBody');
@@ -834,7 +817,6 @@ async function processarUpload(file, mesReferencia = 0, anoReferencia = 0) {
   });
   tbody.innerHTML = html;
 
-  // Evento toggle status (Enviado e Pago)
   document.querySelectorAll('.toggle-status').forEach(btn => {
     btn.addEventListener('click', async function() {
       const id = this.dataset.id;
@@ -854,7 +836,6 @@ async function processarUpload(file, mesReferencia = 0, anoReferencia = 0) {
           .update(updateData)
           .eq('id', id);
         if (error) throw error;
-        // Recarregar com os mesmos filtros
         const mesFiltro = parseInt(document.getElementById('filterMonth').value);
         const anoFiltro = parseInt(document.getElementById('filterYear').value);
         const unidadeFiltro = document.getElementById('filterUnit').value.trim();
@@ -865,7 +846,6 @@ async function processarUpload(file, mesReferencia = 0, anoReferencia = 0) {
     });
   });
 
-  // Evento detalhes (olhinho)
   document.querySelectorAll('.btn-detalhes').forEach(btn => {
     btn.addEventListener('click', function() {
       const unidade = this.dataset.unidade;
@@ -935,74 +915,69 @@ function mostrarDetalhes(unidade, mes, ano, detalhes) {
     }
 
     document.getElementById('btnVoltarMenu').addEventListener('click', function() {
-  // Busca o usuário atual
-  supabaseClient.auth.getUser().then(({ data }) => {
-    if (data.user) {
-      mostrarMenu(data.user);
-    } else {
-      // Fallback: usa o email do span
-      const email = document.getElementById('userEmail').textContent;
-      mostrarMenu({ email: email });
-    }
-  });
-});
+      supabaseClient.auth.getUser().then(({ data }) => {
+        if (data.user) {
+          mostrarMenu(data.user);
+        } else {
+          const email = document.getElementById('userEmail').textContent;
+          mostrarMenu({ email: email });
+        }
+      });
+    });
 
     // ========================= DASHBOARDS =========================
     function atualizarDashboards(dados) {
-  let totalExames = 0;
-  let valorTotal = 0;
-  let totalVidas = 0;
-  let totalMensalidade = 0;
-  let clinicoQtd = 0;
-  let clinicoValor = 0;
-  let complementarQtd = 0;
-  let complementarValor = 0;
+      let totalExames = 0;
+      let valorTotal = 0;
+      let totalVidas = 0;
+      let totalMensalidade = 0;
+      let clinicoQtd = 0;
+      let clinicoValor = 0;
+      let complementarQtd = 0;
+      let complementarValor = 0;
 
-  dados.forEach(row => {
-    valorTotal += row.valor_total;
-    if (row.detalhes) {
-      for (let [nome, info] of Object.entries(row.detalhes)) {
-        let qtd = (typeof info === 'object' && info.quantidade !== undefined) ? info.quantidade : info;
-        let preco = (typeof info === 'object' && info.precoUnitario !== undefined) ? info.precoUnitario : 0;
-        if (nome === 'vidas (NR-1)') {
-          totalVidas += qtd;
-        } else if (nome === 'mensalidade') {
-          totalMensalidade += qtd * preco;
-        } else if (nome === 'exame_clinico') {
-          clinicoQtd += qtd;
-          clinicoValor += qtd * preco;
-        } else {
-          complementarQtd += qtd;
-          complementarValor += qtd * preco;
+      dados.forEach(row => {
+        valorTotal += row.valor_total;
+        if (row.detalhes) {
+          for (let [nome, info] of Object.entries(row.detalhes)) {
+            let qtd = (typeof info === 'object' && info.quantidade !== undefined) ? info.quantidade : info;
+            let preco = (typeof info === 'object' && info.precoUnitario !== undefined) ? info.precoUnitario : 0;
+            if (nome === 'vidas (NR-1)') {
+              totalVidas += qtd;
+            } else if (nome === 'mensalidade') {
+              totalMensalidade += qtd * preco;
+            } else if (nome === 'exame_clinico') {
+              clinicoQtd += qtd;
+              clinicoValor += qtd * preco;
+            } else {
+              complementarQtd += qtd;
+              complementarValor += qtd * preco;
+            }
+            totalExames += qtd;
+          }
         }
-        totalExames += qtd;
-      }
+      });
+
+      document.getElementById('totalExames').textContent = totalExames;
+      document.getElementById('valorTotal').textContent = 'R$ ' + formatarMoeda(valorTotal);
+      document.getElementById('totalVidas').textContent = totalVidas;
+      document.getElementById('totalMensalidade').textContent = 'R$ ' + formatarMoeda(totalMensalidade);
+
+      document.getElementById('clinicoQtd').textContent = clinicoQtd;
+      document.getElementById('clinicoValor').textContent = 'R$ ' + formatarMoeda(clinicoValor);
+      document.getElementById('complementarQtd').textContent = complementarQtd;
+      document.getElementById('complementarValor').textContent = 'R$ ' + formatarMoeda(complementarValor);
+
+      document.getElementById('comparativoTotal').textContent = 'R$ ' + formatarMoeda(valorTotal);
+      document.getElementById('comparativoMensalidade').textContent = 'R$ ' + formatarMoeda(totalMensalidade);
+      const diferenca = valorTotal - totalMensalidade;
+      document.getElementById('comparativoDiferenca').textContent = 'R$ ' + formatarMoeda(diferenca);
+
+      const maxValor = Math.max(valorTotal, totalMensalidade, diferenca, 1);
+      document.getElementById('barTotal').style.width = (valorTotal / maxValor * 100) + '%';
+      document.getElementById('barMensalidade').style.width = (totalMensalidade / maxValor * 100) + '%';
+      document.getElementById('barDiferenca').style.width = (diferenca / maxValor * 100) + '%';
     }
-  });
-
-  // Atualizar cards
-  document.getElementById('totalExames').textContent = totalExames;
-  document.getElementById('valorTotal').textContent = 'R$ ' + formatarMoeda(valorTotal);
-  document.getElementById('totalVidas').textContent = totalVidas;
-  document.getElementById('totalMensalidade').textContent = 'R$ ' + formatarMoeda(totalMensalidade);
-
-  document.getElementById('clinicoQtd').textContent = clinicoQtd;
-  document.getElementById('clinicoValor').textContent = 'R$ ' + formatarMoeda(clinicoValor);
-  document.getElementById('complementarQtd').textContent = complementarQtd;
-  document.getElementById('complementarValor').textContent = 'R$ ' + formatarMoeda(complementarValor);
-
-  // Comparativo com barras de progresso
-  document.getElementById('comparativoTotal').textContent = 'R$ ' + formatarMoeda(valorTotal);
-  document.getElementById('comparativoMensalidade').textContent = 'R$ ' + formatarMoeda(totalMensalidade);
-  const diferenca = valorTotal - totalMensalidade;
-  document.getElementById('comparativoDiferenca').textContent = 'R$ ' + formatarMoeda(diferenca);
-
-  // Barras de progresso (baseado no valor total)
-  const maxValor = Math.max(valorTotal, totalMensalidade, diferenca, 1);
-  document.getElementById('barTotal').style.width = (valorTotal / maxValor * 100) + '%';
-  document.getElementById('barMensalidade').style.width = (totalMensalidade / maxValor * 100) + '%';
-  document.getElementById('barDiferenca').style.width = (diferenca / maxValor * 100) + '%';
-}
 
     // ========================= EVENTOS DA INTERFACE =========================
     document.getElementById('processUploadBtn').addEventListener('click', async () => {
@@ -1016,7 +991,6 @@ function mostrarDetalhes(unidade, mes, ano, detalhes) {
         return;
       }
 
-      // Ler mês/ano dos filtros
       const mesFiltro = parseInt(document.getElementById('filterMonth').value) || 0;
       const anoFiltro = parseInt(document.getElementById('filterYear').value) || 0;
       const mesRef = mesFiltro || new Date().getMonth() + 1;
@@ -1042,7 +1016,6 @@ function mostrarDetalhes(unidade, mes, ano, detalhes) {
           feedback.innerHTML = '';
         }
 
-        // Recarregar relatório com os mesmos filtros
         const mesF = parseInt(document.getElementById('filterMonth').value);
         const anoF = parseInt(document.getElementById('filterYear').value);
         const unidadeF = document.getElementById('filterUnit').value.trim();
@@ -1053,27 +1026,17 @@ function mostrarDetalhes(unidade, mes, ano, detalhes) {
       }
     });
 
-    const dashboardTab = document.getElementById('dashboard');
-if (dashboardTab.classList.contains('show')) {
-  const mesF = parseInt(document.getElementById('filterMonth').value);
-  const anoF = parseInt(document.getElementById('filterYear').value);
-  const unidadeF = document.getElementById('filterUnit').value.trim();
-  carregarDadosDashboard(mesF, anoF, unidadeF);
-}
-
     document.getElementById('applyFiltersBtn').addEventListener('click', () => {
-  const mes = parseInt(document.getElementById('filterMonth').value);
-  const ano = parseInt(document.getElementById('filterYear').value);
-  const unidade = document.getElementById('filterUnit').value.trim();
-  carregarRelatorio(mes, ano, unidade, statusFiltroAtual);
-  // Se a aba Dashboard estiver ativa, atualiza também
-  const dashboardTab = document.getElementById('dashboard');
-  if (dashboardTab.classList.contains('show')) {
-    carregarDadosDashboard(mes, ano, unidade);
-  }
-});
+      const mes = parseInt(document.getElementById('filterMonth').value);
+      const ano = parseInt(document.getElementById('filterYear').value);
+      const unidade = document.getElementById('filterUnit').value.trim();
+      carregarRelatorio(mes, ano, unidade, statusFiltroAtual);
+      const dashboardTab = document.getElementById('dashboard');
+      if (dashboardTab.classList.contains('show')) {
+        carregarDadosDashboard(mes, ano);
+      }
+    });
 
-    // Filtros de status
     document.querySelectorAll('[data-status]').forEach(btn => {
       btn.addEventListener('click', function() {
         document.querySelectorAll('[data-status]').forEach(b => b.classList.remove('active'));
@@ -1128,42 +1091,55 @@ if (dashboardTab.classList.contains('show')) {
       }
     });
 
+    // ========================= DASHBOARD FILTROS =========================
+    function popularAnosDashboard() {
+      const select = document.getElementById('dashboardYear');
+      if (!select) return;
+      const anoAtual = new Date().getFullYear();
+      for (let y = anoAtual; y >= anoAtual - 5; y--) {
+        const option = document.createElement('option');
+        option.value = y;
+        option.textContent = y;
+        select.appendChild(option);
+      }
+      select.value = anoAtual;
+    }
+
+    // Popula os anos na primeira vez
+    popularAnosDashboard();
+
+    // Também popula quando a aba Dashboard for ativada (se por algum motivo não tiver sido)
+    document.getElementById('tab-dashboard').addEventListener('shown.bs.tab', function () {
+      const select = document.getElementById('dashboardYear');
+      if (select && select.options.length === 0) {
+        popularAnosDashboard();
+      }
+      const mes = parseInt(document.getElementById('dashboardMonth').value);
+      const ano = parseInt(document.getElementById('dashboardYear').value);
+      carregarDadosDashboard(mes, ano);
+    });
+
+    // Evento do botão "Atualizar Dashboard"
+    document.getElementById('applyDashboardFilters').addEventListener('click', function() {
+      const mes = parseInt(document.getElementById('dashboardMonth').value);
+      const ano = parseInt(document.getElementById('dashboardYear').value);
+      carregarDadosDashboard(mes, ano);
+    });
+
+    async function carregarDadosDashboard(mes = 0, ano = 0) {
+      let query = supabaseClient.from('faturamento').select('*');
+      if (mes > 0) query = query.eq('mes', mes);
+      if (ano > 0) query = query.eq('ano', ano);
+
+      const { data, error } = await query;
+      if (error) {
+        mostrarAlerta('Erro ao carregar dashboard: ' + error.message, 'danger');
+        return;
+      }
+      atualizarDashboards(data || []);
+    }
+
     // ========================= OUTROS EVENTOS =========================
-    // Quando a aba Dashboard for mostrada, atualiza os dados
-document.getElementById('tab-dashboard').addEventListener('shown.bs.tab', function () {
-  const mes = parseInt(document.getElementById('filterMonth').value);
-  const ano = parseInt(document.getElementById('filterYear').value);
-  const unidade = document.getElementById('filterUnit').value.trim();
-  // Busca os dados com os filtros atuais (mas sem o filtro de status)
-  carregarDadosDashboard(mes, ano, unidade);
-});
-
-// Função separada para carregar apenas os dados do dashboard
-async function carregarDadosDashboard(mes = 0, ano = 0) {
-  let query = supabaseClient.from('faturamento').select('*');
-  if (mes > 0) query = query.eq('mes', mes);
-  if (ano > 0) query = query.eq('ano', ano);
-
-  const { data, error } = await query;
-  if (error) {
-    mostrarAlerta('Erro ao carregar dashboard: ' + error.message, 'danger');
-    return;
-  }
-  atualizarDashboards(data || []);
-}
-
-function popularAnosDashboard() {
-  const select = document.getElementById('dashboardYear');
-  const anoAtual = new Date().getFullYear();
-  for (let y = anoAtual; y >= anoAtual - 5; y--) {
-    const option = document.createElement('option');
-    option.value = y;
-    option.textContent = y;
-    select.appendChild(option);
-  }
-  select.value = anoAtual;
-}
-popularAnosDashboard();
     function popularAnos() {
       const select = document.getElementById('filterYear');
       const anoAtual = new Date().getFullYear();
@@ -1176,12 +1152,6 @@ popularAnosDashboard();
       select.value = anoAtual;
     }
     popularAnos();
-
-    document.getElementById('applyDashboardFilters').addEventListener('click', function() {
-      const mes = parseInt(document.getElementById('dashboardMonth').value);
-      const ano = parseInt(document.getElementById('dashboardYear').value);
-      carregarDadosDashboard(mes, ano);
-    });
 
     document.getElementById('exportCsvBtn').addEventListener('click', () => {
       const table = document.getElementById('resultsTable');
@@ -1203,8 +1173,6 @@ popularAnosDashboard();
       link.download = 'faturamento.csv';
       link.click();
     });
-    popularAnosDashboard();
 
-    // Carregar dados iniciais (será chamado ao clicar no card)
-  });
+  }); // fim DOMContentLoaded
 }
