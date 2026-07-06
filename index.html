@@ -789,37 +789,78 @@
     </div>
   </div>
 
+  <!-- Gráficos -->
+<div class="row g-3 mb-4">
+  <div class="col-md-4">
+    <div class="card h-100">
+      <div class="card-header" style="background:#213b7c; color:#fff;">
+        <i class="fas fa-chart-bar me-2"></i> Valor Total por Mês
+      </div>
+      <div class="card-body">
+        <canvas id="chartTotal"></canvas>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card h-100">
+      <div class="card-header" style="background:#41bae8; color:#fff;">
+        <i class="fas fa-chart-bar me-2"></i> Exames por Mês
+      </div>
+      <div class="card-body">
+        <canvas id="chartExames"></canvas>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card h-100">
+      <div class="card-header" style="background:#f59e0b; color:#fff;">
+        <i class="fas fa-chart-bar me-2"></i> Mensalidade por Mês
+      </div>
+      <div class="card-body">
+        <canvas id="chartMensalidade"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
   <!-- Comparativo visual -->
-  <div class="row mb-4">
-    <div class="col-md-12">
-      <div class="card">
-        <div class="card-header" style="background:#f59e0b; color:#fff;">
-          <i class="fas fa-chart-bar me-2"></i> Comparativo
-        </div>
-        <div class="card-body">
-          <div class="row">
-            <div class="col-md-4 text-center">
-              <h6>Valor Total</h6>
-              <h3 class="text-primary" id="comparativoTotal">R$ 0,00</h3>
-              <div class="progress" style="height: 10px;">
-                <div class="progress-bar bg-primary" id="barTotal" style="width: 100%;"></div>
-              </div>
-            </div>
-            <div class="col-md-4 text-center">
-              <h6>Mensalidade</h6>
-              <h3 class="text-info" id="comparativoMensalidade">R$ 0,00</h3>
-              <div class="progress" style="height: 10px;">
-                <div class="progress-bar bg-info" id="barMensalidade" style="width: 0%;"></div>
-              </div>
-            </div>
-            <div class="col-md-4 text-center">
-              <h6>Exames</h6>
-              <h3 class="text-success" id="comparativoDiferenca">R$ 0,00</h3>
-              <div class="progress" style="height: 10px;">
-                <div class="progress-bar bg-success" id="barDiferenca" style="width: 0%;"></div>
-              </div>
+<div class="row mb-4">
+  <div class="col-md-12">
+    <div class="card">
+      <div class="card-header" style="background:#f59e0b; color:#fff;">
+        <i class="fas fa-chart-bar me-2"></i> Comparativo
+      </div>
+      <div class="card-body">
+        <div class="row">
+          <div class="col-md-3 text-center">
+            <h6>Valor Total</h6>
+            <h3 class="text-primary" id="comparativoTotal">R$ 0,00</h3>
+            <div class="progress" style="height: 10px;">
+              <div class="progress-bar bg-primary" id="barTotal" style="width: 100%;"></div>
             </div>
           </div>
+          <div class="col-md-3 text-center">
+            <h6>Mensalidade</h6>
+            <h3 class="text-info" id="comparativoMensalidade">R$ 0,00</h3>
+            <div class="progress" style="height: 10px;">
+              <div class="progress-bar bg-info" id="barMensalidade" style="width: 0%;"></div>
+            </div>
+          </div>
+          <div class="col-md-3 text-center">
+            <h6>Exames</h6>
+            <h3 class="text-success" id="comparativoExames">R$ 0,00</h3>
+            <div class="progress" style="height: 10px;">
+              <div class="progress-bar bg-success" id="barExames" style="width: 0%;"></div>
+            </div>
+          </div>
+          <div class="col-md-3 text-center">
+            <h6>Vidas</h6>
+            <h3 class="text-warning" id="comparativoVidas">R$ 0,00</h3>
+            <div class="progress" style="height: 10px;">
+              <div class="progress-bar bg-warning" id="barVidas" style="width: 0%;"></div>
+            </div>
+          </div>
+        </div>
         </div>
       </div>
     </div>
@@ -1087,6 +1128,7 @@
 </div>
 
   <!-- ==================== SCRIPTS ==================== -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>

@@ -77,6 +77,93 @@ const UNIDADES_IGNORADAS = [
   'SANTOS & SANTOS MATERIAIS DE CONSTRUCAO',
   'UNIDADE DO FUNCIONARIO'
 ];
+
+let chartTotal = null;
+let chartExames = null;
+let chartMensalidade = null;
+
+function processarDadosPorMes(dados, ano) {
+  // Inicializa arrays para os 12 meses
+  const meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+  const totalPorMes = new Array(12).fill(0);
+  const examesPorMes = new Array(12).fill(0);
+  const mensalidadePorMes = new Array(12).fill(0);
+
+  dados.forEach(row => {
+    // Se o ano for passado, filtra; se ano=0, considera todos
+    if (ano > 0 && row.ano !== ano) return;
+    const mesIndex = row.mes - 1;
+    totalPorMes[mesIndex] += row.valor_total;
+    if (row.detalhes) {
+      for (let [nome, info] of Object.entries(row.detalhes)) {
+        let qtd = (typeof info === 'object' && info.quantidade !== undefined) ? info.quantidade : info;
+        let preco = (typeof info === 'object' && info.precoUnitario !== undefined) ? info.precoUnitario : 0;
+        if (nome === 'mensalidade') {
+          mensalidadePorMes[mesIndex] += qtd * preco;
+        } else if (nome !== 'vidas (NR-1)') {
+          // Exames (inclui exame_clinico e outros)
+          examesPorMes[mesIndex] += qtd * preco;
+        }
+      }
+    }
+  });
+
+  return { meses, totalPorMes, examesPorMes, mensalidadePorMes };
+}
+
+function renderizarGraficos(dados, ano) {
+  const { meses, totalPorMes, examesPorMes, mensalidadePorMes } = processarDadosPorMes(dados, ano);
+
+  // Função auxiliar para criar ou atualizar gráfico
+  function criarOuAtualizarGrafico(canvasId, label, data, cor) {
+    const ctx = document.getElementById(canvasId).getContext('2d');
+    let chart = null;
+    // Verifica se já existe um gráfico associado a este canvas (usando uma propriedade personalizada)
+    if (window[canvasId + 'Chart']) {
+      chart = window[canvasId + 'Chart'];
+      chart.data.datasets[0].data = data;
+      chart.data.datasets[0].label = label;
+      chart.update();
+    } else {
+      chart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: meses,
+          datasets: [{
+            label: label,
+            data: data,
+            backgroundColor: cor,
+            borderColor: cor,
+            borderWidth: 1
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: {
+                callback: function(value) {
+                  return 'R$ ' + value.toLocaleString('pt-BR');
+                }
+              }
+            }
+          }
+        }
+      });
+      window[canvasId + 'Chart'] = chart;
+    }
+  }
+
+  criarOuAtualizarGrafico('chartTotal', 'Valor Total', totalPorMes, '#213b7c');
+  criarOuAtualizarGrafico('chartExames', 'Exames', examesPorMes, '#41bae8');
+  criarOuAtualizarGrafico('chartMensalidade', 'Mensalidade', mensalidadePorMes, '#f59e0b');
+}
+
 // Função para normalizar e verificar se a unidade está na lista de ignorados
 function isUnidadeIgnorada(nome) {
   if (!nome) return false;
@@ -273,18 +360,18 @@ async function exportarPrecos() {
       if (btnTodos) btnTodos.classList.add('active');
     }
 
-    function mostrarDashboard(user) {
-      loginPage.classList.add('hidden');
-      menuPage.classList.add('hidden');
-      dashboardPage.classList.remove('hidden');
-      document.getElementById('userEmail').textContent = user.email;
-      // Ativar a aba relatório
-      document.querySelector('#tab-relatorio').click();
-      // Carregar dados iniciais
-      carregarRelatorio(0, 0, '', 'todos');
-      carregarDadosDashboard(0, 0);
-      carregarPrecos();
-    }
+  function mostrarDashboard(user) {
+  loginPage.classList.add('hidden');
+  menuPage.classList.add('hidden');
+  dashboardPage.classList.remove('hidden');
+  document.getElementById('userEmail').textContent = user.email;
+  document.querySelector('#tab-relatorio').click();
+  carregarRelatorio(0, 0, '', 'todos');
+  const anoAtual = new Date().getFullYear();
+  carregarCards(0, anoAtual);
+  carregarGraficos(anoAtual);
+  carregarPrecos();
+}
 
     // ========================= EVENTOS DO MENU =========================
     document.querySelectorAll('.menu-card').forEach(card => {
@@ -927,57 +1014,81 @@ function mostrarDetalhes(unidade, mes, ano, detalhes) {
 
     // ========================= DASHBOARDS =========================
     function atualizarDashboards(dados) {
-      let totalExames = 0;
-      let valorTotal = 0;
-      let totalVidas = 0;
-      let totalMensalidade = 0;
-      let clinicoQtd = 0;
-      let clinicoValor = 0;
-      let complementarQtd = 0;
-      let complementarValor = 0;
+  let totalExames = 0;
+  let valorTotal = 0;
+  let totalVidasQtd = 0;
+  let totalVidasValor = 0;
+  let totalMensalidade = 0;
+  let clinicoQtd = 0;
+  let clinicoValor = 0;
+  let complementarQtd = 0;
+  let complementarValor = 0;
 
-      dados.forEach(row => {
-        valorTotal += row.valor_total;
-        if (row.detalhes) {
-          for (let [nome, info] of Object.entries(row.detalhes)) {
-            let qtd = (typeof info === 'object' && info.quantidade !== undefined) ? info.quantidade : info;
-            let preco = (typeof info === 'object' && info.precoUnitario !== undefined) ? info.precoUnitario : 0;
-            if (nome === 'vidas (NR-1)') {
-              totalVidas += qtd;
-            } else if (nome === 'mensalidade') {
-              totalMensalidade += qtd * preco;
-            } else if (nome === 'exame_clinico') {
-              clinicoQtd += qtd;
-              clinicoValor += qtd * preco;
-            } else {
-              complementarQtd += qtd;
-              complementarValor += qtd * preco;
-            }
-            totalExames += qtd;
-          }
+  dados.forEach(row => {
+    valorTotal += row.valor_total;
+    if (row.detalhes) {
+      for (let [nome, info] of Object.entries(row.detalhes)) {
+        let qtd = (typeof info === 'object' && info.quantidade !== undefined) ? info.quantidade : info;
+        let preco = (typeof info === 'object' && info.precoUnitario !== undefined) ? info.precoUnitario : 0;
+        if (nome === 'vidas (NR-1)') {
+          totalVidasQtd += qtd;
+          totalVidasValor += qtd * preco;
+        } else if (nome === 'mensalidade') {
+          totalMensalidade += qtd * preco;
+        } else if (nome === 'exame_clinico') {
+          clinicoQtd += qtd;
+          clinicoValor += qtd * preco;
+        } else {
+          complementarQtd += qtd;
+          complementarValor += qtd * preco;
         }
-      });
-
-      document.getElementById('totalExames').textContent = totalExames;
-      document.getElementById('valorTotal').textContent = 'R$ ' + formatarMoeda(valorTotal);
-      document.getElementById('totalVidas').textContent = totalVidas;
-      document.getElementById('totalMensalidade').textContent = 'R$ ' + formatarMoeda(totalMensalidade);
-
-      document.getElementById('clinicoQtd').textContent = clinicoQtd;
-      document.getElementById('clinicoValor').textContent = 'R$ ' + formatarMoeda(clinicoValor);
-      document.getElementById('complementarQtd').textContent = complementarQtd;
-      document.getElementById('complementarValor').textContent = 'R$ ' + formatarMoeda(complementarValor);
-
-      document.getElementById('comparativoTotal').textContent = 'R$ ' + formatarMoeda(valorTotal);
-      document.getElementById('comparativoMensalidade').textContent = 'R$ ' + formatarMoeda(totalMensalidade);
-      const diferenca = valorTotal - totalMensalidade;
-      document.getElementById('comparativoDiferenca').textContent = 'R$ ' + formatarMoeda(diferenca);
-
-      const maxValor = Math.max(valorTotal, totalMensalidade, diferenca, 1);
-      document.getElementById('barTotal').style.width = (valorTotal / maxValor * 100) + '%';
-      document.getElementById('barMensalidade').style.width = (totalMensalidade / maxValor * 100) + '%';
-      document.getElementById('barDiferenca').style.width = (diferenca / maxValor * 100) + '%';
+        totalExames += qtd;
+      }
     }
+  });
+
+  // Atualizar cards de resumo
+  document.getElementById('totalExames').textContent = totalExames;
+  document.getElementById('valorTotal').textContent = 'R$ ' + formatarMoeda(valorTotal);
+  document.getElementById('totalVidas').textContent = totalVidasQtd;
+  document.getElementById('totalMensalidade').textContent = 'R$ ' + formatarMoeda(totalMensalidade);
+
+  // Exame Clínico vs Complementares
+  document.getElementById('clinicoQtd').textContent = clinicoQtd;
+  document.getElementById('clinicoValor').textContent = 'R$ ' + formatarMoeda(clinicoValor);
+  document.getElementById('complementarQtd').textContent = complementarQtd;
+  document.getElementById('complementarValor').textContent = 'R$ ' + formatarMoeda(complementarValor);
+
+  // Comparativo
+  const totalExamesValor = clinicoValor + complementarValor;
+  document.getElementById('comparativoTotal').textContent = 'R$ ' + formatarMoeda(valorTotal);
+  document.getElementById('comparativoMensalidade').textContent = 'R$ ' + formatarMoeda(totalMensalidade);
+  document.getElementById('comparativoExames').textContent = 'R$ ' + formatarMoeda(totalExamesValor);
+  document.getElementById('comparativoVidas').textContent = 'R$ ' + formatarMoeda(totalVidasValor);
+
+  // Barras de progresso (baseado no valor total)
+  const maxValor = Math.max(valorTotal, totalMensalidade, totalExamesValor, totalVidasValor, 1);
+  document.getElementById('barTotal').style.width = (valorTotal / maxValor * 100) + '%';
+  document.getElementById('barMensalidade').style.width = (totalMensalidade / maxValor * 100) + '%';
+  document.getElementById('barExames').style.width = (totalExamesValor / maxValor * 100) + '%';
+  document.getElementById('barVidas').style.width = (totalVidasValor / maxValor * 100) + '%';
+
+  // Verificação de consistência
+const soma = totalMensalidade + totalExamesValor + totalVidasValor;
+const somaEl = document.getElementById('somaVerificacao');
+const statusEl = document.getElementById('somaStatus');
+if (somaEl) {
+  somaEl.textContent = 'R$ ' + formatarMoeda(soma);
+}
+if (statusEl) {
+  const diff = Math.abs(soma - valorTotal);
+  if (diff < 0.01) {
+    statusEl.innerHTML = '<i class="fas fa-check-circle text-success"></i> OK';
+  } else {
+    statusEl.innerHTML = `<i class="fas fa-exclamation-circle text-danger"></i> Diferença: R$ ${formatarMoeda(diff)}`;
+  }
+}
+}
 
     // ========================= EVENTOS DA INTERFACE =========================
     document.getElementById('processUploadBtn').addEventListener('click', async () => {
@@ -1110,35 +1221,51 @@ function mostrarDetalhes(unidade, mes, ano, detalhes) {
 
     // Também popula quando a aba Dashboard for ativada (se por algum motivo não tiver sido)
     document.getElementById('tab-dashboard').addEventListener('shown.bs.tab', function () {
-      const select = document.getElementById('dashboardYear');
-      if (select && select.options.length === 0) {
-        popularAnosDashboard();
-      }
-      const mes = parseInt(document.getElementById('dashboardMonth').value);
-      const ano = parseInt(document.getElementById('dashboardYear').value);
-      carregarDadosDashboard(mes, ano);
-    });
+  const select = document.getElementById('dashboardYear');
+  if (select && select.options.length === 0) {
+    popularAnosDashboard();
+  }
+  const mes = parseInt(document.getElementById('dashboardMonth').value);
+  const ano = parseInt(document.getElementById('dashboardYear').value);
+  carregarCards(mes, ano);
+  carregarGraficos(ano);
+});
 
     // Evento do botão "Atualizar Dashboard"
     document.getElementById('applyDashboardFilters').addEventListener('click', function() {
-      const mes = parseInt(document.getElementById('dashboardMonth').value);
-      const ano = parseInt(document.getElementById('dashboardYear').value);
-      carregarDadosDashboard(mes, ano);
-    });
+  const mes = parseInt(document.getElementById('dashboardMonth').value);
+  const ano = parseInt(document.getElementById('dashboardYear').value);
+  carregarCards(mes, ano);
+  carregarGraficos(ano);
+});
 
-    async function carregarDadosDashboard(mes = 0, ano = 0) {
-      let query = supabaseClient.from('faturamento').select('*');
-      if (mes > 0) query = query.eq('mes', mes);
-      if (ano > 0) query = query.eq('ano', ano);
+    // Carrega apenas os cards com filtro de mês+ano
+async function carregarCards(mes = 0, ano = 0) {
+  let query = supabaseClient.from('faturamento').select('*');
+  if (mes > 0) query = query.eq('mes', mes);
+  if (ano > 0) query = query.eq('ano', ano);
 
-      const { data, error } = await query;
-      if (error) {
-        mostrarAlerta('Erro ao carregar dashboard: ' + error.message, 'danger');
-        return;
-      }
-      atualizarDashboards(data || []);
-    }
+  const { data, error } = await query;
+  if (error) {
+    mostrarAlerta('Erro ao carregar cards: ' + error.message, 'danger');
+    return;
+  }
+  atualizarDashboards(data || []);
+}
 
+// Carrega apenas os gráficos com filtro de ano (ignora mês)
+async function carregarGraficos(ano = 0) {
+  let query = supabaseClient.from('faturamento').select('*');
+  if (ano > 0) query = query.eq('ano', ano);
+  // Não filtra por mês
+
+  const { data, error } = await query;
+  if (error) {
+    mostrarAlerta('Erro ao carregar gráficos: ' + error.message, 'danger');
+    return;
+  }
+  renderizarGraficos(data || [], ano);
+}
     // ========================= OUTROS EVENTOS =========================
     function popularAnos() {
       const select = document.getElementById('filterYear');
