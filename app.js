@@ -677,6 +677,8 @@ async function processarUpload(file, mesReferencia = 0, anoReferencia = 0) {
     if (!row[0] && !row[1] && !row[2]) continue;
     const exameUpload = row[0]?.toString().trim();
     const unidadePlanilha = row[4]?.toString().trim();
+    const funcionario = row[1]?.toString().trim();
+    const dataExameStr = row[2]?.toString().trim();
     if (!exameUpload || !unidadePlanilha) continue;
 
     if (isUnidadeIgnorada(unidadePlanilha)) continue;
@@ -692,7 +694,9 @@ async function processarUpload(file, mesReferencia = 0, anoReferencia = 0) {
     }
     examesPorUnidade[chaveUnidade].push({
       exame: exameNormalizado,
-      nomeOriginal: exameUpload
+      nomeOriginal: exameUpload,
+      funcionario: funcionario || 'N/A',
+      dataExame: dataExameStr || '—'
     });
   }
 
@@ -745,9 +749,17 @@ async function processarUpload(file, mesReferencia = 0, anoReferencia = 0) {
         if (preco === 0) continue;
         total += preco;
         if (!detalhes[ex.exame]) {
-          detalhes[ex.exame] = { quantidade: 0, precoUnitario: preco };
+          detalhes[ex.exame] = {
+            quantidade: 0,
+            precoUnitario: preco,
+            funcionarios: []
+          };
         }
         detalhes[ex.exame].quantidade += 1;
+        detalhes[ex.exame].funcionarios.push({
+          nome: ex.funcionario,
+          data: ex.dataExame
+        });
       }
     }
 
@@ -960,25 +972,35 @@ function mostrarDetalhes(unidade, mes, ano, detalhes) {
     let listHtml = '<ul class="list-group">';
     let totalGeral = 0;
     for (let [exame, info] of Object.entries(detalhes)) {
-      let qtd, preco, subtotal;
+      let qtd, preco, funcionarios;
       if (typeof info === 'object' && info !== null) {
         qtd = info.quantidade || 0;
         preco = info.precoUnitario || 0;
-        subtotal = (info.subtotal !== undefined) ? info.subtotal : (qtd * preco);
+        funcionarios = info.funcionarios || [];
       } else {
         qtd = info;
         preco = 0;
-        subtotal = 'N/A';
+        funcionarios = [];
       }
-      const exibePreco = (preco > 0) ? `R$ ${preco.toFixed(2)}` : '—';
-      const exibeSubtotal = (typeof subtotal === 'number') ? `R$ ${subtotal.toFixed(2)}` : subtotal;
-      totalGeral += (typeof subtotal === 'number') ? subtotal : 0;
-      listHtml += `<li class="list-group-item d-flex justify-content-between align-items-center">
-        <div>
-          <strong>${exame}</strong>
-          <span class="text-muted ms-2">(${qtd} unid. x ${exibePreco})</span>
+      const subtotal = qtd * preco;
+      totalGeral += subtotal;
+
+      let funcionariosHtml = '';
+      if (funcionarios.length > 0) {
+        funcionariosHtml = '<ul class="list-unstyled mb-0 small">' +
+          funcionarios.map(f => `<li>👤 ${f.nome} 📅 ${f.data}</li>`).join('') +
+          '</ul>';
+      }
+
+      listHtml += `<li class="list-group-item">
+        <div class="d-flex justify-content-between align-items-start">
+          <div>
+            <strong>${exame}</strong>
+            <span class="text-muted ms-2">(${qtd} unid. x R$ ${preco.toFixed(2)})</span>
+            ${funcionariosHtml}
+          </div>
+          <span class="badge bg-primary rounded-pill">R$ ${subtotal.toFixed(2)}</span>
         </div>
-        <span class="badge bg-primary rounded-pill">${exibeSubtotal}</span>
       </li>`;
     }
     if (totalGeral > 0) {
@@ -1029,23 +1051,27 @@ function mostrarDetalhes(unidade, mes, ano, detalhes) {
   dados.forEach(row => {
     valorTotal += row.valor_total;
     if (row.detalhes) {
-      for (let [nome, info] of Object.entries(row.detalhes)) {
-        let qtd = (typeof info === 'object' && info.quantidade !== undefined) ? info.quantidade : info;
-        let preco = (typeof info === 'object' && info.precoUnitario !== undefined) ? info.precoUnitario : 0;
-        if (nome === 'vidas (NR-1)') {
-          totalVidasQtd += qtd;
-          totalVidasValor += qtd * preco;
-        } else if (nome === 'mensalidade') {
-          totalMensalidade += qtd * preco;
-        } else if (nome === 'exame_clinico') {
+      // No loop de row.detalhes
+    for (let [nome, info] of Object.entries(row.detalhes)) {
+      let qtd = (typeof info === 'object' && info.quantidade !== undefined) ? info.quantidade : info;
+      let preco = (typeof info === 'object' && info.precoUnitario !== undefined) ? info.precoUnitario : 0;
+      if (nome === 'vidas (NR-1)') {
+        totalVidasQtd += qtd;
+        totalVidasValor += qtd * preco;
+      } else if (nome === 'mensalidade') {
+        totalMensalidade += qtd * preco;
+      } else {
+        // Todos os exames (clínico e complementares)
+        if (nome === 'exame_clinico') {
           clinicoQtd += qtd;
           clinicoValor += qtd * preco;
         } else {
           complementarQtd += qtd;
           complementarValor += qtd * preco;
         }
-        totalExames += qtd;
+        totalExames += qtd; // Apenas exames, não vidas!
       }
+    }
     }
   });
 
@@ -1094,50 +1120,52 @@ if (statusEl) {
 
     // ========================= EVENTOS DA INTERFACE =========================
     document.getElementById('processUploadBtn').addEventListener('click', async () => {
-      const fileInput = document.getElementById('uploadFileInput');
-      const status = document.getElementById('uploadStatus');
-      const feedback = document.getElementById('uploadFeedback');
+  const fileInput = document.getElementById('uploadFileInput');
+  const status = document.getElementById('uploadStatus');
+  const feedback = document.getElementById('uploadFeedback');
+  const searchInput = document.getElementById('searchUpload');
 
-      if (!fileInput.files || fileInput.files.length === 0) {
-        status.innerHTML = '<span class="text-warning">Selecione um arquivo.</span>';
-        feedback.innerHTML = '';
-        return;
-      }
+  if (!fileInput.files || fileInput.files.length === 0) {
+    status.innerHTML = '<span class="text-warning">Selecione um arquivo.</span>';
+    feedback.innerHTML = '';
+    return;
+  }
 
-      const mesFiltro = parseInt(document.getElementById('filterMonth').value) || 0;
-      const anoFiltro = parseInt(document.getElementById('filterYear').value) || 0;
-      const mesRef = mesFiltro || new Date().getMonth() + 1;
-      const anoRef = anoFiltro || new Date().getFullYear();
+  const searchTerm = searchInput ? searchInput.value.trim() : '';
+  const mesFiltro = parseInt(document.getElementById('filterMonth').value) || 0;
+  const anoFiltro = parseInt(document.getElementById('filterYear').value) || 0;
+  const mesRef = mesFiltro || new Date().getMonth() + 1;
+  const anoRef = anoFiltro || new Date().getFullYear();
 
-      status.innerHTML = `<span class="text-info">Processando para ${mesRef}/${anoRef}...</span>`;
+  status.innerHTML = `<span class="text-info">Processando para ${mesRef}/${anoRef}${searchTerm ? ' (filtro: "' + searchTerm + '")' : ''}...</span>`;
+  feedback.innerHTML = '';
+
+  try {
+    const result = await processarUpload(fileInput.files[0], mesRef, anoRef, searchTerm);
+    status.innerHTML = `<span class="text-success">✓ ${result.totalRegistros} unidades processadas. Total geral: R$ ${result.totalGeral.toFixed(2)}</span>`;
+
+    if (result.unidadesNaoEncontradas && result.unidadesNaoEncontradas.length > 0) {
+      let lista = result.unidadesNaoEncontradas.map(u => `<li class="list-unstyled">${u}</li>`).join('');
+      feedback.innerHTML = `
+        <div class="alert alert-warning alert-dismissible fade show" role="alert">
+          <strong><i class="fas fa-exclamation-triangle"></i> Unidades na planilha não encontradas no cadastro:</strong>
+          <ul class="mb-0 mt-1" style="list-style: none; padding-left: 0;">${lista}</ul>
+          <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+      `;
+    } else {
       feedback.innerHTML = '';
+    }
 
-      try {
-        const result = await processarUpload(fileInput.files[0], mesRef, anoRef);
-        status.innerHTML = `<span class="text-success">✓ ${result.totalRegistros} unidades processadas. Total geral: R$ ${result.totalGeral.toFixed(2)}</span>`;
-
-        if (result.unidadesNaoEncontradas && result.unidadesNaoEncontradas.length > 0) {
-          let lista = result.unidadesNaoEncontradas.map(u => `<li class="list-unstyled">${u}</li>`).join('');
-          feedback.innerHTML = `
-            <div class="alert alert-warning alert-dismissible fade show" role="alert">
-              <strong><i class="fas fa-exclamation-triangle"></i> Unidades na planilha não encontradas no cadastro:</strong>
-              <ul class="mb-0 mt-1" style="list-style: none; padding-left: 0;">${lista}</ul>
-              <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            </div>
-          `;
-        } else {
-          feedback.innerHTML = '';
-        }
-
-        const mesF = parseInt(document.getElementById('filterMonth').value);
-        const anoF = parseInt(document.getElementById('filterYear').value);
-        const unidadeF = document.getElementById('filterUnit').value.trim();
-        carregarRelatorio(mesF, anoF, unidadeF, statusFiltroAtual);
-      } catch (err) {
-        status.innerHTML = `<span class="text-danger">Erro: ${err.message}</span>`;
-        feedback.innerHTML = '';
-      }
-    });
+    const mesF = parseInt(document.getElementById('filterMonth').value);
+    const anoF = parseInt(document.getElementById('filterYear').value);
+    const unidadeF = document.getElementById('filterUnit').value.trim();
+    carregarRelatorio(mesF, anoF, unidadeF, statusFiltroAtual);
+  } catch (err) {
+    status.innerHTML = `<span class="text-danger">Erro: ${err.message}</span>`;
+    feedback.innerHTML = '';
+  }
+});
 
     document.getElementById('applyFiltersBtn').addEventListener('click', () => {
       const mes = parseInt(document.getElementById('filterMonth').value);
