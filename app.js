@@ -237,7 +237,7 @@ async function exportarPrecos() {
       { header: 'Grupo', field: 'grupo' },
       { header: 'Holding', field: 'holding' },
       { header: 'Unidade', field: 'unidade' },
-      { header: 'Razão Social', field: 'razao_social' }, // ADICIONADO
+      { header: 'Razão Social', field: 'razao_social' },
       { header: 'Exame Clínico', field: 'exame_clinico' },
       { header: 'Mensalidade', field: 'mensalidade' },
       { header: 'Vidas (valor)', field: 'vidas' },
@@ -494,7 +494,7 @@ document.addEventListener('DOMContentLoaded', function () {
       const grupo = (item.grupo || '').toLowerCase();
       const holding = (item.holding || '').toLowerCase();
       const unidade = (item.unidade || '').toLowerCase();
-      const razao = (item.razao_social || '').toLowerCase(); // também busca na razão social
+      const razao = (item.razao_social || '').toLowerCase();
       return grupo.includes(termo) || holding.includes(termo) || unidade.includes(termo) || razao.includes(termo);
     });
     renderizarTabelaPrecos(filtrados);
@@ -544,7 +544,7 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('precoGrupo').value = dados.grupo || '';
     document.getElementById('precoHolding').value = dados.holding || '';
     document.getElementById('precoUnidade').value = dados.unidade || '';
-    document.getElementById('precoRazaoSocial').value = dados.razao_social || ''; // ADICIONADO
+    document.getElementById('precoRazaoSocial').value = dados.razao_social || '';
     document.getElementById('precoExameClinico').value = dados.exame_clinico || '';
     document.getElementById('precoMensalidade').value = dados.mensalidade || '';
     document.getElementById('precoVidas').value = dados.vidas || '';
@@ -578,7 +578,7 @@ document.addEventListener('DOMContentLoaded', function () {
       grupo: document.getElementById('precoGrupo').value || null,
       holding: document.getElementById('precoHolding').value || null,
       unidade: document.getElementById('precoUnidade').value.trim(),
-      razao_social: document.getElementById('precoRazaoSocial').value.trim() || null, // ADICIONADO
+      razao_social: document.getElementById('precoRazaoSocial').value.trim() || null,
       exame_clinico: parseFloat(document.getElementById('precoExameClinico').value) || null,
       mensalidade: parseFloat(document.getElementById('precoMensalidade').value) || null,
       vidas: parseInt(document.getElementById('precoVidas').value) || null,
@@ -981,11 +981,7 @@ document.addEventListener('DOMContentLoaded', function () {
             <i class="fas fa-money-bill-wave"></i>
           </button>
           <button class="btn btn-sm btn-outline-primary btn-detalhes" 
-                  data-id="${row.id}" 
-                  data-unidade="${row.unidade}"
-                  data-mes="${row.mes}"
-                  data-ano="${row.ano}"
-                  data-detalhes='${JSON.stringify(row.detalhes)}'
+                  data-id="${row.id}"
                   title="Ver detalhes">
             <i class="fas fa-eye"></i>
           </button>
@@ -1022,28 +1018,25 @@ document.addEventListener('DOMContentLoaded', function () {
         }
       });
     });
-
-    document.querySelectorAll('.btn-detalhes').forEach(btn => {
-      btn.addEventListener('click', function() {
-        const unidade = this.dataset.unidade;
-        const mes = parseInt(this.dataset.mes);
-        const ano = parseInt(this.dataset.ano);
-        const detalhes = JSON.parse(this.dataset.detalhes);
-        mostrarDetalhes(unidade, mes, ano, detalhes);
-      });
-    });
   }
 
   function mostrarDetalhes(unidade, mes, ano, detalhes) {
+  try {
+    // Remove qualquer modal antigo que tenha sido criado por esta função
+    const oldModal = document.getElementById('detalhesModalCustom');
+    if (oldModal) oldModal.remove();
+    const oldBackdrops = document.querySelectorAll('.modal-backdrop');
+    oldBackdrops.forEach(b => b.remove());
+    document.body.classList.remove('modal-open');
+
+    // Prepara o conteúdo
     const meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
       'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
     const mesNome = meses[mes - 1];
-    const modalTitle = document.getElementById('detalhesModalLabel');
-    modalTitle.textContent = `Detalhes - ${unidade} (${mesNome}/${ano})`;
 
-    const body = document.getElementById('detalhesModalBody');
+    let bodyContent = '';
     if (!detalhes || Object.keys(detalhes).length === 0) {
-      body.innerHTML = '<p class="text-muted">Nenhum detalhe disponível.</p>';
+      bodyContent = '<p class="text-muted">Nenhum detalhe disponível.</p>';
     } else {
       let listHtml = '<ul class="list-group">';
       let totalGeral = 0;
@@ -1086,12 +1079,107 @@ document.addEventListener('DOMContentLoaded', function () {
         </li>`;
       }
       listHtml += '</ul>';
-      body.innerHTML = listHtml;
+      bodyContent = listHtml;
     }
 
-    const modal = new bootstrap.Modal(document.getElementById('detalhesModal'));
-    modal.show();
+    // Cria a estrutura do modal do zero
+    const modalHTML = `
+      <div id="detalhesModalCustom" class="modal show" tabindex="-1" style="
+        display: block !important;
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        z-index: 9999 !important;
+        background: rgba(0,0,0,0.5) !important;
+        overflow-y: auto !important;
+        opacity: 1 !important;
+        visibility: visible !important;
+        pointer-events: auto !important;
+      ">
+        <div class="modal-dialog modal-md" style="
+          position: relative !important;
+          margin: 1.75rem auto !important;
+          max-width: 500px !important;
+          pointer-events: auto !important;
+          transform: none !important;
+          opacity: 1 !important;
+          visibility: visible !important;
+        ">
+          <div class="modal-content" style="
+            background: #fff !important;
+            border-radius: 16px !important;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3) !important;
+          ">
+            <div class="modal-header" style="
+              background: #213b7c !important;
+              color: #fff !important;
+              border-radius: 16px 16px 0 0 !important;
+              padding: 16px 20px !important;
+              border-bottom: none !important;
+            ">
+              <h5 class="modal-title" style="color: #fff !important; font-weight: 600;">
+                <i class="fas fa-file-invoice me-2"></i> Detalhes - ${unidade} (${mesNome}/${ano})
+              </h5>
+              <button type="button" class="btn-close btn-close-white" onclick="fecharModalCustom()" style="
+                background: transparent !important;
+                border: none !important;
+                font-size: 1.5rem !important;
+                color: #fff !important;
+                opacity: 0.8 !important;
+              "></button>
+            </div>
+            <div class="modal-body" style="padding: 20px !important; max-height: 400px !important; overflow-y: auto !important;">
+              ${bodyContent}
+            </div>
+            <div class="modal-footer" style="
+              border-top: 1px solid #e9ecef !important;
+              padding: 12px 20px !important;
+              border-radius: 0 0 16px 16px !important;
+            ">
+              <button type="button" class="btn btn-secondary" onclick="fecharModalCustom()" style="
+                border-radius: 30px !important;
+                padding: 8px 24px !important;
+                font-weight: 500 !important;
+              ">Fechar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // Insere no body
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+    // Adiciona um listener para fechar com ESC
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') fecharModalCustom();
+    });
+
+    // Adiciona clique no backdrop para fechar (clicar fora do modal)
+    const modalElement = document.getElementById('detalhesModalCustom');
+    modalElement.addEventListener('click', function(e) {
+      if (e.target === this) {
+        fecharModalCustom();
+      }
+    });
+
+    console.log('✅ Modal criado do zero com sucesso!');
+  } catch (err) {
+    console.error('Erro em mostrarDetalhes:', err);
+    mostrarAlerta('Erro ao exibir detalhes: ' + err.message, 'danger');
   }
+}
+
+// Função global para fechar o modal customizado
+window.fecharModalCustom = function() {
+  const modal = document.getElementById('detalhesModalCustom');
+  if (modal) modal.remove();
+  const backdrops = document.querySelectorAll('.modal-backdrop');
+  backdrops.forEach(b => b.remove());
+  document.body.classList.remove('modal-open');
+};
 
   function mostrarAlerta(mensagem, tipo = 'info') {
     const area = document.getElementById('alertArea');
@@ -1391,200 +1479,229 @@ document.addEventListener('DOMContentLoaded', function () {
     link.click();
   });
 
-  // ========================= CARREGAR HOLDINGS PARA O SELECT =========================
-async function carregarHoldings() {
-  const select = document.getElementById('holdingSelect');
-  try {
-    const { data, error } = await supabaseClient
-      .from('precos')
-      .select('holding')
-      .not('holding', 'is', null)
-      .order('holding', { ascending: true });
+  // ================================================================
+  // ===== NOVAS FUNÇÕES – Upload de Vidas e Atualização por Holding =
+  // ================================================================
 
-    if (error) throw error;
-    const holdings = [...new Set(data.map(item => item.holding).filter(Boolean))];
-    select.innerHTML = '<option value="">Selecione uma holding</option>';
-    holdings.forEach(h => {
-      const opt = document.createElement('option');
-      opt.value = h;
-      opt.textContent = h;
-      select.appendChild(opt);
-    });
-  } catch (err) {
-    console.error('Erro ao carregar holdings:', err);
-    select.innerHTML = '<option value="">Erro ao carregar</option>';
-  }
-}
+  async function carregarHoldings() {
+    const select = document.getElementById('holdingSelect');
+    if (!select) return;
+    try {
+      const { data, error } = await supabaseClient
+        .from('precos')
+        .select('holding')
+        .not('holding', 'is', null)
+        .order('holding', { ascending: true });
 
-// ========================= UPLOAD DE PLANILHA DE VIDAS =========================
-async function processarUploadVidas(file) {
-  const data = await file.arrayBuffer();
-  const workbook = XLSX.read(data, { type: 'array' });
-  const sheet = workbook.Sheets[workbook.SheetNames[0]];
-  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
-
-  // Localizar cabeçalho: procurar por linhas que contenham "UNIDADE" e "Func."
-  let headerIndex = -1;
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i];
-    if (row.length >= 2) {
-      const col0 = row[0]?.toString().trim().toUpperCase();
-      const col1 = row[1]?.toString().trim().toUpperCase();
-      if ((col0 === 'UNIDADE' || col0 === 'EMPRESA' || col0 === 'RAZÃO SOCIAL') &&
-          (col1 === 'FUNC.' || col1 === 'FUNCIONÁRIOS' || col1 === 'QTDE' || col1 === 'QUANTIDADE')) {
-        headerIndex = i;
-        break;
-      }
+      if (error) throw error;
+      const holdings = [...new Set(data.map(item => item.holding).filter(Boolean))];
+      select.innerHTML = '<option value="">Selecione uma holding</option>';
+      holdings.forEach(h => {
+        const opt = document.createElement('option');
+        opt.value = h;
+        opt.textContent = h;
+        select.appendChild(opt);
+      });
+    } catch (err) {
+      console.error('Erro ao carregar holdings:', err);
+      select.innerHTML = '<option value="">Erro ao carregar</option>';
     }
   }
-  if (headerIndex === -1) {
-    throw new Error('Cabeçalho não encontrado. Procure por colunas "UNIDADE" e "Func." (ou similar).');
+
+  async function processarUploadVidas(file) {
+    const data = await file.arrayBuffer();
+    const workbook = XLSX.read(data, { type: 'array' });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+
+    // Localizar cabeçalho
+    let headerIndex = -1;
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      if (row.length >= 2) {
+        const col0 = row[0]?.toString().trim().toUpperCase();
+        const col1 = row[1]?.toString().trim().toUpperCase();
+        if ((col0 === 'UNIDADE' || col0 === 'EMPRESA' || col0 === 'RAZÃO SOCIAL') &&
+            (col1 === 'FUNC.' || col1 === 'FUNCIONÁRIOS' || col1 === 'QTDE' || col1 === 'QUANTIDADE')) {
+          headerIndex = i;
+          break;
+        }
+      }
+    }
+    if (headerIndex === -1) {
+      throw new Error('Cabeçalho não encontrado. Procure por colunas "UNIDADE" e "Func." (ou similar).');
+    }
+
+    const dataRows = rows.slice(headerIndex + 1);
+    const atualizados = [];
+    const naoEncontrados = [];
+
+    const { data: precos, error } = await supabaseClient.from('precos').select('*');
+    if (error) throw error;
+
+    const mapaUnidade = {};
+    const mapaRazao = {};
+    precos.forEach(item => {
+      const chaveUnidade = normalizarUnidade(item.unidade);
+      mapaUnidade[chaveUnidade] = item;
+      if (item.razao_social) {
+        const chaveRazao = normalizarUnidade(item.razao_social);
+        mapaRazao[chaveRazao] = item;
+      }
+    });
+
+    for (let row of dataRows) {
+      if (!row[0] && !row[1]) continue;
+      const nomePlanilha = row[0]?.toString().trim();
+      const qtdVidas = parseInt(row[1]?.toString().trim()) || 0;
+      if (!nomePlanilha) continue;
+
+      const chave = normalizarUnidade(nomePlanilha);
+      let registro = mapaUnidade[chave] || mapaRazao[chave];
+      if (!registro) {
+        naoEncontrados.push(nomePlanilha);
+        continue;
+      }
+
+      const { error: updateError } = await supabaseClient
+        .from('precos')
+        .update({ qtd_vidas: qtdVidas })
+        .eq('id', registro.id);
+
+      if (updateError) {
+        throw new Error(`Erro ao atualizar ${registro.unidade}: ${updateError.message}`);
+      }
+      atualizados.push(registro.unidade);
+    }
+
+    return { atualizados, naoEncontrados, totalAtualizados: atualizados.length, totalNaoEncontrados: naoEncontrados.length };
   }
 
-  const dataRows = rows.slice(headerIndex + 1);
-  const atualizados = [];
-  const naoEncontrados = [];
+  async function atualizarVidasPorHolding(holding, novoValor) {
+    if (!holding || !novoValor || novoValor < 0) {
+      throw new Error('Selecione uma holding e informe um valor válido.');
+    }
 
-  // Buscar todos os registros de preços uma vez
-  const { data: precos, error } = await supabaseClient.from('precos').select('*');
-  if (error) throw error;
+    const { data, error } = await supabaseClient
+      .from('precos')
+      .update({ vidas: novoValor })
+      .eq('holding', holding)
+      .select(); // ESSE .select() garante que o Supabase retorne os registros atualizados
 
-  // Construir mapa por unidade normalizada e razão social normalizada
-  const mapaUnidade = {};
-  const mapaRazao = {};
-  precos.forEach(item => {
-    const chaveUnidade = normalizarUnidade(item.unidade);
-    mapaUnidade[chaveUnidade] = item;
-    if (item.razao_social) {
-      const chaveRazao = normalizarUnidade(item.razao_social);
-      mapaRazao[chaveRazao] = item;
+    if (error) throw error;
+    return { holding, novoValor, affected: data?.length || 0 };
+  }
+
+  // ===== EVENTOS DAS NOVAS FUNCIONALIDADES =====
+
+  // Upload de planilha de vidas
+  document.getElementById('processUploadVidasBtn').addEventListener('click', async function() {
+    const input = document.getElementById('uploadVidasInput');
+    const status = document.getElementById('uploadVidasStatus');
+    const feedback = document.getElementById('uploadVidasFeedback');
+
+    if (!input.files || input.files.length === 0) {
+      status.innerHTML = '<span class="text-warning">Selecione um arquivo.</span>';
+      feedback.innerHTML = '';
+      return;
+    }
+
+    status.innerHTML = '<span class="text-info">Processando...</span>';
+    feedback.innerHTML = '';
+
+    try {
+      const result = await processarUploadVidas(input.files[0]);
+      status.innerHTML = `<span class="text-success">✓ ${result.totalAtualizados} unidades atualizadas. ${result.totalNaoEncontrados} não encontradas.</span>`;
+
+      if (result.naoEncontrados.length > 0) {
+        let lista = result.naoEncontrados.map(u => `<li class="list-unstyled">${u}</li>`).join('');
+        feedback.innerHTML = `
+          <div class="alert alert-warning alert-dismissible fade show" role="alert">
+            <strong><i class="fas fa-exclamation-triangle"></i> Unidades não encontradas:</strong>
+            <ul class="mb-0 mt-1" style="list-style: none; padding-left: 0;">${lista}</ul>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+          </div>
+        `;
+      } else {
+        feedback.innerHTML = `<div class="alert alert-success">Todas as unidades foram atualizadas com sucesso!</div>`;
+      }
+      carregarPrecos();
+    } catch (err) {
+      status.innerHTML = `<span class="text-danger">Erro: ${err.message}</span>`;
+      feedback.innerHTML = '';
     }
   });
 
-  for (let row of dataRows) {
-    if (!row[0] && !row[1]) continue;
-    const nomePlanilha = row[0]?.toString().trim();
-    const qtdVidas = parseInt(row[1]?.toString().trim()) || 0;
-    if (!nomePlanilha) continue;
+  // Atualizar valor por holding
+  document.getElementById('atualizarVidasHoldingBtn').addEventListener('click', async function() {
+    const holding = document.getElementById('holdingSelect').value;
+    const valor = parseFloat(document.getElementById('novoValorVidas').value);
+    const status = document.getElementById('holdingUpdateStatus');
 
-    const chave = normalizarUnidade(nomePlanilha);
-    let registro = mapaUnidade[chave] || mapaRazao[chave];
-    if (!registro) {
-      naoEncontrados.push(nomePlanilha);
-      continue;
+    if (!holding) {
+      status.innerHTML = '<span class="text-warning">Selecione uma holding.</span>';
+      return;
+    }
+    if (isNaN(valor) || valor < 0) {
+      status.innerHTML = '<span class="text-warning">Informe um valor válido (R$).</span>';
+      return;
     }
 
-    // Atualizar qtd_vidas
-    const { error: updateError } = await supabaseClient
-      .from('precos')
-      .update({ qtd_vidas: qtdVidas })
-      .eq('id', registro.id);
-
-    if (updateError) {
-      throw new Error(`Erro ao atualizar ${registro.unidade}: ${updateError.message}`);
+    if (!confirm(`Deseja realmente alterar o valor de "Vidas" para R$ ${valor.toFixed(2)} em TODAS as unidades da holding "${holding}"?`)) {
+      return;
     }
-    atualizados.push(registro.unidade);
-  }
 
-  return { atualizados, naoEncontrados, totalAtualizados: atualizados.length, totalNaoEncontrados: naoEncontrados.length };
-}
-
-// ========================= ATUALIZAR VALOR DE VIDAS POR HOLDING =========================
-async function atualizarVidasPorHolding(holding, novoValor) {
-  if (!holding || !novoValor || novoValor < 0) {
-    throw new Error('Selecione uma holding e informe um valor válido.');
-  }
-
-  const { data, error } = await supabaseClient
-    .from('precos')
-    .update({ vidas: novoValor })
-    .eq('holding', holding)
-    .select();
-
-  if (error) throw error;
-  return { holding, novoValor, affected: data?.length || 0 };
-}
-
-// ===== UPLOAD DE PLANILHA DE VIDAS =====
-document.getElementById('processUploadVidasBtn').addEventListener('click', async function() {
-  const input = document.getElementById('uploadVidasInput');
-  const status = document.getElementById('uploadVidasStatus');
-  const feedback = document.getElementById('uploadVidasFeedback');
-
-  if (!input.files || input.files.length === 0) {
-    status.innerHTML = '<span class="text-warning">Selecione um arquivo.</span>';
-    feedback.innerHTML = '';
-    return;
-  }
-
-  status.innerHTML = '<span class="text-info">Processando...</span>';
-  feedback.innerHTML = '';
-
-  try {
-    const result = await processarUploadVidas(input.files[0]);
-    status.innerHTML = `<span class="text-success">✓ ${result.totalAtualizados} unidades atualizadas. ${result.totalNaoEncontrados} não encontradas.</span>`;
-
-    if (result.naoEncontrados.length > 0) {
-      let lista = result.naoEncontrados.map(u => `<li class="list-unstyled">${u}</li>`).join('');
-      feedback.innerHTML = `
-        <div class="alert alert-warning alert-dismissible fade show" role="alert">
-          <strong><i class="fas fa-exclamation-triangle"></i> Unidades não encontradas:</strong>
-          <ul class="mb-0 mt-1" style="list-style: none; padding-left: 0;">${lista}</ul>
-          <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        </div>
-      `;
-    } else {
-      feedback.innerHTML = `<div class="alert alert-success">Todas as unidades foram atualizadas com sucesso!</div>`;
+    status.innerHTML = '<span class="text-info">Atualizando...</span>';
+    try {
+      const result = await atualizarVidasPorHolding(holding, valor);
+      status.innerHTML = `<span class="text-success">✓ ${result.affected} unidades da holding "${holding}" atualizadas para R$ ${result.novoValor.toFixed(2)}.</span>`;
+      carregarPrecos();
+    } catch (err) {
+      status.innerHTML = `<span class="text-danger">Erro: ${err.message}</span>`;
     }
-    // Recarregar a tabela de preços
-    carregarPrecos();
-  } catch (err) {
-    status.innerHTML = `<span class="text-danger">Erro: ${err.message}</span>`;
-    feedback.innerHTML = '';
-  }
-});
+  });
 
-// ===== ATUALIZAR VALOR POR HOLDING =====
-document.getElementById('atualizarVidasHoldingBtn').addEventListener('click', async function() {
-  const holding = document.getElementById('holdingSelect').value;
-  const valor = parseFloat(document.getElementById('novoValorVidas').value);
-  const status = document.getElementById('holdingUpdateStatus');
-
-  if (!holding) {
-    status.innerHTML = '<span class="text-warning">Selecione uma holding.</span>';
-    return;
-  }
-  if (isNaN(valor) || valor < 0) {
-    status.innerHTML = '<span class="text-warning">Informe um valor válido (R$).</span>';
-    return;
-  }
-
-  if (!confirm(`Deseja realmente alterar o valor de "Vidas" para R$ ${valor.toFixed(2)} em TODAS as unidades da holding "${holding}"?`)) {
-    return;
-  }
-
-  status.innerHTML = '<span class="text-info">Atualizando...</span>';
-  try {
-    const result = await atualizarVidasPorHolding(holding, valor);
-    status.innerHTML = `<span class="text-success">✓ ${result.affected} unidades da holding "${holding}" atualizadas para R$ ${result.novoValor.toFixed(2)}.</span>`;
-    // Recarregar a tabela
-    carregarPrecos();
-  } catch (err) {
-    status.innerHTML = `<span class="text-danger">Erro: ${err.message}</span>`;
-  }
-});
-
-// ===== POPULAR HOLDINGS AO CARREGAR A ABA =====
-// Quando a aba de cadastro for exibida, carregar holdings
-document.getElementById('tab-cadastro').addEventListener('shown.bs.tab', function() {
-  carregarHoldings();
-});
-
-// Também carregar holdings ao iniciar (caso a aba já esteja ativa)
-setTimeout(() => {
-  if (document.getElementById('cadastro').classList.contains('show')) {
+  // Carregar holdings quando a aba de cadastro for exibida
+  document.getElementById('tab-cadastro').addEventListener('shown.bs.tab', function() {
     carregarHoldings();
-  }
-}, 500);
+  });
+
+  // Carregar holdings também ao iniciar, se a aba já estiver ativa
+  setTimeout(() => {
+    if (document.getElementById('cadastro')?.classList.contains('show')) {
+      carregarHoldings();
+    }
+  }, 500);
+
+  // ===== DELEGAÇÃO DE EVENTO PARA BOTÃO DE DETALHES =====
+  document.getElementById('resultsBody').addEventListener('click', async function(e) {
+    const btn = e.target.closest('.btn-detalhes');
+    if (!btn) return;
+
+    const id = parseInt(btn.dataset.id);
+    if (isNaN(id)) {
+      mostrarAlerta('ID inválido.', 'warning');
+      return;
+    }
+
+    try {
+      const { data, error } = await supabaseClient
+        .from('faturamento')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (error) throw error;
+      if (!data) {
+        mostrarAlerta('Registro não encontrado.', 'warning');
+        return;
+      }
+
+      mostrarDetalhes(data.unidade, data.mes, data.ano, data.detalhes);
+    } catch (err) {
+      console.error('Erro no detalhe:', err);
+      mostrarAlerta('Erro ao carregar detalhes: ' + err.message, 'danger');
+    }
+  });
 
 }); // fim DOMContentLoaded

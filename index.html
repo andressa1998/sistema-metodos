@@ -867,96 +867,91 @@
   </div>
 </div>
 
-        <!-- ... dentro da aba cadastro, após o botão de exportar ... -->
-<div class="row mt-4">
-  <div class="col-md-6">
-    <div class="card h-100">
-      <div class="card-header" style="background:#41bae8; color:#fff;">
-        <i class="fas fa-upload me-2"></i> Atualizar Quantidade de Vidas
-      </div>
-      <div class="card-body">
-        <p class="text-muted">Envie uma planilha <strong>.xlsx</strong> com as colunas <strong>UNIDADE</strong> e <strong>Func.</strong> (quantidade de funcionários).</p>
-        <div class="input-group mb-2">
-          <input type="file" id="uploadVidasInput" class="form-control" accept=".xlsx" />
-          <button class="btn btn-primary-custom" id="processUploadVidasBtn">
-            <i class="fas fa-upload me-1"></i> Atualizar
-          </button>
+       <!-- ====== ABA CADASTRO DE PREÇOS ====== -->
+<div class="tab-pane fade" id="cadastro" role="tabpanel">
+  <!-- Cards de atualização de vidas -->
+  <div class="row mt-4">
+    <div class="col-md-6">
+      <div class="card h-100">
+        <div class="card-header" style="background:#41bae8; color:#fff;">
+          <i class="fas fa-upload me-2"></i> Atualizar Quantidade de Vidas
         </div>
-        <div id="uploadVidasStatus" class="fw-semibold small"></div>
-        <div id="uploadVidasFeedback"></div>
+        <div class="card-body">
+          <p class="text-muted">Envie uma planilha <strong>.xlsx</strong> com as colunas <strong>UNIDADE</strong> e <strong>Func.</strong> (quantidade de funcionários).</p>
+          <div class="input-group mb-2">
+            <input type="file" id="uploadVidasInput" class="form-control" accept=".xlsx" />
+            <button class="btn btn-primary-custom" id="processUploadVidasBtn">
+              <i class="fas fa-upload me-1"></i> Atualizar
+            </button>
+          </div>
+          <div id="uploadVidasStatus" class="fw-semibold small"></div>
+          <div id="uploadVidasFeedback"></div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="card h-100">
+        <div class="card-header" style="background:#f59e0b; color:#fff;">
+          <i class="fas fa-edit me-2"></i> Atualizar Valor por Vida (Holding)
+        </div>
+        <div class="card-body">
+          <p class="text-muted">Selecione uma holding e defina o novo valor de <strong>Vidas (R$ por vida)</strong> para todas as unidades dessa holding.</p>
+          <select id="holdingSelect" class="form-select mb-2">
+            <option value="">Carregando holdings...</option>
+          </select>
+          <div class="input-group">
+            <span class="input-group-text">R$</span>
+            <input type="number" step="0.01" id="novoValorVidas" class="form-control" placeholder="Novo valor por vida" />
+            <button class="btn btn-warning" id="atualizarVidasHoldingBtn">
+              <i class="fas fa-sync me-1"></i> Atualizar
+            </button>
+          </div>
+          <div id="holdingUpdateStatus" class="mt-2 fw-semibold small"></div>
+        </div>
       </div>
     </div>
   </div>
-  <div class="col-md-6">
-    <div class="card h-100">
-      <div class="card-header" style="background:#f59e0b; color:#fff;">
-        <i class="fas fa-edit me-2"></i> Atualizar Valor por Vida (Holding)
+
+  <!-- Título e botões de ação -->
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4 mt-4">
+    <h5 class="fw-bold mb-0"><i class="fas fa-dollar-sign text-success me-2"></i> Preços por Unidade</h5>
+    <div class="d-flex flex-wrap gap-3 align-items-center">
+      <div class="search-box">
+        <i class="fas fa-search"></i>
+        <input type="text" id="searchPreco" class="form-control" placeholder="Buscar por grupo, holding ou unidade..." />
       </div>
-      <div class="card-body">
-        <p class="text-muted">Selecione uma holding e defina o novo valor de <strong>Vidas (R$ por vida)</strong> para todas as unidades dessa holding.</p>
-        <select id="holdingSelect" class="form-select mb-2">
-          <option value="">Carregando holdings...</option>
-        </select>
-        <div class="input-group">
-          <span class="input-group-text">R$</span>
-          <input type="number" step="0.01" id="novoValorVidas" class="form-control" placeholder="Novo valor por vida" />
-          <button class="btn btn-warning" id="atualizarVidasHoldingBtn">
-            <i class="fas fa-sync me-1"></i> Atualizar
-          </button>
-        </div>
-        <div id="holdingUpdateStatus" class="mt-2 fw-semibold small"></div>
+      <button class="btn btn-soft-success" id="exportPrecosBtn" title="Exportar todos os preços para Excel">
+        <i class="fas fa-file-excel"></i> Exportar XLSX
+      </button>
+      <button class="btn btn-primary-custom" id="btnNovoPreco"><i class="fas fa-plus me-1"></i> Novo Preço</button>
+    </div>
+  </div>
+
+  <!-- Tabela de preços -->
+  <div class="card-modern card">
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-modern" id="precosTable">
+          <thead>
+            <tr>
+              <th>Grupo</th>
+              <th>Holding</th>
+              <th>Unidade</th>
+              <th>Razão Social</th>
+              <th class="text-end">Exame Clínico</th>
+              <th class="text-end">Mensalidade</th>
+              <th class="text-end">Vidas</th>
+              <th class="text-center">Ações</th>
+            </tr>
+          </thead>
+          <tbody id="precosBody">
+            <tr><td colspan="8" class="text-center text-muted py-4">Carregando...</td></tr>
+          </tbody>
+        </table>
       </div>
     </div>
   </div>
 </div>
-
-.
-
-        <!-- ====== ABA CADASTRO DE PREÇOS ====== -->
-        <div class="tab-pane fade" id="cadastro" role="tabpanel">
-          <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
-            <h5 class="fw-bold mb-0"><i class="fas fa-dollar-sign text-success me-2"></i> Preços por Unidade</h5>
-            <div class="d-flex flex-wrap gap-3 align-items-center">
-              <!-- Campo de busca -->
-              <div class="search-box">
-                <i class="fas fa-search"></i>
-                <input type="text" id="searchPreco" class="form-control" placeholder="Buscar por grupo, holding ou unidade..." />
-              </div>
-              <!-- Botão Exportar -->
-              <button class="btn btn-soft-success" id="exportPrecosBtn" title="Exportar todos os preços para Excel">
-                <i class="fas fa-file-excel"></i> Exportar XLSX
-              </button>
-              <button class="btn btn-primary-custom" id="btnNovoPreco"><i class="fas fa-plus me-1"></i> Novo Preço</button>
-            </div>
-          </div>  
-
-          <div class="card-modern card">
-            <div class="card-body p-0">
-              <div class="table-responsive">
-                <table class="table table-modern" id="precosTable">
-                  <thead>
-                    <tr>
-                      <th>Grupo</th>
-                      <th>Holding</th>
-                      <th>Unidade</th>
-                      <th>Razão Social</th>
-                      <th class="text-end">Exame Clínico</th>
-                      <th class="text-end">Mensalidade</th>
-                      <th class="text-end">Vidas</th>
-                      <th class="text-center">Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody id="precosBody">
-                    <tr><td colspan="7" class="text-center text-muted py-4">Carregando...</td></tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
 
   <!-- ==================== MODAL DE PREÇOS ==================== -->
   <div class="modal fade" id="precoModal" tabindex="-1" aria-hidden="true">
