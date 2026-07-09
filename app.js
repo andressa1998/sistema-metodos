@@ -645,16 +645,15 @@ async function exportarPrecos() {
     });
 
     // ========================= PROCESSAMENTO DE UPLOAD =========================
-async function processarUpload(file, mesReferencia = 0, anoReferencia = 0) {
-  const now = new Date();
-  const mes = mesReferencia || now.getMonth() + 1;
-  const ano = anoReferencia || now.getFullYear();
+async function processarUpload(file) {
+  // Agora não recebe mais mesReferencia/anoReferencia
 
   const data = await file.arrayBuffer();
   const workbook = XLSX.read(data, { type: 'array' });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
   const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
 
+  // --- 1) Localizar cabeçalho ---
   let headerRowIndex = -1;
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
@@ -670,6 +669,68 @@ async function processarUpload(file, mesReferencia = 0, anoReferencia = 0) {
 
   const dataRows = rows.slice(headerRowIndex + 1);
 
+  // --- 2) Extrair datas para determinar o mês de referência ---
+  let dataReferencia = null;
+  const mapMesAno = {}; // contagem de ocorrências
+  let maxCount = 0;
+  let mesEscolhido = 0, anoEscolhido = 0;
+
+  for (let row of dataRows) {
+    if (!row[0] && !row[1] && !row[2]) continue;
+    const dataExameStr = row[2]?.toString().trim();
+    if (!dataExameStr) continue;
+
+    // Tenta interpretar a data (suporta vários formatos)
+    let dataObj = null;
+    // Tenta DD/MM/AAAA ou DD-MM-AAAA ou AAAA-MM-DD etc.
+    const partes = dataExameStr.split(/[\/\-]/);
+    if (partes.length === 3) {
+      let d, m, a;
+      // Se o primeiro for > 31, provavelmente é AAAA-MM-DD
+      if (parseInt(partes[0]) > 31) {
+        a = parseInt(partes[0]);
+        m = parseInt(partes[1]);
+        d = parseInt(partes[2]);
+      } else {
+        d = parseInt(partes[0]);
+        m = parseInt(partes[1]);
+        a = parseInt(partes[2]);
+        // Se o ano tiver 2 dígitos, ajusta para 4
+        if (a < 100) a += 2000;
+      }
+      if (!isNaN(d) && !isNaN(m) && !isNaN(a) && m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+        dataObj = new Date(a, m - 1, d);
+        if (!isNaN(dataObj.getTime())) {
+          const chave = `${a}-${m}`;
+          mapMesAno[chave] = (mapMesAno[chave] || 0) + 1;
+          if (mapMesAno[chave] > maxCount) {
+            maxCount = mapMesAno[chave];
+            mesEscolhido = m;
+            anoEscolhido = a;
+          }
+        }
+      }
+    }
+  }
+
+  // Se não encontrou nenhuma data, usa o mês atual + 1
+  if (mesEscolhido === 0) {
+    const now = new Date();
+    mesEscolhido = now.getMonth() + 1;
+    anoEscolhido = now.getFullYear();
+  }
+
+  // --- 3) Calcular o mês seguinte (faturamento) ---
+  let mesFaturamento = mesEscolhido + 1;
+  let anoFaturamento = anoEscolhido;
+  if (mesFaturamento > 12) {
+    mesFaturamento = 1;
+    anoFaturamento += 1;
+  }
+
+  // Agora usamos mesFaturamento e anoFaturamento para o resto do processamento
+
+  // --- 4) Ler exames por unidade (mesmo código de antes, mas usando os novos meses) ---
   const examesPorUnidade = {};
   const unidadesPlanilha = new Set();
 
@@ -700,6 +761,7 @@ async function processarUpload(file, mesReferencia = 0, anoReferencia = 0) {
     });
   }
 
+  // --- 5) Buscar preços das unidades ---
   const { data: todasUnidades, error: unidadesError } = await supabaseClient
     .from('precos')
     .select('*');
@@ -764,14 +826,14 @@ async function processarUpload(file, mesReferencia = 0, anoReferencia = 0) {
     }
 
     const diaVencimento = unidade.dia_vencimento || 10;
-    const ultimoDia = new Date(ano, mes, 0).getDate();
+    const ultimoDia = new Date(anoFaturamento, mesFaturamento, 0).getDate();
     const diaFinal = Math.min(diaVencimento, ultimoDia);
-    const dataVencimento = new Date(ano, mes - 1, diaFinal);
+    const dataVencimento = new Date(anoFaturamento, mesFaturamento - 1, diaFinal);
 
     registros.push({
       unidade: nomeUnidade,
-      mes: mes,
-      ano: ano,
+      mes: mesFaturamento,
+      ano: anoFaturamento,
       valor_total: total,
       detalhes: detalhes,
       data_vencimento: dataVencimento.toISOString().split('T')[0],
@@ -783,11 +845,12 @@ async function processarUpload(file, mesReferencia = 0, anoReferencia = 0) {
 
   if (registros.length === 0) throw new Error('Nenhuma unidade cadastrada para gerar faturamento.');
 
+  // --- 6) Deletar registros antigos do mesmo mês/ano e inserir ---
   const { error: deleteError } = await supabaseClient
     .from('faturamento')
     .delete()
-    .eq('mes', mes)
-    .eq('ano', ano);
+    .eq('mes', mesFaturamento)
+    .eq('ano', anoFaturamento);
 
   if (deleteError) {
     console.warn('Erro ao deletar registros antigos:', deleteError);
@@ -804,7 +867,9 @@ async function processarUpload(file, mesReferencia = 0, anoReferencia = 0) {
   return {
     totalRegistros: registros.length,
     totalGeral,
-    unidadesNaoEncontradas
+    unidadesNaoEncontradas,
+    mesProcessado: mesFaturamento,
+    anoProcessado: anoFaturamento
   };
 }
 
@@ -1119,11 +1184,10 @@ if (statusEl) {
 }
 
     // ========================= EVENTOS DA INTERFACE =========================
-    document.getElementById('processUploadBtn').addEventListener('click', async () => {
+   document.getElementById('processUploadBtn').addEventListener('click', async () => {
   const fileInput = document.getElementById('uploadFileInput');
   const status = document.getElementById('uploadStatus');
   const feedback = document.getElementById('uploadFeedback');
-  const searchInput = document.getElementById('searchUpload');
 
   if (!fileInput.files || fileInput.files.length === 0) {
     status.innerHTML = '<span class="text-warning">Selecione um arquivo.</span>';
@@ -1131,18 +1195,14 @@ if (statusEl) {
     return;
   }
 
-  const searchTerm = searchInput ? searchInput.value.trim() : '';
-  const mesFiltro = parseInt(document.getElementById('filterMonth').value) || 0;
-  const anoFiltro = parseInt(document.getElementById('filterYear').value) || 0;
-  const mesRef = mesFiltro || new Date().getMonth() + 1;
-  const anoRef = anoFiltro || new Date().getFullYear();
-
-  status.innerHTML = `<span class="text-info">Processando para ${mesRef}/${anoRef}${searchTerm ? ' (filtro: "' + searchTerm + '")' : ''}...</span>`;
+  status.innerHTML = `<span class="text-info">Processando...</span>`;
   feedback.innerHTML = '';
 
   try {
-    const result = await processarUpload(fileInput.files[0], mesRef, anoRef, searchTerm);
-    status.innerHTML = `<span class="text-success">✓ ${result.totalRegistros} unidades processadas. Total geral: R$ ${result.totalGeral.toFixed(2)}</span>`;
+    const result = await processarUpload(fileInput.files[0]);
+    const mesNome = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+                     'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'][result.mesProcessado - 1];
+    status.innerHTML = `<span class="text-success">✓ ${result.totalRegistros} unidades processadas para ${mesNome}/${result.anoProcessado}. Total: R$ ${result.totalGeral.toFixed(2)}</span>`;
 
     if (result.unidadesNaoEncontradas && result.unidadesNaoEncontradas.length > 0) {
       let lista = result.unidadesNaoEncontradas.map(u => `<li class="list-unstyled">${u}</li>`).join('');
@@ -1157,10 +1217,12 @@ if (statusEl) {
       feedback.innerHTML = '';
     }
 
+    // Recarrega o relatório com os filtros atuais (opcional)
     const mesF = parseInt(document.getElementById('filterMonth').value);
     const anoF = parseInt(document.getElementById('filterYear').value);
     const unidadeF = document.getElementById('filterUnit').value.trim();
     carregarRelatorio(mesF, anoF, unidadeF, statusFiltroAtual);
+
   } catch (err) {
     status.innerHTML = `<span class="text-danger">Erro: ${err.message}</span>`;
     feedback.innerHTML = '';
