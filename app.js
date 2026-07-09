@@ -1391,4 +1391,200 @@ document.addEventListener('DOMContentLoaded', function () {
     link.click();
   });
 
+  // ========================= CARREGAR HOLDINGS PARA O SELECT =========================
+async function carregarHoldings() {
+  const select = document.getElementById('holdingSelect');
+  try {
+    const { data, error } = await supabaseClient
+      .from('precos')
+      .select('holding')
+      .not('holding', 'is', null)
+      .order('holding', { ascending: true });
+
+    if (error) throw error;
+    const holdings = [...new Set(data.map(item => item.holding).filter(Boolean))];
+    select.innerHTML = '<option value="">Selecione uma holding</option>';
+    holdings.forEach(h => {
+      const opt = document.createElement('option');
+      opt.value = h;
+      opt.textContent = h;
+      select.appendChild(opt);
+    });
+  } catch (err) {
+    console.error('Erro ao carregar holdings:', err);
+    select.innerHTML = '<option value="">Erro ao carregar</option>';
+  }
+}
+
+// ========================= UPLOAD DE PLANILHA DE VIDAS =========================
+async function processarUploadVidas(file) {
+  const data = await file.arrayBuffer();
+  const workbook = XLSX.read(data, { type: 'array' });
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+
+  // Localizar cabeçalho: procurar por linhas que contenham "UNIDADE" e "Func."
+  let headerIndex = -1;
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    if (row.length >= 2) {
+      const col0 = row[0]?.toString().trim().toUpperCase();
+      const col1 = row[1]?.toString().trim().toUpperCase();
+      if ((col0 === 'UNIDADE' || col0 === 'EMPRESA' || col0 === 'RAZÃO SOCIAL') &&
+          (col1 === 'FUNC.' || col1 === 'FUNCIONÁRIOS' || col1 === 'QTDE' || col1 === 'QUANTIDADE')) {
+        headerIndex = i;
+        break;
+      }
+    }
+  }
+  if (headerIndex === -1) {
+    throw new Error('Cabeçalho não encontrado. Procure por colunas "UNIDADE" e "Func." (ou similar).');
+  }
+
+  const dataRows = rows.slice(headerIndex + 1);
+  const atualizados = [];
+  const naoEncontrados = [];
+
+  // Buscar todos os registros de preços uma vez
+  const { data: precos, error } = await supabaseClient.from('precos').select('*');
+  if (error) throw error;
+
+  // Construir mapa por unidade normalizada e razão social normalizada
+  const mapaUnidade = {};
+  const mapaRazao = {};
+  precos.forEach(item => {
+    const chaveUnidade = normalizarUnidade(item.unidade);
+    mapaUnidade[chaveUnidade] = item;
+    if (item.razao_social) {
+      const chaveRazao = normalizarUnidade(item.razao_social);
+      mapaRazao[chaveRazao] = item;
+    }
+  });
+
+  for (let row of dataRows) {
+    if (!row[0] && !row[1]) continue;
+    const nomePlanilha = row[0]?.toString().trim();
+    const qtdVidas = parseInt(row[1]?.toString().trim()) || 0;
+    if (!nomePlanilha) continue;
+
+    const chave = normalizarUnidade(nomePlanilha);
+    let registro = mapaUnidade[chave] || mapaRazao[chave];
+    if (!registro) {
+      naoEncontrados.push(nomePlanilha);
+      continue;
+    }
+
+    // Atualizar qtd_vidas
+    const { error: updateError } = await supabaseClient
+      .from('precos')
+      .update({ qtd_vidas: qtdVidas })
+      .eq('id', registro.id);
+
+    if (updateError) {
+      throw new Error(`Erro ao atualizar ${registro.unidade}: ${updateError.message}`);
+    }
+    atualizados.push(registro.unidade);
+  }
+
+  return { atualizados, naoEncontrados, totalAtualizados: atualizados.length, totalNaoEncontrados: naoEncontrados.length };
+}
+
+// ========================= ATUALIZAR VALOR DE VIDAS POR HOLDING =========================
+async function atualizarVidasPorHolding(holding, novoValor) {
+  if (!holding || !novoValor || novoValor < 0) {
+    throw new Error('Selecione uma holding e informe um valor válido.');
+  }
+
+  const { data, error } = await supabaseClient
+    .from('precos')
+    .update({ vidas: novoValor })
+    .eq('holding', holding)
+    .select();
+
+  if (error) throw error;
+  return { holding, novoValor, affected: data?.length || 0 };
+}
+
+// ===== UPLOAD DE PLANILHA DE VIDAS =====
+document.getElementById('processUploadVidasBtn').addEventListener('click', async function() {
+  const input = document.getElementById('uploadVidasInput');
+  const status = document.getElementById('uploadVidasStatus');
+  const feedback = document.getElementById('uploadVidasFeedback');
+
+  if (!input.files || input.files.length === 0) {
+    status.innerHTML = '<span class="text-warning">Selecione um arquivo.</span>';
+    feedback.innerHTML = '';
+    return;
+  }
+
+  status.innerHTML = '<span class="text-info">Processando...</span>';
+  feedback.innerHTML = '';
+
+  try {
+    const result = await processarUploadVidas(input.files[0]);
+    status.innerHTML = `<span class="text-success">✓ ${result.totalAtualizados} unidades atualizadas. ${result.totalNaoEncontrados} não encontradas.</span>`;
+
+    if (result.naoEncontrados.length > 0) {
+      let lista = result.naoEncontrados.map(u => `<li class="list-unstyled">${u}</li>`).join('');
+      feedback.innerHTML = `
+        <div class="alert alert-warning alert-dismissible fade show" role="alert">
+          <strong><i class="fas fa-exclamation-triangle"></i> Unidades não encontradas:</strong>
+          <ul class="mb-0 mt-1" style="list-style: none; padding-left: 0;">${lista}</ul>
+          <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+      `;
+    } else {
+      feedback.innerHTML = `<div class="alert alert-success">Todas as unidades foram atualizadas com sucesso!</div>`;
+    }
+    // Recarregar a tabela de preços
+    carregarPrecos();
+  } catch (err) {
+    status.innerHTML = `<span class="text-danger">Erro: ${err.message}</span>`;
+    feedback.innerHTML = '';
+  }
+});
+
+// ===== ATUALIZAR VALOR POR HOLDING =====
+document.getElementById('atualizarVidasHoldingBtn').addEventListener('click', async function() {
+  const holding = document.getElementById('holdingSelect').value;
+  const valor = parseFloat(document.getElementById('novoValorVidas').value);
+  const status = document.getElementById('holdingUpdateStatus');
+
+  if (!holding) {
+    status.innerHTML = '<span class="text-warning">Selecione uma holding.</span>';
+    return;
+  }
+  if (isNaN(valor) || valor < 0) {
+    status.innerHTML = '<span class="text-warning">Informe um valor válido (R$).</span>';
+    return;
+  }
+
+  if (!confirm(`Deseja realmente alterar o valor de "Vidas" para R$ ${valor.toFixed(2)} em TODAS as unidades da holding "${holding}"?`)) {
+    return;
+  }
+
+  status.innerHTML = '<span class="text-info">Atualizando...</span>';
+  try {
+    const result = await atualizarVidasPorHolding(holding, valor);
+    status.innerHTML = `<span class="text-success">✓ ${result.affected} unidades da holding "${holding}" atualizadas para R$ ${result.novoValor.toFixed(2)}.</span>`;
+    // Recarregar a tabela
+    carregarPrecos();
+  } catch (err) {
+    status.innerHTML = `<span class="text-danger">Erro: ${err.message}</span>`;
+  }
+});
+
+// ===== POPULAR HOLDINGS AO CARREGAR A ABA =====
+// Quando a aba de cadastro for exibida, carregar holdings
+document.getElementById('tab-cadastro').addEventListener('shown.bs.tab', function() {
+  carregarHoldings();
+});
+
+// Também carregar holdings ao iniciar (caso a aba já esteja ativa)
+setTimeout(() => {
+  if (document.getElementById('cadastro').classList.contains('show')) {
+    carregarHoldings();
+  }
+}, 500);
+
 }); // fim DOMContentLoaded

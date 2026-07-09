@@ -885,6 +885,51 @@
             </div>
           </div>
 
+          <!-- ... dentro da aba cadastro, após o botão de exportar ... -->
+<div class="row mt-4">
+  <div class="col-md-6">
+    <div class="card h-100">
+      <div class="card-header" style="background:#41bae8; color:#fff;">
+        <i class="fas fa-upload me-2"></i> Atualizar Quantidade de Vidas
+      </div>
+      <div class="card-body">
+        <p class="text-muted">Envie uma planilha <strong>.xlsx</strong> com as colunas <strong>UNIDADE</strong> e <strong>Func.</strong> (quantidade de funcionários).</p>
+        <div class="input-group mb-2">
+          <input type="file" id="uploadVidasInput" class="form-control" accept=".xlsx" />
+          <button class="btn btn-primary-custom" id="processUploadVidasBtn">
+            <i class="fas fa-upload me-1"></i> Atualizar
+          </button>
+        </div>
+        <div id="uploadVidasStatus" class="fw-semibold small"></div>
+        <div id="uploadVidasFeedback"></div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card h-100">
+      <div class="card-header" style="background:#f59e0b; color:#fff;">
+        <i class="fas fa-edit me-2"></i> Atualizar Valor por Vida (Holding)
+      </div>
+      <div class="card-body">
+        <p class="text-muted">Selecione uma holding e defina o novo valor de <strong>Vidas (R$ por vida)</strong> para todas as unidades dessa holding.</p>
+        <select id="holdingSelect" class="form-select mb-2">
+          <option value="">Carregando holdings...</option>
+        </select>
+        <div class="input-group">
+          <span class="input-group-text">R$</span>
+          <input type="number" step="0.01" id="novoValorVidas" class="form-control" placeholder="Novo valor por vida" />
+          <button class="btn btn-warning" id="atualizarVidasHoldingBtn">
+            <i class="fas fa-sync me-1"></i> Atualizar
+          </button>
+        </div>
+        <div id="holdingUpdateStatus" class="mt-2 fw-semibold small"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+...
+
           <div class="card-modern card">
             <div class="card-body p-0">
               <div class="table-responsive">
@@ -953,9 +998,15 @@
                 <label for="precoUnidade" class="form-label fw-semibold">Unidade (Empresa) *</label>
                 <input type="text" class="form-control" id="precoUnidade" placeholder="Nome da empresa" required />
               </div>
-             <div class="col-md-4">
-              <label for="precoRazaoSocial" class="form-label">Razão Social</label>
+             <div class="row">
+            <div class="col-md-4">
+              <label for="precoRazaoSocial" class="form-label fw-semibold">Razão Social</label>
               <input type="text" class="form-control" id="precoRazaoSocial" placeholder="Razão social da empresa" />
+            </div>
+
+            <div class="col-md-4">
+              <label for="precoCnpj" class="form-label fw-semibold">CNPJ</label>
+              <input type="text" class="form-control" id="precoCnpj" placeholder="00.000.000/0000-00" />
             </div>
             </div>
             <hr class="my-3" />
