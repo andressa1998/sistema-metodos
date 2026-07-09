@@ -1484,29 +1484,77 @@ window.fecharModalCustom = function() {
   // ================================================================
 
   async function carregarHoldings() {
-    const select = document.getElementById('holdingSelect');
-    if (!select) return;
-    try {
-      const { data, error } = await supabaseClient
-        .from('precos')
-        .select('holding')
-        .not('holding', 'is', null)
-        .order('holding', { ascending: true });
-
-      if (error) throw error;
-      const holdings = [...new Set(data.map(item => item.holding).filter(Boolean))];
-      select.innerHTML = '<option value="">Selecione uma holding</option>';
-      holdings.forEach(h => {
-        const opt = document.createElement('option');
-        opt.value = h;
-        opt.textContent = h;
-        select.appendChild(opt);
-      });
-    } catch (err) {
-      console.error('Erro ao carregar holdings:', err);
-      select.innerHTML = '<option value="">Erro ao carregar</option>';
-    }
+  const select = document.getElementById('holdingSelect');
+  if (!select) {
+    console.error('Elemento holdingSelect não encontrado');
+    return;
   }
+
+  // Mostra status de carregamento
+  select.innerHTML = '<option value="">⏳ Carregando holdings...</option>';
+  select.disabled = true;
+
+  try {
+    // Verifica se o usuário está autenticado
+    const { data: sessionData, error: sessionError } = await supabaseClient.auth.getSession();
+    if (sessionError) {
+      console.error('Erro ao verificar sessão:', sessionError);
+      select.innerHTML = '<option value="">❌ Erro de autenticação</option>';
+      select.disabled = false;
+      return;
+    }
+    if (!sessionData.session) {
+      console.warn('Usuário não autenticado');
+      select.innerHTML = '<option value="">🔒 Faça login novamente</option>';
+      select.disabled = false;
+      return;
+    }
+    console.log('✅ Usuário autenticado:', sessionData.session.user.email);
+
+    // Busca as holdings
+    console.log('⏳ Buscando holdings...');
+    const { data, error } = await supabaseClient
+      .from('precos')
+      .select('holding')
+      .not('holding', 'is', null)
+      .order('holding', { ascending: true });
+
+    if (error) {
+      console.error('❌ Erro Supabase:', error);
+      select.innerHTML = `<option value="">❌ Erro: ${error.message}</option>`;
+      select.disabled = false;
+      return;
+    }
+
+    console.log('📊 Dados recebidos:', data);
+
+    // Extrai holdings únicas
+    const holdings = [...new Set(data.map(item => item.holding).filter(Boolean))];
+    console.log('🏷️ Holdings encontradas:', holdings);
+
+    if (holdings.length === 0) {
+      select.innerHTML = '<option value="">⚠️ Nenhuma holding cadastrada</option>';
+      select.disabled = false;
+      return;
+    }
+
+    // Preenche o select
+    select.innerHTML = '<option value="">Selecione uma holding</option>';
+    holdings.forEach(h => {
+      const opt = document.createElement('option');
+      opt.value = h;
+      opt.textContent = h;
+      select.appendChild(opt);
+    });
+    select.disabled = false;
+    console.log('✅ Holdings carregadas com sucesso!');
+
+  } catch (err) {
+    console.error('❌ Erro inesperado:', err);
+    select.innerHTML = `<option value="">❌ Erro: ${err.message}</option>`;
+    select.disabled = false;
+  }
+}
 
   async function processarUploadVidas(file) {
     const data = await file.arrayBuffer();
@@ -1703,5 +1751,14 @@ window.fecharModalCustom = function() {
       mostrarAlerta('Erro ao carregar detalhes: ' + err.message, 'danger');
     }
   });
+
+  // Botão para recarregar holdings manualmente
+document.getElementById('btnRecarregarHoldings')?.addEventListener('click', function() {
+  carregarHoldings();
+  this.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+  setTimeout(() => {
+    this.innerHTML = '<i class="fas fa-sync"></i>';
+  }, 1500);
+});
 
 }); // fim DOMContentLoaded
