@@ -565,6 +565,68 @@
   </div>
 </div>
 
+<!-- Modal Criar OS -->
+<div class="modal fade" id="criarOsModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content">
+      <div class="modal-header" style="background:#213b7c; color:#fff; border-radius:24px 24px 0 0;">
+        <h5 class="modal-title" id="criarOsModalLabel" style="color:#fff;">
+          <i class="fas fa-file-invoice"></i> Criar Ordem de Serviço
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form id="criarOsForm">
+          <input type="hidden" id="osFaturamentoId" />
+
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="fw-semibold">Unidade</label>
+              <input type="text" id="osCliente" class="form-control" readonly />
+            </div>
+            <div class="col-md-3">
+              <label class="fw-semibold">CNPJ (Omie)</label>
+              <input type="text" id="osCnpj" class="form-control" readonly />
+            </div>
+            <div class="col-md-3">
+              <label class="fw-semibold">Valor Total</label>
+              <input type="text" id="osValorTotal" class="form-control" readonly />
+            </div>
+          </div>
+
+          <div class="mt-3">
+            <label class="fw-semibold">Descrição</label>
+            <textarea id="osDescricao" class="form-control" rows="8" readonly style="font-family: monospace;"></textarea>
+          </div>
+
+          <div class="mt-3">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="osEnviarBoleto" checked disabled />
+              <label class="form-check-label" for="osEnviarBoleto">
+                <i class="fas fa-envelope"></i> Enviar Boleto de Cobrança (sempre ativo)
+              </label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="osEnviarNfse" checked disabled />
+              <label class="form-check-label" for="osEnviarNfse">
+                <i class="fas fa-file-pdf"></i> Enviar link da NFS-e (sempre ativo)
+              </label>
+            </div>
+          </div>
+
+          <div id="osStatusMessage" class="mt-3"></div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-success" id="confirmarCriarOsBtn">
+          <i class="fas fa-save"></i> Criar e Emitir
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
   <!-- ==================== DASHBOARD ==================== -->
   <div id="dashboardPage" class="hidden dashboard-wrapper">
     <!-- Navbar -->

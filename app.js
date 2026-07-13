@@ -581,6 +581,7 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('precoVisitaTec').value = dados.visita_tec ?? '';
     document.getElementById('precoTransporte').value = dados.transporte ?? '';
     document.getElementById('precoDiaVencimento').value = dados.dia_vencimento ?? 10;
+    document.getElementById('precoCnpj').value = dados.cnpj || '';
   }
 
   function lerFormulario() {
@@ -623,6 +624,7 @@ document.addEventListener('DOMContentLoaded', function () {
       visita_tec: getNumber('precoVisitaTec'),
       transporte: getNumber('precoTransporte'),
       dia_vencimento: getInt('precoDiaVencimento') || 10,
+      cnpj: document.getElementById('precoCnpj').value.trim() || null,
     };
   }
 
@@ -907,6 +909,181 @@ document.addEventListener('DOMContentLoaded', function () {
   };
 }
 
+// ===== ABRIR MODAL CRIAR OS =====
+document.addEventListener('click', function(e) {
+  const btn = e.target.closest('.btn-criar-os');
+  if (!btn) return;
+
+  const id = btn.dataset.id;
+  const unidade = btn.dataset.unidade;
+  const valor = parseFloat(btn.dataset.valor);
+
+  (async () => {
+    try {
+      const { data, error } = await supabaseClient
+        .from('faturamento')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (error) throw error;
+
+      // Buscar CNPJ da unidade
+      const { data: precoData, error: precoError } = await supabaseClient
+        .from('precos')
+        .select('cnpj, unidade')
+        .eq('unidade', unidade)
+        .single();
+
+      if (precoError && precoError.code !== 'PGRST116') throw precoError;
+
+      const cnpj = precoData?.cnpj || 'NÃO CADASTRADO';
+
+      // Preencher os campos (com verificações)
+      const setField = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.value = value;
+        else console.warn(`Elemento #${id} não encontrado`);
+      };
+
+      setField('osFaturamentoId', id);
+      setField('osCliente', unidade);
+      setField('osCnpj', cnpj);
+      setField('osValorTotal', 'R$ ' + valor.toFixed(2));
+
+      // Construir descrição detalhada
+      let descricao = '';
+      const detalhes = data.detalhes || {};
+      
+      if (detalhes.mensalidade) {
+        const mens = detalhes.mensalidade;
+        descricao += `MENSALIDADE: R$ ${mens.precoUnitario?.toFixed(2) || '0,00'}\n`;
+      }
+      if (detalhes['vidas (NR-1)']) {
+        const vidas = detalhes['vidas (NR-1)'];
+        descricao += `COBRANÇA VIDAS NR-1: ${vidas.quantidade} * R$ ${vidas.precoUnitario?.toFixed(2) || '0,00'} = R$ ${vidas.subtotal?.toFixed(2) || '0,00'}\n`;
+      }
+      for (let [exame, info] of Object.entries(detalhes)) {
+        if (exame === 'mensalidade' || exame === 'vidas (NR-1)') continue;
+        if (typeof info === 'object' && info.funcionarios) {
+          info.funcionarios.forEach(f => {
+            descricao += `${exame.toUpperCase()} - ${f.nome} - ${f.data || '—'}\n`;
+          });
+        } else {
+          descricao += `${exame.toUpperCase()} - ${info.quantidade} unid.\n`;
+        }
+      }
+
+      const descEl = document.getElementById('osDescricao');
+      if (descEl) descEl.value = descricao || 'Nenhum item detalhado.';
+
+      // Verificar se já existe OS
+      const statusMsg = document.getElementById('osStatusMessage');
+      const confirmBtn = document.getElementById('confirmarCriarOsBtn');
+      if (data.codigo_os_omie) {
+        if (statusMsg) {
+          statusMsg.innerHTML = `
+            <div class="alert alert-info">
+              <i class="fas fa-info-circle"></i> OS já criada: #${data.numero_os_omie} (Status: ${data.status_os_omie || 'pendente'})
+            </div>
+          `;
+        }
+        if (confirmBtn) confirmBtn.disabled = true;
+      } else {
+        if (statusMsg) statusMsg.innerHTML = '';
+        if (confirmBtn) confirmBtn.disabled = false;
+      }
+
+      // Abrir modal
+      const modal = new bootstrap.Modal(document.getElementById('criarOsModal'));
+      modal.show();
+
+    } catch (err) {
+      mostrarAlerta('Erro ao carregar dados: ' + err.message, 'danger');
+    }
+  })();
+});
+
+// ===== CONFIRMAR CRIAÇÃO DA OS =====
+// ===== CONFIRMAR CRIAÇÃO DA OS =====
+document.getElementById('confirmarCriarOsBtn').addEventListener('click', async function() {
+  // Verifica se todos os elementos existem
+  const idEl = document.getElementById('osFaturamentoId');
+  const cnpjEl = document.getElementById('osCnpj');
+  const valorEl = document.getElementById('osValorTotal');
+  const descEl = document.getElementById('osDescricao');
+  const clienteEl = document.getElementById('osCliente');
+
+  if (!idEl || !cnpjEl || !valorEl || !descEl || !clienteEl) {
+    mostrarAlerta('Erro: elementos do modal não encontrados. Recarregue a página.', 'danger');
+    return;
+  }
+
+  const id = idEl.value;
+  const cnpj = cnpjEl.value;
+  const valorStr = valorEl.value.replace('R$ ', '').replace(/\./g, '').replace(',', '.');
+  const valor = parseFloat(valorStr);
+  const descricao = descEl.value;
+  const unidade = clienteEl.value;
+
+  if (!id || isNaN(id)) {
+    mostrarAlerta('ID do faturamento inválido.', 'warning');
+    return;
+  }
+
+  if (cnpj === 'NÃO CADASTRADO' || !cnpj || cnpj.trim() === '') {
+    mostrarAlerta('CNPJ não cadastrado para esta unidade. Cadastre o CNPJ na aba "Cadastro de Unidades".', 'warning');
+    return;
+  }
+
+  if (isNaN(valor) || valor <= 0) {
+    mostrarAlerta('Valor total inválido.', 'warning');
+    return;
+  }
+
+  // Desabilitar botão para evitar duplo clique
+  this.disabled = true;
+  this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Criando...';
+
+  try {
+    const response = await fetch('/functions/v1/criar-os', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id_faturamento: parseInt(id),
+        cnpj: cnpj.trim(),
+        valor_total: valor,
+        descricao_detalhada: descricao,
+        // O e-mail será obtido da Omie pela Edge Function
+      }),
+    });
+
+    const result = await response.json();
+
+    if (!result.success) {
+      throw new Error(result.error || 'Erro desconhecido');
+    }
+
+    mostrarAlerta(`✅ OS criada e emitida com sucesso! Nº: ${result.os?.cNumOS || '—'}`, 'success');
+
+    // Fechar modal
+    const modal = bootstrap.Modal.getInstance(document.getElementById('criarOsModal'));
+    if (modal) modal.hide();
+
+    // Recarregar a tabela
+    const mesF = parseInt(document.getElementById('filterMonth').value);
+    const anoF = parseInt(document.getElementById('filterYear').value);
+    const unidadeF = document.getElementById('filterUnit').value.trim();
+    carregarRelatorio(mesF, anoF, unidadeF, statusFiltroAtual);
+
+  } catch (err) {
+    mostrarAlerta('Erro ao criar OS: ' + err.message, 'danger');
+  } finally {
+    this.disabled = false;
+    this.innerHTML = '<i class="fas fa-save"></i> Criar e Emitir';
+  }
+});
+
   // ========================= RELATÓRIO =========================
   async function carregarRelatorio(mes = 0, ano = 0, unidadeFiltro = '', status = 'todos') {
     let query = supabaseClient.from('faturamento').select('*');
@@ -1017,6 +1194,13 @@ document.addEventListener('DOMContentLoaded', function () {
                   data-id="${row.id}"
                   title="Ver detalhes">
             <i class="fas fa-eye"></i>
+          </button>
+          <button class="btn btn-sm btn-outline-success btn-criar-os" 
+                  data-id="${row.id}" 
+                  data-unidade="${row.unidade}"
+                  data-valor="${row.valor_total}"
+                  title="Criar Ordem de Serviço na Omie">
+            <i class="fas fa-file-invoice"></i> Criar OS
           </button>
         </td>
       </tr>`;
