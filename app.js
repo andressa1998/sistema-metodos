@@ -3,6 +3,7 @@
 const SUPABASE_URL = 'https://uvilxelwpvrwjxxdougw.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV2aWx4ZWx3cHZyd2p4eGRvdWd3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI0OTUxODksImV4cCI6MjA5ODA3MTE4OX0.6YXJYNUFBxL-KQbpZQvRbvKejSFMTpKk6qbxOF_tdlM';
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const SUPABASE_FUNCTIONS_URL = 'https://uvilxelwpvrwjxxdougw.supabase.co/functions/v1';
 
 // ========================= MAPEAMENTO DE EXAMES =========================
 const EXAME_MAP = {
@@ -1005,9 +1006,7 @@ document.addEventListener('click', function(e) {
 });
 
 // ===== CONFIRMAR CRIAÇÃO DA OS =====
-// ===== CONFIRMAR CRIAÇÃO DA OS =====
 document.getElementById('confirmarCriarOsBtn').addEventListener('click', async function() {
-  // Verifica se todos os elementos existem
   const idEl = document.getElementById('osFaturamentoId');
   const cnpjEl = document.getElementById('osCnpj');
   const valorEl = document.getElementById('osValorTotal');
@@ -1024,29 +1023,27 @@ document.getElementById('confirmarCriarOsBtn').addEventListener('click', async f
   const valorStr = valorEl.value.replace('R$ ', '').replace(/\./g, '').replace(',', '.');
   const valor = parseFloat(valorStr);
   const descricao = descEl.value;
-  const unidade = clienteEl.value;
 
   if (!id || isNaN(id)) {
     mostrarAlerta('ID do faturamento inválido.', 'warning');
     return;
   }
-
   if (cnpj === 'NÃO CADASTRADO' || !cnpj || cnpj.trim() === '') {
-    mostrarAlerta('CNPJ não cadastrado para esta unidade. Cadastre o CNPJ na aba "Cadastro de Unidades".', 'warning');
+    mostrarAlerta('CNPJ não cadastrado. Cadastre o CNPJ na unidade.', 'warning');
     return;
   }
-
   if (isNaN(valor) || valor <= 0) {
     mostrarAlerta('Valor total inválido.', 'warning');
     return;
   }
 
-  // Desabilitar botão para evitar duplo clique
   this.disabled = true;
   this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Criando...';
 
   try {
-    const response = await fetch('/functions/v1/criar-os', {
+    // ===== URL CORRETA DA FUNÇÃO =====
+    const functionsUrl = 'https://uvilxelwpvrwjxxdougw.supabase.co/functions/v1';
+    const response = await fetch(`${functionsUrl}/criar-os`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1054,7 +1051,6 @@ document.getElementById('confirmarCriarOsBtn').addEventListener('click', async f
         cnpj: cnpj.trim(),
         valor_total: valor,
         descricao_detalhada: descricao,
-        // O e-mail será obtido da Omie pela Edge Function
       }),
     });
 
@@ -1064,13 +1060,11 @@ document.getElementById('confirmarCriarOsBtn').addEventListener('click', async f
       throw new Error(result.error || 'Erro desconhecido');
     }
 
-    mostrarAlerta(`✅ OS criada e emitida com sucesso! Nº: ${result.os?.cNumOS || '—'}`, 'success');
+    mostrarAlerta(`✅ OS criada com sucesso! Nº: ${result.os?.cNumOS || '—'}`, 'success');
 
-    // Fechar modal
     const modal = bootstrap.Modal.getInstance(document.getElementById('criarOsModal'));
     if (modal) modal.hide();
 
-    // Recarregar a tabela
     const mesF = parseInt(document.getElementById('filterMonth').value);
     const anoF = parseInt(document.getElementById('filterYear').value);
     const unidadeF = document.getElementById('filterUnit').value.trim();
