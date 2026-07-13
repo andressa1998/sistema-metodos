@@ -83,6 +83,7 @@ const UNIDADES_IGNORADAS = [
 let chartTotal = null;
 let chartExames = null;
 let chartMensalidade = null;
+let mapaUnidadeHolding = {};
 
 function processarDadosPorMes(dados, ano) {
   // Inicializa arrays para os 12 meses
@@ -443,6 +444,17 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     precosDataGlobal = data || [];
     renderizarTabelaPrecos(precosDataGlobal);
+
+    // ===== ATUALIZA O MAPA UNIDADE → HOLDING (para filtro na aba Processamento) =====
+    mapaUnidadeHolding = {};
+    if (data) {
+      data.forEach(item => {
+        if (item.unidade && item.holding) {
+          mapaUnidadeHolding[item.unidade] = item.holding;
+        }
+      });
+    }
+    console.log('🗺️ Mapa unidade→holding atualizado com', Object.keys(mapaUnidadeHolding).length, 'registros');
   }
 
   function renderizarTabelaPrecos(dados) {
@@ -545,64 +557,72 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('precoHolding').value = dados.holding || '';
     document.getElementById('precoUnidade').value = dados.unidade || '';
     document.getElementById('precoRazaoSocial').value = dados.razao_social || '';
-    document.getElementById('precoExameClinico').value = dados.exame_clinico || '';
-    document.getElementById('precoMensalidade').value = dados.mensalidade || '';
-    document.getElementById('precoVidas').value = dados.vidas || '';
-    document.getElementById('precoQtdVidas').value = dados.qtd_vidas || '';
-    document.getElementById('precoAudiometria').value = dados.audiometria || '';
-    document.getElementById('precoAcuidade').value = dados.acuidade_visual || '';
-    document.getElementById('precoEcg').value = dados.eletrocardiograma || '';
-    document.getElementById('precoEeg').value = dados.eletroencefalograma || '';
-    document.getElementById('precoEspirometria').value = dados.espirometria || '';
-    document.getElementById('precoRaioX').value = dados.raio_x_torax || '';
-    document.getElementById('precoHemograma').value = dados.hemograma || '';
-    document.getElementById('precoAntiHbs').value = dados.anti_hbs || '';
-    document.getElementById('precoAntiHcv').value = dados.anti_hcv || '';
-    document.getElementById('precoAntiHbsAg').value = dados.anti_hbs_ag || '';
-    document.getElementById('precoVdrl').value = dados.vdrl || '';
-    document.getElementById('precoCoprocultura').value = dados.coprocultura || '';
-    document.getElementById('precoParasitologico').value = dados.parasitologico || '';
-    document.getElementById('precoGamaGt').value = dados.gama_gt || '';
-    document.getElementById('precoGlicose').value = dados.glicose || '';
-    document.getElementById('precoPesquisaFungos').value = dados.pesquisa_fungos || '';
-    document.getElementById('precoDinamometria').value = dados.dinamometria || '';
-    document.getElementById('precoVisitaTec').value = dados.visita_tec || '';
-    document.getElementById('precoTransporte').value = dados.transporte || '';
-    document.getElementById('precoDiaVencimento').value = dados.dia_vencimento || 10;
+    document.getElementById('precoExameClinico').value = dados.exame_clinico ?? '';
+    document.getElementById('precoMensalidade').value = dados.mensalidade ?? '';
+    document.getElementById('precoVidas').value = dados.vidas ?? '';
+    document.getElementById('precoQtdVidas').value = dados.qtd_vidas ?? '';
+    document.getElementById('precoAudiometria').value = dados.audiometria ?? '';
+    document.getElementById('precoAcuidade').value = dados.acuidade_visual ?? '';
+    document.getElementById('precoEcg').value = dados.eletrocardiograma ?? '';
+    document.getElementById('precoEeg').value = dados.eletroencefalograma ?? '';
+    document.getElementById('precoEspirometria').value = dados.espirometria ?? '';
+    document.getElementById('precoRaioX').value = dados.raio_x_torax ?? '';
+    document.getElementById('precoHemograma').value = dados.hemograma ?? '';
+    document.getElementById('precoAntiHbs').value = dados.anti_hbs ?? '';
+    document.getElementById('precoAntiHcv').value = dados.anti_hcv ?? '';
+    document.getElementById('precoAntiHbsAg').value = dados.anti_hbs_ag ?? '';
+    document.getElementById('precoVdrl').value = dados.vdrl ?? '';
+    document.getElementById('precoCoprocultura').value = dados.coprocultura ?? '';
+    document.getElementById('precoParasitologico').value = dados.parasitologico ?? '';
+    document.getElementById('precoGamaGt').value = dados.gama_gt ?? '';
+    document.getElementById('precoGlicose').value = dados.glicose ?? '';
+    document.getElementById('precoPesquisaFungos').value = dados.pesquisa_fungos ?? '';
+    document.getElementById('precoDinamometria').value = dados.dinamometria ?? '';
+    document.getElementById('precoVisitaTec').value = dados.visita_tec ?? '';
+    document.getElementById('precoTransporte').value = dados.transporte ?? '';
+    document.getElementById('precoDiaVencimento').value = dados.dia_vencimento ?? 10;
   }
 
   function lerFormulario() {
     const id = document.getElementById('precoId').value;
+    const getNumber = (id) => {
+      const val = document.getElementById(id).value.trim();
+      return val === '' ? null : parseFloat(val);
+    };
+    const getInt = (id) => {
+      const val = document.getElementById(id).value.trim();
+      return val === '' ? null : parseInt(val);
+    };
     return {
       id: id ? parseInt(id) : null,
       grupo: document.getElementById('precoGrupo').value || null,
       holding: document.getElementById('precoHolding').value || null,
       unidade: document.getElementById('precoUnidade').value.trim(),
       razao_social: document.getElementById('precoRazaoSocial').value.trim() || null,
-      exame_clinico: parseFloat(document.getElementById('precoExameClinico').value) || null,
-      mensalidade: parseFloat(document.getElementById('precoMensalidade').value) || null,
-      vidas: parseInt(document.getElementById('precoVidas').value) || null,
-      qtd_vidas: parseInt(document.getElementById('precoQtdVidas').value) || 0,
-      audiometria: parseFloat(document.getElementById('precoAudiometria').value) || null,
-      acuidade_visual: parseFloat(document.getElementById('precoAcuidade').value) || null,
-      eletrocardiograma: parseFloat(document.getElementById('precoEcg').value) || null,
-      eletroencefalograma: parseFloat(document.getElementById('precoEeg').value) || null,
-      espirometria: parseFloat(document.getElementById('precoEspirometria').value) || null,
-      raio_x_torax: parseFloat(document.getElementById('precoRaioX').value) || null,
-      hemograma: parseFloat(document.getElementById('precoHemograma').value) || null,
-      anti_hbs: parseFloat(document.getElementById('precoAntiHbs').value) || null,
-      anti_hcv: parseFloat(document.getElementById('precoAntiHcv').value) || null,
-      anti_hbs_ag: parseFloat(document.getElementById('precoAntiHbsAg').value) || null,
-      vdrl: parseFloat(document.getElementById('precoVdrl').value) || null,
-      coprocultura: parseFloat(document.getElementById('precoCoprocultura').value) || null,
-      parasitologico: parseFloat(document.getElementById('precoParasitologico').value) || null,
-      gama_gt: parseFloat(document.getElementById('precoGamaGt').value) || null,
-      glicose: parseFloat(document.getElementById('precoGlicose').value) || null,
-      pesquisa_fungos: parseFloat(document.getElementById('precoPesquisaFungos').value) || null,
-      dinamometria: parseFloat(document.getElementById('precoDinamometria').value) || null,
-      visita_tec: parseFloat(document.getElementById('precoVisitaTec').value) || null,
-      transporte: parseFloat(document.getElementById('precoTransporte').value) || null,
-      dia_vencimento: parseInt(document.getElementById('precoDiaVencimento').value) || 10,
+      exame_clinico: getNumber('precoExameClinico'),
+      mensalidade: getNumber('precoMensalidade'),
+      vidas: getNumber('precoVidas'),
+      qtd_vidas: getInt('precoQtdVidas') || 0,
+      audiometria: getNumber('precoAudiometria'),
+      acuidade_visual: getNumber('precoAcuidade'),
+      eletrocardiograma: getNumber('precoEcg'),
+      eletroencefalograma: getNumber('precoEeg'),
+      espirometria: getNumber('precoEspirometria'),
+      raio_x_torax: getNumber('precoRaioX'),
+      hemograma: getNumber('precoHemograma'),
+      anti_hbs: getNumber('precoAntiHbs'),
+      anti_hcv: getNumber('precoAntiHcv'),
+      anti_hbs_ag: getNumber('precoAntiHbsAg'),
+      vdrl: getNumber('precoVdrl'),
+      coprocultura: getNumber('precoCoprocultura'),
+      parasitologico: getNumber('precoParasitologico'),
+      gama_gt: getNumber('precoGamaGt'),
+      glicose: getNumber('precoGlicose'),
+      pesquisa_fungos: getNumber('precoPesquisaFungos'),
+      dinamometria: getNumber('precoDinamometria'),
+      visita_tec: getNumber('precoVisitaTec'),
+      transporte: getNumber('precoTransporte'),
+      dia_vencimento: getInt('precoDiaVencimento') || 10,
     };
   }
 
@@ -652,237 +672,240 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // ========================= PROCESSAMENTO DE UPLOAD =========================
   async function processarUpload(file) {
-    // Agora não recebe mais mesReferencia/anoReferencia
+  const data = await file.arrayBuffer();
+  const workbook = XLSX.read(data, { type: 'array' });
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
 
-    const data = await file.arrayBuffer();
-    const workbook = XLSX.read(data, { type: 'array' });
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
-
-    // --- 1) Localizar cabeçalho ---
-    let headerRowIndex = -1;
-    for (let i = 0; i < rows.length; i++) {
-      const row = rows[i];
-      if (row.length >= 3 &&
-          row[0]?.toString().trim() === 'Exames' &&
-          row[1]?.toString().trim() === 'Funcionário' &&
-          row[2]?.toString().trim() === 'Data do Exame') {
-        headerRowIndex = i;
-        break;
-      }
+  // --- 1) Localizar cabeçalho ---
+  let headerRowIndex = -1;
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    if (row.length >= 3 &&
+        row[0]?.toString().trim() === 'Exames' &&
+        row[1]?.toString().trim() === 'Funcionário' &&
+        row[2]?.toString().trim() === 'Data do Exame') {
+      headerRowIndex = i;
+      break;
     }
-    if (headerRowIndex === -1) throw new Error('Cabeçalho da planilha não encontrado.');
-
-    const dataRows = rows.slice(headerRowIndex + 1);
-
-    // --- 2) Extrair datas para determinar o mês de referência ---
-    let dataReferencia = null;
-    const mapMesAno = {}; // contagem de ocorrências
-    let maxCount = 0;
-    let mesEscolhido = 0, anoEscolhido = 0;
-
-    for (let row of dataRows) {
-      if (!row[0] && !row[1] && !row[2]) continue;
-      const dataExameStr = row[2]?.toString().trim();
-      if (!dataExameStr) continue;
-
-      // Tenta interpretar a data (suporta vários formatos)
-      let dataObj = null;
-      // Tenta DD/MM/AAAA ou DD-MM-AAAA ou AAAA-MM-DD etc.
-      const partes = dataExameStr.split(/[\/\-]/);
-      if (partes.length === 3) {
-        let d, m, a;
-        // Se o primeiro for > 31, provavelmente é AAAA-MM-DD
-        if (parseInt(partes[0]) > 31) {
-          a = parseInt(partes[0]);
-          m = parseInt(partes[1]);
-          d = parseInt(partes[2]);
-        } else {
-          d = parseInt(partes[0]);
-          m = parseInt(partes[1]);
-          a = parseInt(partes[2]);
-          // Se o ano tiver 2 dígitos, ajusta para 4
-          if (a < 100) a += 2000;
-        }
-        if (!isNaN(d) && !isNaN(m) && !isNaN(a) && m >= 1 && m <= 12 && d >= 1 && d <= 31) {
-          dataObj = new Date(a, m - 1, d);
-          if (!isNaN(dataObj.getTime())) {
-            const chave = `${a}-${m}`;
-            mapMesAno[chave] = (mapMesAno[chave] || 0) + 1;
-            if (mapMesAno[chave] > maxCount) {
-              maxCount = mapMesAno[chave];
-              mesEscolhido = m;
-              anoEscolhido = a;
-            }
-          }
-        }
-      }
-    }
-
-    // Se não encontrou nenhuma data, usa o mês atual + 1
-    if (mesEscolhido === 0) {
-      const now = new Date();
-      mesEscolhido = now.getMonth() + 1;
-      anoEscolhido = now.getFullYear();
-    }
-
-    // --- 3) Calcular o mês seguinte (faturamento) ---
-    let mesFaturamento = mesEscolhido + 1;
-    let anoFaturamento = anoEscolhido;
-    if (mesFaturamento > 12) {
-      mesFaturamento = 1;
-      anoFaturamento += 1;
-    }
-
-    // Agora usamos mesFaturamento e anoFaturamento para o resto do processamento
-
-    // --- 4) Ler exames por unidade ---
-    const examesPorUnidade = {};
-    const unidadesPlanilha = new Set();
-
-    for (let row of dataRows) {
-      if (!row[0] && !row[1] && !row[2]) continue;
-      const exameUpload = row[0]?.toString().trim();
-      const unidadePlanilha = row[4]?.toString().trim();
-      const funcionario = row[1]?.toString().trim();
-      const dataExameStr = row[2]?.toString().trim();
-      if (!exameUpload || !unidadePlanilha) continue;
-
-      if (isUnidadeIgnorada(unidadePlanilha)) continue;
-
-      const exameNormalizado = normalizarNomeExame(exameUpload);
-      if (!exameNormalizado) continue;
-
-      const chaveUnidade = normalizarUnidade(unidadePlanilha);
-      unidadesPlanilha.add(chaveUnidade);
-
-      if (!examesPorUnidade[chaveUnidade]) {
-        examesPorUnidade[chaveUnidade] = [];
-      }
-      examesPorUnidade[chaveUnidade].push({
-        exame: exameNormalizado,
-        nomeOriginal: exameUpload,
-        funcionario: funcionario || 'N/A',
-        dataExame: dataExameStr || '—'
-      });
-    }
-
-    // --- 5) Buscar preços das unidades ---
-    const { data: todasUnidades, error: unidadesError } = await supabaseClient
-      .from('precos')
-      .select('*');
-
-    if (unidadesError) throw unidadesError;
-
-    const mapaUnidades = {};
-    const mapaRazaoSocial = {};
-    todasUnidades.forEach(u => {
-      const chaveUnidade = normalizarUnidade(u.unidade);
-      mapaUnidades[chaveUnidade] = u;
-      if (u.razao_social) {
-        const chaveRazao = normalizarUnidade(u.razao_social);
-        mapaRazaoSocial[chaveRazao] = u;
-      }
-    });
-
-    const unidadesNaoEncontradas = [];
-    const registros = [];
-
-    // Percorre as unidades da planilha (não as cadastradas)
-    for (let chave of unidadesPlanilha) {
-      let unidadeEncontrada = mapaUnidades[chave];
-      if (!unidadeEncontrada && mapaRazaoSocial[chave]) {
-        unidadeEncontrada = mapaRazaoSocial[chave];
-      }
-      if (!unidadeEncontrada) {
-        unidadesNaoEncontradas.push(chave);
-        continue;
-      }
-
-      const nomeUnidade = unidadeEncontrada.unidade;
-      const detalhes = {};
-      let total = 0;
-
-      if (unidadeEncontrada.mensalidade && unidadeEncontrada.mensalidade > 0) {
-        total += unidadeEncontrada.mensalidade;
-        detalhes['mensalidade'] = { quantidade: 1, precoUnitario: unidadeEncontrada.mensalidade };
-      }
-
-      if (unidadeEncontrada.vidas && unidadeEncontrada.qtd_vidas) {
-        const valorVidas = unidadeEncontrada.vidas * unidadeEncontrada.qtd_vidas;
-        total += valorVidas;
-        detalhes['vidas (NR-1)'] = {
-          quantidade: unidadeEncontrada.qtd_vidas,
-          precoUnitario: unidadeEncontrada.vidas,
-          subtotal: valorVidas
-        };
-      }
-
-      if (examesPorUnidade[chave]) {
-        for (let ex of examesPorUnidade[chave]) {
-          const preco = unidadeEncontrada[ex.exame] || 0;
-          if (preco === 0) continue;
-          total += preco;
-          if (!detalhes[ex.exame]) {
-            detalhes[ex.exame] = {
-              quantidade: 0,
-              precoUnitario: preco,
-              funcionarios: []
-            };
-          }
-          detalhes[ex.exame].quantidade += 1;
-          detalhes[ex.exame].funcionarios.push({
-            nome: ex.funcionario,
-            data: ex.dataExame
-          });
-        }
-      }
-
-      const diaVencimento = unidadeEncontrada.dia_vencimento || 10;
-      const ultimoDia = new Date(anoFaturamento, mesFaturamento, 0).getDate();
-      const diaFinal = Math.min(diaVencimento, ultimoDia);
-      const dataVencimento = new Date(anoFaturamento, mesFaturamento - 1, diaFinal);
-
-      registros.push({
-        unidade: nomeUnidade,
-        mes: mesFaturamento,
-        ano: anoFaturamento,
-        valor_total: total,
-        detalhes: detalhes,
-        data_vencimento: dataVencimento.toISOString().split('T')[0],
-        nota_emitida: false,
-        boleto_enviado: false,
-        pago: false
-      });
-    }
-
-    // --- 6) Deletar registros antigos do mesmo mês/ano e inserir ---
-    const { error: deleteError } = await supabaseClient
-      .from('faturamento')
-      .delete()
-      .eq('mes', mesFaturamento)
-      .eq('ano', anoFaturamento);
-
-    if (deleteError) {
-      console.warn('Erro ao deletar registros antigos:', deleteError);
-    }
-
-    const { error: insertError } = await supabaseClient
-      .from('faturamento')
-      .insert(registros);
-
-    if (insertError) throw insertError;
-
-    const totalGeral = registros.reduce((acc, r) => acc + r.valor_total, 0);
-
-    return {
-      totalRegistros: registros.length,
-      totalGeral,
-      unidadesNaoEncontradas,
-      mesProcessado: mesFaturamento,
-      anoProcessado: anoFaturamento
-    };
   }
+  if (headerRowIndex === -1) throw new Error('Cabeçalho da planilha não encontrado.');
+
+  const dataRows = rows.slice(headerRowIndex + 1);
+
+  // --- 2) Extrair datas para determinar o mês de referência ---
+  const mapMesAno = {};
+  let maxCount = 0;
+  let mesEscolhido = 0, anoEscolhido = 0;
+
+  for (let row of dataRows) {
+    if (!row[0] && !row[1] && !row[2]) continue;
+    const dataExameStr = row[2]?.toString().trim();
+    if (!dataExameStr) continue;
+
+    const partes = dataExameStr.split(/[\/\-]/);
+    if (partes.length === 3) {
+      let d, m, a;
+      if (parseInt(partes[0]) > 31) {
+        a = parseInt(partes[0]);
+        m = parseInt(partes[1]);
+        d = parseInt(partes[2]);
+      } else {
+        d = parseInt(partes[0]);
+        m = parseInt(partes[1]);
+        a = parseInt(partes[2]);
+        if (a < 100) a += 2000;
+      }
+      if (!isNaN(d) && !isNaN(m) && !isNaN(a) && m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+        const chave = `${a}-${m}`;
+        mapMesAno[chave] = (mapMesAno[chave] || 0) + 1;
+        if (mapMesAno[chave] > maxCount) {
+          maxCount = mapMesAno[chave];
+          mesEscolhido = m;
+          anoEscolhido = a;
+        }
+      }
+    }
+  }
+
+  if (mesEscolhido === 0) {
+    const now = new Date();
+    mesEscolhido = now.getMonth() + 1;
+    anoEscolhido = now.getFullYear();
+  }
+
+  let mesFaturamento = mesEscolhido + 1;
+  let anoFaturamento = anoEscolhido;
+  if (mesFaturamento > 12) {
+    mesFaturamento = 1;
+    anoFaturamento += 1;
+  }
+
+  // --- 3) Ler exames por unidade (a partir da planilha) ---
+  const examesPorUnidade = {};
+  const unidadesNaPlanilha = new Set();
+
+  // Primeiro, identificar todas as unidades que aparecem na planilha
+  for (let row of dataRows) {
+    if (!row[0] && !row[1] && !row[2]) continue;
+    const unidadePlanilha = row[4]?.toString().trim();
+    if (!unidadePlanilha) continue;
+    if (isUnidadeIgnorada(unidadePlanilha)) continue;
+    const chave = normalizarUnidade(unidadePlanilha);
+    unidadesNaPlanilha.add(chave);
+  }
+
+  // Depois, associar exames a essas unidades
+  for (let row of dataRows) {
+    if (!row[0] && !row[1] && !row[2]) continue;
+    const exameUpload = row[0]?.toString().trim();
+    const unidadePlanilha = row[4]?.toString().trim();
+    const funcionario = row[1]?.toString().trim();
+    const dataExameStr = row[2]?.toString().trim();
+    if (!exameUpload || !unidadePlanilha) continue;
+    if (isUnidadeIgnorada(unidadePlanilha)) continue;
+
+    const exameNormalizado = normalizarNomeExame(exameUpload);
+    if (!exameNormalizado) continue;
+
+    const chave = normalizarUnidade(unidadePlanilha);
+    if (!examesPorUnidade[chave]) {
+      examesPorUnidade[chave] = [];
+    }
+    examesPorUnidade[chave].push({
+      exame: exameNormalizado,
+      nomeOriginal: exameUpload,
+      funcionario: funcionario || 'N/A',
+      dataExame: dataExameStr || '—'
+    });
+  }
+
+  // --- 4) Buscar TODAS as unidades cadastradas (precos) ---
+  const { data: todasUnidades, error: unidadesError } = await supabaseClient
+    .from('precos')
+    .select('*');
+
+  if (unidadesError) throw unidadesError;
+
+  // Mapear unidades por nome normalizado e razão social
+  const mapaUnidades = {};
+  const mapaRazaoSocial = {};
+  todasUnidades.forEach(u => {
+    const chaveUnidade = normalizarUnidade(u.unidade);
+    mapaUnidades[chaveUnidade] = u;
+    if (u.razao_social) {
+      const chaveRazao = normalizarUnidade(u.razao_social);
+      mapaRazaoSocial[chaveRazao] = u;
+    }
+  });
+
+  // --- 5) Criar registros para TODAS as unidades cadastradas ---
+  const registros = [];
+  const unidadesNaoEncontradas = []; // unidades da planilha que não estão no cadastro
+
+  for (let chave of unidadesNaPlanilha) {
+    let unidade = mapaUnidades[chave] || mapaRazaoSocial[chave];
+    if (!unidade) {
+      unidadesNaoEncontradas.push(chave);
+    }
+  }
+
+  // Agora, iteramos sobre todas as unidades cadastradas
+  for (let unidade of todasUnidades) {
+    // Pular se for ignorada (já tratado)
+    const nomeUnidade = unidade.unidade;
+    const chave = normalizarUnidade(nomeUnidade);
+    // Se a unidade foi marcada como ignorada, pular (mas já tratamos)
+    // Podemos também pular se a unidade não tem mensalidade e nem vidas e não tem exames?
+    // Mas vamos incluir todas, mesmo que o total seja 0.
+
+    const detalhes = {};
+    let total = 0;
+
+    // Adiciona mensalidade (se > 0)
+    if (unidade.mensalidade && unidade.mensalidade > 0) {
+      total += unidade.mensalidade;
+      detalhes['mensalidade'] = { quantidade: 1, precoUnitario: unidade.mensalidade };
+    }
+
+    // Adiciona vidas (se houver valor e quantidade)
+    if (unidade.vidas && unidade.qtd_vidas) {
+      const valorVidas = unidade.vidas * unidade.qtd_vidas;
+      total += valorVidas;
+      detalhes['vidas (NR-1)'] = {
+        quantidade: unidade.qtd_vidas,
+        precoUnitario: unidade.vidas,
+        subtotal: valorVidas
+      };
+    }
+
+    // Adiciona exames (se esta unidade apareceu na planilha)
+    if (examesPorUnidade[chave]) {
+      for (let ex of examesPorUnidade[chave]) {
+        const preco = unidade[ex.exame] || 0;
+        if (preco === 0) continue;
+        total += preco;
+        if (!detalhes[ex.exame]) {
+          detalhes[ex.exame] = {
+            quantidade: 0,
+            precoUnitario: preco,
+            funcionarios: []
+          };
+        }
+        detalhes[ex.exame].quantidade += 1;
+        detalhes[ex.exame].funcionarios.push({
+          nome: ex.funcionario,
+          data: ex.dataExame
+        });
+      }
+    }
+
+    // Data de vencimento
+    const diaVencimento = unidade.dia_vencimento || 10;
+    const ultimoDia = new Date(anoFaturamento, mesFaturamento, 0).getDate();
+    const diaFinal = Math.min(diaVencimento, ultimoDia);
+    const dataVencimento = new Date(anoFaturamento, mesFaturamento - 1, diaFinal);
+
+    registros.push({
+      unidade: nomeUnidade,
+      mes: mesFaturamento,
+      ano: anoFaturamento,
+      valor_total: total,
+      detalhes: detalhes,
+      data_vencimento: dataVencimento.toISOString().split('T')[0],
+      nota_emitida: false,
+      boleto_enviado: false,
+      pago: false
+    });
+  }
+
+  // --- 6) Deletar registros antigos do mesmo mês/ano e inserir ---
+  const { error: deleteError } = await supabaseClient
+    .from('faturamento')
+    .delete()
+    .eq('mes', mesFaturamento)
+    .eq('ano', anoFaturamento);
+
+  if (deleteError) {
+    console.warn('Erro ao deletar registros antigos:', deleteError);
+  }
+
+  const { error: insertError } = await supabaseClient
+    .from('faturamento')
+    .insert(registros);
+
+  if (insertError) throw insertError;
+
+  const totalGeral = registros.reduce((acc, r) => acc + r.valor_total, 0);
+
+  return {
+    totalRegistros: registros.length,
+    totalGeral,
+    unidadesNaoEncontradas, // agora são as unidades da planilha que não estão cadastradas
+    mesProcessado: mesFaturamento,
+    anoProcessado: anoFaturamento
+  };
+}
 
   // ========================= RELATÓRIO =========================
   async function carregarRelatorio(mes = 0, ano = 0, unidadeFiltro = '', status = 'todos') {
@@ -890,7 +913,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
     if (mes > 0) query = query.eq('mes', mes);
     if (ano > 0) query = query.eq('ano', ano);
-    if (unidadeFiltro) query = query.ilike('unidade', `%${unidadeFiltro}%`);
 
     if (status === 'pendentes') {
       query = query.eq('nota_emitida', false).eq('boleto_enviado', false).eq('pago', false);
@@ -906,10 +928,21 @@ document.addEventListener('DOMContentLoaded', function () {
       return;
     }
 
-    atualizarDashboards(data);
+    // ===== FILTRO POR NOME DA UNIDADE OU HOLDING (em memória) =====
+    let dadosFiltrados = data;
+    if (unidadeFiltro && unidadeFiltro.trim() !== '') {
+      const termo = unidadeFiltro.toLowerCase().trim();
+      dadosFiltrados = data.filter(row => {
+        const unidade = (row.unidade || '').toLowerCase();
+        const holding = (mapaUnidadeHolding[row.unidade] || '').toLowerCase();
+        return unidade.includes(termo) || holding.includes(termo);
+      });
+    }
+
+    atualizarDashboards(dadosFiltrados);
 
     const tbody = document.getElementById('resultsBody');
-    if (!data || data.length === 0) {
+    if (!dadosFiltrados || dadosFiltrados.length === 0) {
       tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted py-4">Nenhum registro encontrado</td></tr>`;
       return;
     }
@@ -919,7 +952,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const hoje = new Date();
 
     let html = '';
-    data.forEach(row => {
+    dadosFiltrados.forEach(row => {
       const mesNome = meses[row.mes - 1];
       let totalItens = 0;
       if (row.detalhes && typeof row.detalhes === 'object') {
@@ -1021,165 +1054,158 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function mostrarDetalhes(unidade, mes, ano, detalhes) {
-  try {
-    // Remove qualquer modal antigo que tenha sido criado por esta função
-    const oldModal = document.getElementById('detalhesModalCustom');
-    if (oldModal) oldModal.remove();
-    const oldBackdrops = document.querySelectorAll('.modal-backdrop');
-    oldBackdrops.forEach(b => b.remove());
-    document.body.classList.remove('modal-open');
+    try {
+      const oldModal = document.getElementById('detalhesModalCustom');
+      if (oldModal) oldModal.remove();
+      const oldBackdrops = document.querySelectorAll('.modal-backdrop');
+      oldBackdrops.forEach(b => b.remove());
+      document.body.classList.remove('modal-open');
 
-    // Prepara o conteúdo
-    const meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-      'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
-    const mesNome = meses[mes - 1];
+      const meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+        'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+      const mesNome = meses[mes - 1];
 
-    let bodyContent = '';
-    if (!detalhes || Object.keys(detalhes).length === 0) {
-      bodyContent = '<p class="text-muted">Nenhum detalhe disponível.</p>';
-    } else {
-      let listHtml = '<ul class="list-group">';
-      let totalGeral = 0;
-      for (let [exame, info] of Object.entries(detalhes)) {
-        let qtd, preco, funcionarios;
-        if (typeof info === 'object' && info !== null) {
-          qtd = info.quantidade || 0;
-          preco = info.precoUnitario || 0;
-          funcionarios = info.funcionarios || [];
-        } else {
-          qtd = info;
-          preco = 0;
-          funcionarios = [];
-        }
-        const subtotal = qtd * preco;
-        totalGeral += subtotal;
+      let bodyContent = '';
+      if (!detalhes || Object.keys(detalhes).length === 0) {
+        bodyContent = '<p class="text-muted">Nenhum detalhe disponível.</p>';
+      } else {
+        let listHtml = '<ul class="list-group">';
+        let totalGeral = 0;
+        for (let [exame, info] of Object.entries(detalhes)) {
+          let qtd, preco, funcionarios;
+          if (typeof info === 'object' && info !== null) {
+            qtd = info.quantidade || 0;
+            preco = info.precoUnitario || 0;
+            funcionarios = info.funcionarios || [];
+          } else {
+            qtd = info;
+            preco = 0;
+            funcionarios = [];
+          }
+          const subtotal = qtd * preco;
+          totalGeral += subtotal;
 
-        let funcionariosHtml = '';
-        if (funcionarios.length > 0) {
-          funcionariosHtml = '<ul class="list-unstyled mb-0 small">' +
-            funcionarios.map(f => `<li>👤 ${f.nome} 📅 ${f.data}</li>`).join('') +
-            '</ul>';
-        }
+          let funcionariosHtml = '';
+          if (funcionarios.length > 0) {
+            funcionariosHtml = '<ul class="list-unstyled mb-0 small">' +
+              funcionarios.map(f => `<li>👤 ${f.nome} 📅 ${f.data}</li>`).join('') +
+              '</ul>';
+          }
 
-        listHtml += `<li class="list-group-item">
-          <div class="d-flex justify-content-between align-items-start">
-            <div>
-              <strong>${exame}</strong>
-              <span class="text-muted ms-2">(${qtd} unid. x R$ ${preco.toFixed(2)})</span>
-              ${funcionariosHtml}
+          listHtml += `<li class="list-group-item">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <strong>${exame}</strong>
+                <span class="text-muted ms-2">(${qtd} unid. x R$ ${preco.toFixed(2)})</span>
+                ${funcionariosHtml}
+              </div>
+              <span class="badge bg-primary rounded-pill">R$ ${subtotal.toFixed(2)}</span>
             </div>
-            <span class="badge bg-primary rounded-pill">R$ ${subtotal.toFixed(2)}</span>
-          </div>
-        </li>`;
+          </li>`;
+        }
+        if (totalGeral > 0) {
+          listHtml += `<li class="list-group-item d-flex justify-content-between align-items-center fw-bold">
+            Total
+            <span>R$ ${totalGeral.toFixed(2)}</span>
+          </li>`;
+        }
+        listHtml += '</ul>';
+        bodyContent = listHtml;
       }
-      if (totalGeral > 0) {
-        listHtml += `<li class="list-group-item d-flex justify-content-between align-items-center fw-bold">
-          Total
-          <span>R$ ${totalGeral.toFixed(2)}</span>
-        </li>`;
-      }
-      listHtml += '</ul>';
-      bodyContent = listHtml;
-    }
 
-    // Cria a estrutura do modal do zero
-    const modalHTML = `
-      <div id="detalhesModalCustom" class="modal show" tabindex="-1" style="
-        display: block !important;
-        position: fixed !important;
-        top: 0 !important;
-        left: 0 !important;
-        right: 0 !important;
-        bottom: 0 !important;
-        z-index: 9999 !important;
-        background: rgba(0,0,0,0.5) !important;
-        overflow-y: auto !important;
-        opacity: 1 !important;
-        visibility: visible !important;
-        pointer-events: auto !important;
-      ">
-        <div class="modal-dialog modal-md" style="
-          position: relative !important;
-          margin: 1.75rem auto !important;
-          max-width: 500px !important;
-          pointer-events: auto !important;
-          transform: none !important;
+      const modalHTML = `
+        <div id="detalhesModalCustom" class="modal show" tabindex="-1" style="
+          display: block !important;
+          position: fixed !important;
+          top: 0 !important;
+          left: 0 !important;
+          right: 0 !important;
+          bottom: 0 !important;
+          z-index: 9999 !important;
+          background: rgba(0,0,0,0.5) !important;
+          overflow-y: auto !important;
           opacity: 1 !important;
           visibility: visible !important;
+          pointer-events: auto !important;
         ">
-          <div class="modal-content" style="
-            background: #fff !important;
-            border-radius: 16px !important;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.3) !important;
+          <div class="modal-dialog modal-md" style="
+            position: relative !important;
+            margin: 1.75rem auto !important;
+            max-width: 500px !important;
+            pointer-events: auto !important;
+            transform: none !important;
+            opacity: 1 !important;
+            visibility: visible !important;
           ">
-            <div class="modal-header" style="
-              background: #213b7c !important;
-              color: #fff !important;
-              border-radius: 16px 16px 0 0 !important;
-              padding: 16px 20px !important;
-              border-bottom: none !important;
+            <div class="modal-content" style="
+              background: #fff !important;
+              border-radius: 16px !important;
+              box-shadow: 0 10px 40px rgba(0,0,0,0.3) !important;
             ">
-              <h5 class="modal-title" style="color: #fff !important; font-weight: 600;">
-                <i class="fas fa-file-invoice me-2"></i> Detalhes - ${unidade} (${mesNome}/${ano})
-              </h5>
-              <button type="button" class="btn-close btn-close-white" onclick="fecharModalCustom()" style="
-                background: transparent !important;
-                border: none !important;
-                font-size: 1.5rem !important;
+              <div class="modal-header" style="
+                background: #213b7c !important;
                 color: #fff !important;
-                opacity: 0.8 !important;
-              "></button>
-            </div>
-            <div class="modal-body" style="padding: 20px !important; max-height: 400px !important; overflow-y: auto !important;">
-              ${bodyContent}
-            </div>
-            <div class="modal-footer" style="
-              border-top: 1px solid #e9ecef !important;
-              padding: 12px 20px !important;
-              border-radius: 0 0 16px 16px !important;
-            ">
-              <button type="button" class="btn btn-secondary" onclick="fecharModalCustom()" style="
-                border-radius: 30px !important;
-                padding: 8px 24px !important;
-                font-weight: 500 !important;
-              ">Fechar</button>
+                border-radius: 16px 16px 0 0 !important;
+                padding: 16px 20px !important;
+                border-bottom: none !important;
+              ">
+                <h5 class="modal-title" style="color: #fff !important; font-weight: 600;">
+                  <i class="fas fa-file-invoice me-2"></i> Detalhes - ${unidade} (${mesNome}/${ano})
+                </h5>
+                <button type="button" class="btn-close btn-close-white" onclick="fecharModalCustom()" style="
+                  background: transparent !important;
+                  border: none !important;
+                  font-size: 1.5rem !important;
+                  color: #fff !important;
+                  opacity: 0.8 !important;
+                "></button>
+              </div>
+              <div class="modal-body" style="padding: 20px !important; max-height: 400px !important; overflow-y: auto !important;">
+                ${bodyContent}
+              </div>
+              <div class="modal-footer" style="
+                border-top: 1px solid #e9ecef !important;
+                padding: 12px 20px !important;
+                border-radius: 0 0 16px 16px !important;
+              ">
+                <button type="button" class="btn btn-secondary" onclick="fecharModalCustom()" style="
+                  border-radius: 30px !important;
+                  padding: 8px 24px !important;
+                  font-weight: 500 !important;
+                ">Fechar</button>
+              </div>
             </div>
           </div>
         </div>
-      </div>
-    `;
+      `;
 
-    // Insere no body
-    document.body.insertAdjacentHTML('beforeend', modalHTML);
+      document.body.insertAdjacentHTML('beforeend', modalHTML);
 
-    // Adiciona um listener para fechar com ESC
-    document.addEventListener('keydown', function(e) {
-      if (e.key === 'Escape') fecharModalCustom();
-    });
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') fecharModalCustom();
+      });
 
-    // Adiciona clique no backdrop para fechar (clicar fora do modal)
-    const modalElement = document.getElementById('detalhesModalCustom');
-    modalElement.addEventListener('click', function(e) {
-      if (e.target === this) {
-        fecharModalCustom();
-      }
-    });
+      const modalElement = document.getElementById('detalhesModalCustom');
+      modalElement.addEventListener('click', function(e) {
+        if (e.target === this) {
+          fecharModalCustom();
+        }
+      });
 
-    console.log('✅ Modal criado do zero com sucesso!');
-  } catch (err) {
-    console.error('Erro em mostrarDetalhes:', err);
-    mostrarAlerta('Erro ao exibir detalhes: ' + err.message, 'danger');
+      console.log('✅ Modal criado do zero com sucesso!');
+    } catch (err) {
+      console.error('Erro em mostrarDetalhes:', err);
+      mostrarAlerta('Erro ao exibir detalhes: ' + err.message, 'danger');
+    }
   }
-}
 
-// Função global para fechar o modal customizado
-window.fecharModalCustom = function() {
-  const modal = document.getElementById('detalhesModalCustom');
-  if (modal) modal.remove();
-  const backdrops = document.querySelectorAll('.modal-backdrop');
-  backdrops.forEach(b => b.remove());
-  document.body.classList.remove('modal-open');
-};
+  window.fecharModalCustom = function() {
+    const modal = document.getElementById('detalhesModalCustom');
+    if (modal) modal.remove();
+    const backdrops = document.querySelectorAll('.modal-backdrop');
+    backdrops.forEach(b => b.remove());
+    document.body.classList.remove('modal-open');
+  };
 
   function mostrarAlerta(mensagem, tipo = 'info') {
     const area = document.getElementById('alertArea');
@@ -1345,45 +1371,194 @@ window.fecharModalCustom = function() {
 
   document.getElementById('exportPrecosBtn').addEventListener('click', exportarPrecos);
 
-  // ========================= EXCLUSÃO DE PROCESSAMENTO =========================
-  function popularAnosExcluir() {
-    const select = document.getElementById('excluirAno');
-    const anoAtual = new Date().getFullYear();
-    for (let y = anoAtual; y >= anoAtual - 5; y--) {
-      const option = document.createElement('option');
-      option.value = y;
-      option.textContent = y;
-      select.appendChild(option);
-    }
-  }
-  popularAnosExcluir();
+  // ========================= EXCLUSÃO DE PROCESSAMENTO (MODAL CUSTOMIZADO) =========================
+  // ===== Botão para abrir o modal de exclusão =====
+  document.getElementById('btnExcluirProcessamento').addEventListener('click', function() {
+    abrirModalExclusao();
+  });
 
-  document.getElementById('confirmarExcluir').addEventListener('click', async function() {
-    const mes = parseInt(document.getElementById('excluirMes').value);
-    const ano = parseInt(document.getElementById('excluirAno').value);
-    if (!mes || !ano) {
-      mostrarAlerta('Selecione mês e ano.', 'warning');
-      return;
+  // ===== MODAL CUSTOMIZADO DE EXCLUSÃO =====
+  function abrirModalExclusao() {
+    // Remove qualquer modal antigo
+    const oldModal = document.getElementById('excluirModalCustom');
+    if (oldModal) oldModal.remove();
+    const oldBackdrops = document.querySelectorAll('.modal-backdrop');
+    oldBackdrops.forEach(b => b.remove());
+    document.body.classList.remove('modal-open');
+
+    // Popula selects com meses e anos
+    const meses = [
+      { value: 1, label: 'Janeiro' }, { value: 2, label: 'Fevereiro' },
+      { value: 3, label: 'Março' }, { value: 4, label: 'Abril' },
+      { value: 5, label: 'Maio' }, { value: 6, label: 'Junho' },
+      { value: 7, label: 'Julho' }, { value: 8, label: 'Agosto' },
+      { value: 9, label: 'Setembro' }, { value: 10, label: 'Outubro' },
+      { value: 11, label: 'Novembro' }, { value: 12, label: 'Dezembro' }
+    ];
+    const anoAtual = new Date().getFullYear();
+    const anos = [];
+    for (let y = anoAtual; y >= anoAtual - 5; y--) {
+      anos.push(y);
     }
-    if (confirm(`Deseja realmente excluir todos os registros de ${mes}/${ano}?`)) {
+
+    let monthOptions = meses.map(m => `<option value="${m.value}">${m.label}</option>`).join('');
+    let yearOptions = anos.map(y => `<option value="${y}">${y}</option>`).join('');
+
+    // HTML do modal
+    const modalHTML = `
+      <div id="excluirModalCustom" class="modal show" tabindex="-1" style="
+        display: block !important;
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        z-index: 9999 !important;
+        background: rgba(0,0,0,0.5) !important;
+        overflow-y: auto !important;
+        opacity: 1 !important;
+        visibility: visible !important;
+        pointer-events: auto !important;
+      ">
+        <div class="modal-dialog modal-md" style="
+          position: relative !important;
+          margin: 1.75rem auto !important;
+          max-width: 500px !important;
+          pointer-events: auto !important;
+          transform: none !important;
+        ">
+          <div class="modal-content" style="
+            background: #fff !important;
+            border-radius: 16px !important;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3) !important;
+          ">
+            <div class="modal-header" style="
+              background: #dc3545 !important;
+              color: #fff !important;
+              border-radius: 16px 16px 0 0 !important;
+              padding: 16px 20px !important;
+              border-bottom: none !important;
+            ">
+              <h5 class="modal-title" style="color: #fff !important; font-weight: 600;">
+                <i class="fas fa-exclamation-triangle me-2"></i> Excluir Processamento
+              </h5>
+              <button type="button" class="btn-close btn-close-white" onclick="fecharModalExclusao()" style="
+                background: transparent !important;
+                border: none !important;
+                font-size: 1.5rem !important;
+                color: #fff !important;
+                opacity: 0.8 !important;
+              "></button>
+            </div>
+            <div class="modal-body" style="padding: 20px !important;">
+              <p>Selecione o mês e ano para excluir todos os registros de faturamento.</p>
+              <div class="row">
+                <div class="col-6">
+                  <label for="excluirMesCustom" class="form-label">Mês</label>
+                  <select id="excluirMesCustom" class="form-select">
+                    <option value="0">Selecione</option>
+                    ${monthOptions}
+                  </select>
+                </div>
+                <div class="col-6">
+                  <label for="excluirAnoCustom" class="form-label">Ano</label>
+                  <select id="excluirAnoCustom" class="form-select">
+                    <option value="0">Selecione</option>
+                    ${yearOptions}
+                  </select>
+                </div>
+              </div>
+              <div id="excluirStatusCustom" class="mt-2 small text-danger"></div>
+            </div>
+            <div class="modal-footer" style="
+              border-top: 1px solid #e9ecef !important;
+              padding: 12px 20px !important;
+              border-radius: 0 0 16px 16px !important;
+            ">
+              <button type="button" class="btn btn-secondary" onclick="fecharModalExclusao()" style="
+                border-radius: 30px !important;
+                padding: 8px 24px !important;
+                font-weight: 500 !important;
+              ">Cancelar</button>
+              <button type="button" class="btn btn-danger" id="confirmarExcluirCustom" style="
+                border-radius: 30px !important;
+                padding: 8px 24px !important;
+                font-weight: 500 !important;
+              ">
+                <i class="fas fa-trash me-1"></i> Excluir
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+    // Adiciona eventos
+    const modalElement = document.getElementById('excluirModalCustom');
+    modalElement.addEventListener('click', function(e) {
+      if (e.target === this) fecharModalExclusao();
+    });
+
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') fecharModalExclusao();
+    });
+
+    // Evento do botão confirmar
+    document.getElementById('confirmarExcluirCustom').addEventListener('click', async function() {
+      const mes = parseInt(document.getElementById('excluirMesCustom').value);
+      const ano = parseInt(document.getElementById('excluirAnoCustom').value);
+      const status = document.getElementById('excluirStatusCustom');
+
+      if (!mes || !ano) {
+        status.textContent = '⚠️ Selecione mês e ano.';
+        return;
+      }
+
+      if (!confirm(`Deseja realmente excluir todos os registros de ${mes}/${ano}?`)) return;
+
+      status.textContent = '⏳ Excluindo...';
+      this.disabled = true;
+
       try {
         const { error } = await supabaseClient
           .from('faturamento')
           .delete()
           .eq('mes', mes)
           .eq('ano', ano);
+
         if (error) throw error;
+
+        status.textContent = '✅ Registros excluídos com sucesso!';
         mostrarAlerta(`Registros de ${mes}/${ano} excluídos com sucesso.`, 'success');
-        const mesF = parseInt(document.getElementById('filterMonth').value);
-        const anoF = parseInt(document.getElementById('filterYear').value);
-        const unidadeF = document.getElementById('filterUnit').value.trim();
-        carregarRelatorio(mesF, anoF, unidadeF, statusFiltroAtual);
-        bootstrap.Modal.getInstance(document.getElementById('excluirModal')).hide();
+
+        // Recarrega a lista
+        const mesFiltro = parseInt(document.getElementById('filterMonth').value);
+        const anoFiltro = parseInt(document.getElementById('filterYear').value);
+        const unidadeFiltro = document.getElementById('filterUnit').value.trim();
+        carregarRelatorio(mesFiltro, anoFiltro, unidadeFiltro, statusFiltroAtual);
+
+        setTimeout(fecharModalExclusao, 1000);
       } catch (err) {
+        status.textContent = `❌ Erro: ${err.message}`;
         mostrarAlerta('Erro ao excluir: ' + err.message, 'danger');
+      } finally {
+        this.disabled = false;
       }
-    }
-  });
+    });
+
+    console.log('✅ Modal de exclusão customizado aberto');
+  }
+
+  // Função para fechar o modal customizado
+  window.fecharModalExclusao = function() {
+    const modal = document.getElementById('excluirModalCustom');
+    if (modal) modal.remove();
+    const backdrops = document.querySelectorAll('.modal-backdrop');
+    backdrops.forEach(b => b.remove());
+    document.body.classList.remove('modal-open');
+  };
 
   // ========================= DASHBOARD FILTROS =========================
   function popularAnosDashboard() {
@@ -1484,77 +1659,71 @@ window.fecharModalCustom = function() {
   // ================================================================
 
   async function carregarHoldings() {
-  const select = document.getElementById('holdingSelect');
-  if (!select) {
-    console.error('Elemento holdingSelect não encontrado');
-    return;
+    const select = document.getElementById('holdingSelect');
+    if (!select) {
+      console.error('Elemento holdingSelect não encontrado');
+      return;
+    }
+
+    select.innerHTML = '<option value="">⏳ Carregando holdings...</option>';
+    select.disabled = true;
+
+    try {
+      const { data: sessionData, error: sessionError } = await supabaseClient.auth.getSession();
+      if (sessionError) {
+        console.error('Erro ao verificar sessão:', sessionError);
+        select.innerHTML = '<option value="">❌ Erro de autenticação</option>';
+        select.disabled = false;
+        return;
+      }
+      if (!sessionData.session) {
+        console.warn('Usuário não autenticado');
+        select.innerHTML = '<option value="">🔒 Faça login novamente</option>';
+        select.disabled = false;
+        return;
+      }
+      console.log('✅ Usuário autenticado:', sessionData.session.user.email);
+
+      const { data, error } = await supabaseClient
+        .from('precos')
+        .select('holding')
+        .not('holding', 'is', null)
+        .order('holding', { ascending: true });
+
+      if (error) {
+        console.error('❌ Erro Supabase:', error);
+        select.innerHTML = `<option value="">❌ Erro: ${error.message}</option>`;
+        select.disabled = false;
+        return;
+      }
+
+      console.log('📊 Dados recebidos:', data);
+
+      const holdings = [...new Set(data.map(item => item.holding).filter(Boolean))];
+      console.log('🏷️ Holdings encontradas:', holdings);
+
+      if (holdings.length === 0) {
+        select.innerHTML = '<option value="">⚠️ Nenhuma holding cadastrada</option>';
+        select.disabled = false;
+        return;
+      }
+
+      select.innerHTML = '<option value="">Selecione uma holding</option>';
+      holdings.forEach(h => {
+        const opt = document.createElement('option');
+        opt.value = h;
+        opt.textContent = h;
+        select.appendChild(opt);
+      });
+      select.disabled = false;
+      console.log('✅ Holdings carregadas com sucesso!');
+
+    } catch (err) {
+      console.error('❌ Erro inesperado:', err);
+      select.innerHTML = `<option value="">❌ Erro: ${err.message}</option>`;
+      select.disabled = false;
+    }
   }
-
-  // Mostra status de carregamento
-  select.innerHTML = '<option value="">⏳ Carregando holdings...</option>';
-  select.disabled = true;
-
-  try {
-    // Verifica se o usuário está autenticado
-    const { data: sessionData, error: sessionError } = await supabaseClient.auth.getSession();
-    if (sessionError) {
-      console.error('Erro ao verificar sessão:', sessionError);
-      select.innerHTML = '<option value="">❌ Erro de autenticação</option>';
-      select.disabled = false;
-      return;
-    }
-    if (!sessionData.session) {
-      console.warn('Usuário não autenticado');
-      select.innerHTML = '<option value="">🔒 Faça login novamente</option>';
-      select.disabled = false;
-      return;
-    }
-    console.log('✅ Usuário autenticado:', sessionData.session.user.email);
-
-    // Busca as holdings
-    console.log('⏳ Buscando holdings...');
-    const { data, error } = await supabaseClient
-      .from('precos')
-      .select('holding')
-      .not('holding', 'is', null)
-      .order('holding', { ascending: true });
-
-    if (error) {
-      console.error('❌ Erro Supabase:', error);
-      select.innerHTML = `<option value="">❌ Erro: ${error.message}</option>`;
-      select.disabled = false;
-      return;
-    }
-
-    console.log('📊 Dados recebidos:', data);
-
-    // Extrai holdings únicas
-    const holdings = [...new Set(data.map(item => item.holding).filter(Boolean))];
-    console.log('🏷️ Holdings encontradas:', holdings);
-
-    if (holdings.length === 0) {
-      select.innerHTML = '<option value="">⚠️ Nenhuma holding cadastrada</option>';
-      select.disabled = false;
-      return;
-    }
-
-    // Preenche o select
-    select.innerHTML = '<option value="">Selecione uma holding</option>';
-    holdings.forEach(h => {
-      const opt = document.createElement('option');
-      opt.value = h;
-      opt.textContent = h;
-      select.appendChild(opt);
-    });
-    select.disabled = false;
-    console.log('✅ Holdings carregadas com sucesso!');
-
-  } catch (err) {
-    console.error('❌ Erro inesperado:', err);
-    select.innerHTML = `<option value="">❌ Erro: ${err.message}</option>`;
-    select.disabled = false;
-  }
-}
 
   async function processarUploadVidas(file) {
     const data = await file.arrayBuffer();
@@ -1562,7 +1731,6 @@ window.fecharModalCustom = function() {
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
 
-    // Localizar cabeçalho
     let headerIndex = -1;
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
@@ -1634,7 +1802,7 @@ window.fecharModalCustom = function() {
       .from('precos')
       .update({ vidas: novoValor })
       .eq('holding', holding)
-      .select(); // ESSE .select() garante que o Supabase retorne os registros atualizados
+      .select();
 
     if (error) throw error;
     return { holding, novoValor, affected: data?.length || 0 };
@@ -1642,7 +1810,6 @@ window.fecharModalCustom = function() {
 
   // ===== EVENTOS DAS NOVAS FUNCIONALIDADES =====
 
-  // Upload de planilha de vidas
   document.getElementById('processUploadVidasBtn').addEventListener('click', async function() {
     const input = document.getElementById('uploadVidasInput');
     const status = document.getElementById('uploadVidasStatus');
@@ -1680,7 +1847,6 @@ window.fecharModalCustom = function() {
     }
   });
 
-  // Atualizar valor por holding
   document.getElementById('atualizarVidasHoldingBtn').addEventListener('click', async function() {
     const holding = document.getElementById('holdingSelect').value;
     const valor = parseFloat(document.getElementById('novoValorVidas').value);
@@ -1709,17 +1875,23 @@ window.fecharModalCustom = function() {
     }
   });
 
-  // Carregar holdings quando a aba de cadastro for exibida
   document.getElementById('tab-cadastro').addEventListener('shown.bs.tab', function() {
     carregarHoldings();
   });
 
-  // Carregar holdings também ao iniciar, se a aba já estiver ativa
   setTimeout(() => {
     if (document.getElementById('cadastro')?.classList.contains('show')) {
       carregarHoldings();
     }
   }, 500);
+
+  document.getElementById('btnRecarregarHoldings')?.addEventListener('click', function() {
+    carregarHoldings();
+    this.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    setTimeout(() => {
+      this.innerHTML = '<i class="fas fa-sync"></i>';
+    }, 1500);
+  });
 
   // ===== DELEGAÇÃO DE EVENTO PARA BOTÃO DE DETALHES =====
   document.getElementById('resultsBody').addEventListener('click', async function(e) {
@@ -1751,14 +1923,5 @@ window.fecharModalCustom = function() {
       mostrarAlerta('Erro ao carregar detalhes: ' + err.message, 'danger');
     }
   });
-
-  // Botão para recarregar holdings manualmente
-document.getElementById('btnRecarregarHoldings')?.addEventListener('click', function() {
-  carregarHoldings();
-  this.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-  setTimeout(() => {
-    this.innerHTML = '<i class="fas fa-sync"></i>';
-  }, 1500);
-});
 
 }); // fim DOMContentLoaded
