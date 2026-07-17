@@ -661,6 +661,11 @@
           </button>
         </li>
         <li class="nav-item" role="presentation">
+          <button class="nav-link" id="tab-boletos" data-bs-toggle="tab" data-bs-target="#boletos" type="button" role="tab">
+            <i class="fas fa-barcode"></i> Boletos
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
           <button class="nav-link" id="tab-dashboard" data-bs-toggle="tab" data-bs-target="#dashboard" type="button" role="tab">
             <i class="fas fa-chart-pie"></i> Dashboard
           </button>
@@ -673,6 +678,121 @@
       </ul>
 
       <div class="tab-content">
+
+        <!-- ====== ABA BOLETOS ====== -->
+<div class="tab-pane fade" id="boletos" role="tabpanel">
+  <!-- Filtros de Boletos -->
+  <div class="row g-3 align-items-end mb-4 mt-3">
+    <div class="col-md-3">
+      <label for="boletoFiltroStatus" class="form-label fw-semibold">Status do Boleto</label>
+      <select id="boletoFiltroStatus" class="form-select">
+        <option value="todos">Todos</option>
+        <option value="pago">Pagos</option>
+        <option value="vencido">Vencidos</option>
+        <option value="avencer">A Vencer</option>
+        <option value="naogerado">Não Gerado</option>
+      </select>
+    </div>
+    <div class="col-md-3">
+      <label for="boletoFiltroMes" class="form-label fw-semibold">Mês</label>
+      <select id="boletoFiltroMes" class="form-select">
+        <option value="0">Todos</option>
+        <option value="1">Janeiro</option><option value="2">Fevereiro</option>
+        <option value="3">Março</option><option value="4">Abril</option>
+        <option value="5">Maio</option><option value="6">Junho</option>
+        <option value="7">Julho</option><option value="8">Agosto</option>
+        <option value="9">Setembro</option><option value="10">Outubro</option>
+        <option value="11">Novembro</option><option value="12">Dezembro</option>
+      </select>
+    </div>
+    <div class="col-md-3">
+      <label for="boletoFiltroAno" class="form-label fw-semibold">Ano</label>
+      <select id="boletoFiltroAno" class="form-select"></select>
+    </div>
+    <div class="col-md-3">
+      <label for="boletoFiltroUnidade" class="form-label fw-semibold">Unidade</label>
+      <input type="text" id="boletoFiltroUnidade" class="form-control" placeholder="Filtrar unidade..." />
+    </div>
+  </div>
+
+  <!-- Botões de ação -->
+  <div class="row mb-3">
+    <div class="col-md-12">
+      <button class="btn btn-primary-custom" id="btnAplicarFiltroBoletos">
+        <i class="fas fa-filter me-1"></i> Aplicar Filtros
+      </button>
+      <button class="btn btn-success" id="btnAtualizarStatusBoletos">
+        <i class="fas fa-sync me-1"></i> Atualizar Status dos Boletos
+      </button>
+      <button class="btn btn-warning" id="btnExportarBoletos">
+        <i class="fas fa-file-excel me-1"></i> Exportar Boletos
+      </button>
+    </div>
+  </div>
+
+  <!-- Cards de resumo de boletos -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-3">
+      <div class="card text-white bg-success h-100">
+        <div class="card-body">
+          <h6 class="card-title"><i class="fas fa-check-circle me-2"></i> Pagos</h6>
+          <h2 class="card-text" id="totalBoletosPagos">0</h2>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card text-white bg-danger h-100">
+        <div class="card-body">
+          <h6 class="card-title"><i class="fas fa-exclamation-circle me-2"></i> Vencidos</h6>
+          <h2 class="card-text" id="totalBoletosVencidos">0</h2>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card text-white bg-warning h-100">
+        <div class="card-body">
+          <h6 class="card-title"><i class="fas fa-clock me-2"></i> A Vencer</h6>
+          <h2 class="card-text" id="totalBoletosAVencer">0</h2>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card text-white bg-secondary h-100">
+        <div class="card-body">
+          <h6 class="card-title"><i class="fas fa-file me-2"></i> Não Gerados</h6>
+          <h2 class="card-text" id="totalBoletosNaoGerados">0</h2>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tabela de boletos -->
+  <div class="card-modern card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span><i class="fas fa-barcode me-2 text-primary"></i> Boletos por Unidade</span>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-modern" id="boletosTable">
+          <thead>
+            <tr>
+              <th>Unidade</th>
+              <th>Mês/Ano</th>
+              <th class="text-end">Valor (R$)</th>
+              <th class="text-center">Status Boleto</th>
+              <th class="text-center">Status Nota Fiscal</th>
+              <th class="text-center">Data Vencimento</th>
+              <th class="text-end">Ações</th>
+            </tr>
+          </thead>
+          <tbody id="boletosBody">
+            <tr><td colspan="7" class="text-center text-muted py-4">Carregando boletos...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
         <!-- ====== ABA RELATÓRIO ====== -->
         <div class="tab-pane fade show active" id="relatorio" role="tabpanel">
           <!-- Filtros -->
@@ -712,6 +832,9 @@
               <button class="btn btn-outline-info btn-sm" data-status="enviado">Enviado p/ Unidade</button>
               <button class="btn btn-outline-success btn-sm" data-status="pago">Pago</button>
             </div>
+            <button class="btn btn-warning" id="btnFaturarLote">
+              <i class="fas fa-file-invoice-dollar"></i> Faturar em Lote
+            </button>
           </div>
         </div>
 
@@ -729,10 +852,14 @@
                   <span id="uploadStatus" class="d-block mt-2 fw-semibold" style="font-size:0.9rem;"></span>
                   <div id="uploadFeedback" class="mt-2"></div>
                 </div>
+                
               </div>
+              
             </div>
+            
           </div>
 
+          
           <!-- Tabela de resultados -->
           <div class="card-modern card">
             <div class="card-header d-flex justify-content-between align-items-center">
@@ -1020,6 +1147,24 @@
   </div>
 </div>
 
+<!-- Modal de Detalhes -->
+<div class="modal fade" id="detalhesModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-md">
+    <div class="modal-content">
+      <div class="modal-header" style="background:#213b7c; color:#fff; border-radius:16px 16px 0 0;">
+        <h5 class="modal-title" id="detalhesModalLabel" style="color:#fff;">Detalhes</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="detalhesModalBody">
+        <!-- Conteúdo preenchido via JS -->
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
   <!-- ==================== MODAL DE PREÇOS ==================== -->
   <div class="modal fade" id="precoModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-xl">
@@ -1189,24 +1334,6 @@
       </div>
     </div>
   </div>
-
-  <!-- Modal de Detalhes -->
-<div class="modal fade" id="detalhesModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-md">
-    <div class="modal-content">
-      <div class="modal-header" style="background:#213b7c; color:#fff; border-radius:16px 16px 0 0;">
-        <h5 class="modal-title" id="detalhesModalLabel" style="color:#fff;">Detalhes</h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body" id="detalhesModalBody">
-        <!-- Conteúdo preenchido via JS -->
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
-      </div>
-    </div>
-  </div>
-</div>
 
   <!-- ==================== SCRIPTS ==================== -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
