@@ -218,7 +218,7 @@ async function buscarEmailClienteOmie(codigoCliente) {
   }
 }
 
-// ========================= CRIAR ORDEM DE SERVIÇO NA OMIE (ETAPA 50) - VERSÃO FINAL =========================
+// ========================= CRIAR ORDEM DE SERVIÇO NA OMIE (ETAPA 50) =========================
 async function criarOrdemServicoOmie(registro, codigoCliente) {
   const now = new Date();
   const timestamp = now.getTime();
@@ -273,9 +273,9 @@ async function criarOrdemServicoOmie(registro, codigoCliente) {
   let dataVencimentoOriginal = '01/08/2026';
   if (registro.data_vencimento) {
     const partes = registro.data_vencimento.split('-');
-    const ano = parseInt(partes[0]);
+    const ano = parseInt(partes[2]);
     const mes = parseInt(partes[1]);
-    const dia = parseInt(partes[2]);
+    const dia = parseInt(partes[0]);
     
     let mesCorrigido = mes - 1;
     let anoCorrigido = ano;
@@ -308,10 +308,10 @@ async function criarOrdemServicoOmie(registro, codigoCliente) {
     cRetemISS: "N",
     impostos: {
       nAliqISS: 2.01,
-      cRetemPIS: "N",    // 👈 OBRIGATÓRIO: Adicione estas flags para validar o nó de impostos
-      cRetemCOFINS: "N", // 👈 OBRIGATÓRIO
-      cRetemCSLL: "N",   // 👈 OBRIGATÓRIO
-      cRetemIRRF: "N",   // 👈 OBRIGATÓRIO
+      cRetemPIS: "N",
+      cRetemCOFINS: "N",
+      cRetemCSLL: "N",
+      cRetemIRRF: "N",
       nAliqPIS: 0,
       nAliqCOFINS: 0,
       nAliqCSLL: 0,
@@ -435,95 +435,6 @@ async function faturarLoteOSCorrigido(etapa = '50') {
   }
 }
 
-// ========================= TESTAR FATURAMENTO EM LOTE CORRIGIDO =========================
-async function testarFaturarLote() {
-  console.log('🚀 Testando faturamento em lote...');
-  
-  try {
-    // Primeiro, verificar se há OS na Etapa 50
-    const osList = await listarOSProntasParaFaturar();
-    console.log(`📋 ${osList.length} OS encontradas na Etapa 50`);
-    
-    if (osList.length === 0) {
-      console.log('⚠️ Nenhuma OS na Etapa 50 para faturar.');
-      return;
-    }
-    
-    // Mostrar quais OS serão faturadas
-    console.log('📋 OS que serão faturadas:');
-    osList.forEach(os => {
-      const numOS = os.Cabecalho?.cNumOS || os.cabecalho?.cNumOS || 'N/A';
-      const cliente = os.Cabecalho?.cNomeCli || os.cabecalho?.cNomeCli || 'Sem cliente';
-      console.log(`  OS ${numOS} - ${cliente}`);
-    });
-    
-    // Confirmar com o usuário
-    if (!confirm(`Deseja faturar ${osList.length} OS?`)) {
-      console.log('❌ Operação cancelada pelo usuário.');
-      return;
-    }
-    
-    // Executar o faturamento em lote
-    const resultado = await faturarLoteOSCorrigido('50');
-    console.log('✅ Resultado:', resultado);
-    
-    // Verificar o status do lote após alguns segundos
-    const idLote = resultado.nIdLoteFat || resultado.nIdLoteFet;
-    if (idLote) {
-      console.log(`⏳ Aguardando 5 segundos para verificar o status do lote ${idLote}...`);
-      await new Promise(resolve => setTimeout(resolve, 5000));
-      
-      const status = await statusLoteOS(idLote);
-      console.log('📊 Status do lote:', status);
-    }
-    
-    return resultado;
-  } catch (err) {
-    console.error('❌ Erro:', err.message);
-    throw err;
-  }
-}
-
-// Função para monitorar o lote até concluir
-async function monitorarLoteAteConcluir(nIdLoteFat) {
-  console.log(`🔍 Monitorando lote ${nIdLoteFat}...`);
-  
-  let tentativas = 0;
-  const maxTentativas = 20;
-  
-  while (tentativas < maxTentativas) {
-    try {
-      const status = await statusLoteOS(nIdLoteFat);
-      tentativas++;
-      
-      console.log(`📊 Tentativa ${tentativas}/${maxTentativas} - Status: ${status.cStatus} - Processadas: ${status.nQtdeProcessadas || 0}/${status.nQtdeTotal || 0}`);
-      
-      if (status.cStatus === 'Concluído') {
-        console.log(`✅ Lote ${nIdLoteFat} concluído com sucesso!`);
-        console.log(`📋 ${status.nQtdeProcessadas || 0} OS faturadas`);
-        
-        // Verificar as OS na Etapa 60
-        await listarOSFaturadas();
-        return status;
-      }
-      
-      if (status.cStatus === 'Erro') {
-        console.error(`❌ Lote ${nIdLoteFat} falhou!`);
-        return status;
-      }
-      
-      await new Promise(resolve => setTimeout(resolve, 5000));
-    } catch (err) {
-      console.error(`❌ Erro:`, err);
-      tentativas++;
-      await new Promise(resolve => setTimeout(resolve, 5000));
-    }
-  }
-  
-  console.log(`⏰ Tempo limite excedido para o lote ${nIdLoteFat}`);
-  return null;
-}
-
 // Status do lote
 async function statusLoteOS(nIdLoteFat) {
   console.log(`🔍 Verificando status do lote: ${nIdLoteFat}`);
@@ -576,83 +487,13 @@ async function faturarOSIndividual(codigoOS) {
   }
 }
 
-// Trocar etapa da OS
-async function trocarEtapaOS(codigoOS, novaEtapa = '60') {
-  console.log(`🔄 Trocando etapa da OS ${codigoOS} para ${novaEtapa}...`);
-  
-  const payload = {
-    endpoint: 'servicos/os',
-    call: 'TrocarEtapaOS',
-    param: [{
-      nCodOS: parseInt(codigoOS),
-      cEtapa: novaEtapa
-    }]
-  };
-  
-  try {
-    console.log('📤 Payload:', JSON.stringify(payload, null, 2));
-    const response = await fetchOmieProxy(payload);
-    const data = await response.json();
-    console.log('📥 Resposta:', JSON.stringify(data, null, 2));
-    
-    if (data.fault) {
-      throw new Error(`Erro OMIE: ${data.fault.faultstring}`);
-    }
-    
-    console.log(`✅ OS ${codigoOS} trocada para etapa ${novaEtapa}!`);
-    console.log(`   Número OS: ${data.cNumOS || 'N/A'}`);
-    console.log(`   Nova Etapa: ${data.cEtapa || novaEtapa}`);
-    return data;
-  } catch (err) {
-    console.error(`❌ Erro ao trocar etapa:`, err.message);
-    throw err;
-  }
-}
-
-// Consultar OS
-async function consultarOS(codigoOS) {
-  console.log(`🔍 Consultando OS ${codigoOS}...`);
-  
-  const payload = {
-    endpoint: 'servicos/os',
-    call: 'ConsultarOS',
-    param: [{
-      nCodOS: parseInt(codigoOS)
-    }]
-  };
-  
-  try {
-    const response = await fetchOmieProxy(payload);
-    const data = await response.json();
-    console.log('📥 Dados da OS:', JSON.stringify(data, null, 2));
-    
-    if (data.fault) {
-      console.error('❌ Erro OMIE:', data.fault.faultstring);
-      return null;
-    }
-    
-    console.log(`📋 OS ${codigoOS}:`);
-    console.log(`   Número: ${data.cabecalho?.cNumOS || data.Cabecalho?.cNumOS || 'N/A'}`);
-    console.log(`   Etapa: ${data.cabecalho?.cEtapa || data.Cabecalho?.cEtapa || 'N/A'}`);
-    console.log(`   Cliente: ${data.cabecalho?.cNomeCli || data.Cabecalho?.cNomeCli || 'N/A'}`);
-    console.log(`   Valor: R$ ${data.servicosPrestados?.[0]?.nValUnit || data.ServicosPrestados?.[0]?.nValUnit || 0}`);
-    console.log(`   Faturada: ${data.cabecalho?.cFaturada || data.Cabecalho?.cFaturada || 'N'}`);
-    
-    return data;
-  } catch (err) {
-    console.error('❌ Erro:', err);
-    return null;
-  }
-}
-
-// ========================= PROCESSAR UPLOAD - VERSÃO CORRIGIDA =========================
+// ========================= PROCESSAR UPLOAD =========================
 async function processarUpload(file) {
   const data = await file.arrayBuffer();
   const workbook = XLSX.read(data, { type: 'array' });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
   const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
 
-  // 1) Localizar cabeçalho
   let headerRowIndex = -1;
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
@@ -668,7 +509,6 @@ async function processarUpload(file) {
 
   const dataRows = rows.slice(headerRowIndex + 1);
 
-  // 2) Extrair datas para determinar o mês de referência
   const mapMesAno = {};
   let maxCount = 0;
   let mesEscolhido = 0, anoEscolhido = 0;
@@ -712,7 +552,6 @@ async function processarUpload(file) {
     anoEscolhido = now.getFullYear();
   }
 
-  // ===== CORREÇÃO: MÊS DE FATURAMENTO = MÊS DOS EXAMES + 1 =====
   let mesFaturamento = mesEscolhido + 1;
   let anoFaturamento = anoEscolhido;
   if (mesFaturamento > 12) {
@@ -723,7 +562,6 @@ async function processarUpload(file) {
   console.log(`📅 Mês dos exames: ${mesEscolhido}/${anoEscolhido}`);
   console.log(`📅 Mês de faturamento: ${mesFaturamento}/${anoFaturamento}`);
 
-  // 4) Ler exames por unidade da planilha
   const examesPorUnidade = {};
   const unidadesNaPlanilha = new Set();
 
@@ -754,14 +592,12 @@ async function processarUpload(file) {
     });
   }
 
-  // 5) Buscar TODAS as unidades cadastradas
   const { data: todasUnidades, error: unidadesError } = await supabaseClient
     .from('precos')
     .select('*');
 
   if (unidadesError) throw unidadesError;
 
-  // 6) Construir mapas para busca
   const mapaUnidades = {};
   const mapaUnidadesPorRazaoSocial = {};
 
@@ -774,7 +610,6 @@ async function processarUpload(file) {
     }
   });
 
-  // 7) Determinar quais unidades serão processadas
   const unidadesParaProcessar = new Set();
 
   for (let chave of unidadesNaPlanilha) {
@@ -793,7 +628,6 @@ async function processarUpload(file) {
 
   console.log(`📊 Total de unidades a processar: ${unidadesParaProcessar.size}`);
 
-  // 8) Buscar cada unidade e construir registros
   const unidadesEncontradas = {};
   const unidadesNaoEncontradas = [];
 
@@ -829,7 +663,6 @@ async function processarUpload(file) {
     }
   }
 
-  // 9) Construir registros de faturamento
   const registros = [];
 
   for (let chavePlanilha in unidadesEncontradas) {
@@ -839,7 +672,6 @@ async function processarUpload(file) {
     const detalhes = {};
     let total = 0;
 
-    // ===== MENSALIDADE =====
     if (unidade.mensalidade && unidade.mensalidade > 0) {
       total += unidade.mensalidade;
       detalhes['mensalidade'] = { 
@@ -849,7 +681,6 @@ async function processarUpload(file) {
       };
     }
 
-    // ===== VIDAS (NR-1) =====
     if (unidade.vidas && unidade.vidas > 0 && unidade.qtd_vidas && unidade.qtd_vidas > 0) {
       const valorVidas = unidade.vidas * unidade.qtd_vidas;
       total += valorVidas;
@@ -860,7 +691,6 @@ async function processarUpload(file) {
       };
     }
 
-    // ===== EXAMES =====
     if (examesPorUnidade[chavePlanilha]) {
       for (let ex of examesPorUnidade[chavePlanilha]) {
         const preco = unidade[ex.exame] || 0;
@@ -886,13 +716,9 @@ async function processarUpload(file) {
       continue;
     }
 
-    // ===== DATA DE VENCIMENTO CORRETA =====
-    // Mês de faturamento: mesFaturamento (ex: AGOSTO)
-    // Dia: do cadastro da unidade
     const diaVencimento = unidade.dia_vencimento || 10;
     const ultimoDia = new Date(anoFaturamento, mesFaturamento, 0).getDate();
     const diaFinal = Math.min(diaVencimento, ultimoDia);
-    // Data com o MÊS DE FATURAMENTO (AGOSTO) e o DIA do cadastro
     const dataVencimento = new Date(anoFaturamento, mesFaturamento - 1, diaFinal);
     const dataVencimentoStr = dataVencimento.toISOString().split('T')[0];
 
@@ -913,7 +739,6 @@ async function processarUpload(file) {
 
   if (registros.length === 0) throw new Error('Nenhuma unidade com itens para faturar.');
 
-  // 10) Deletar registros antigos do mesmo mês/ano
   const { error: deleteError } = await supabaseClient
     .from('faturamento')
     .delete()
@@ -924,7 +749,6 @@ async function processarUpload(file) {
     console.warn('Erro ao deletar registros antigos:', deleteError);
   }
 
-  // 11) Inserir novos registros
   const { data: insertedData, error: insertError } = await supabaseClient
     .from('faturamento')
     .insert(registros)
@@ -954,127 +778,159 @@ async function processarUpload(file) {
 }
 
 // ========================= FUNÇÕES DE BUSCA DE CLIENTES =========================
-async function listarClientesOmie() {
-  const agora = Date.now();
-  if (clientesCache && (agora - ultimaBuscaClientes) < CACHE_TTL) {
-    console.log(`📦 Usando cache de clientes (${clientesCache.length} clientes)`);
-    return clientesCache;
-  }
 
-  let pagina = 1;
-  let todosClientes = [];
-  let totalPaginas = 1;
-  const MAX_PAGINAS = 50;
-  let tentativas = 0;
-  const MAX_TENTATIVAS = 3;
-
-  while (pagina <= totalPaginas && pagina <= MAX_PAGINAS && tentativas < MAX_TENTATIVAS) {
-    try {
-      console.log(`📄 Buscando página ${pagina} de clientes...`);
-      const payload = {
-        endpoint: 'geral/clientes',
-        call: 'ListarClientes',
-        param: [{ 
-          pagina: pagina, 
-          registros_por_pagina: 100
-        }]
-      };
-      
-      const response = await fetchOmieProxy(payload);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`HTTP ${response.status} na página ${pagina}:`, errorText);
-        tentativas++;
-        if (tentativas < MAX_TENTATIVAS) {
-          console.log(`⏳ Tentativa ${tentativas}/${MAX_TENTATIVAS}, aguardando...`);
-          await new Promise(resolve => setTimeout(resolve, 5000));
-          continue;
-        }
-        break;
-      }
-      
-      const data = await response.json();
-      
-      if (data.fault) {
-        console.error('Erro OMIE:', data.faultstring);
-        if (data.faultstring && data.faultstring.includes('REDUNDANT')) {
-          const waitTime = parseInt(data.faultstring.match(/\d+/)?.[0] || 30);
-          console.log(`⏳ Aguardando ${waitTime} segundos...`);
-          await new Promise(resolve => setTimeout(resolve, (waitTime + 5) * 1000));
-          continue;
-        }
-        break;
-      }
-
-      const clientes = data.clientes_cadastro || data.clientes || [];
-      console.log(`📄 Página ${pagina}: ${clientes.length} clientes carregados`);
-      
-      todosClientes = todosClientes.concat(clientes);
-      
-      if (data.total_paginas) {
-        totalPaginas = data.total_paginas;
-        console.log(`📊 Total de páginas: ${totalPaginas}`);
-      }
-      
-      pagina++;
-      tentativas = 0;
-      
-      if (pagina <= totalPaginas && pagina <= MAX_PAGINAS) {
-        await new Promise(resolve => setTimeout(resolve, 800));
-      }
-    } catch (err) {
-      console.error(`Erro na página ${pagina}:`, err.message);
-      tentativas++;
-      if (tentativas < MAX_TENTATIVAS) {
-        console.log(`⏳ Tentativa ${tentativas}/${MAX_TENTATIVAS}, aguardando...`);
-        await new Promise(resolve => setTimeout(resolve, 5000));
-      } else {
-        break;
-      }
-    }
-  }
-
-  console.log(`✅ Total de clientes carregados: ${todosClientes.length}`);
-  
-  clientesCache = todosClientes;
-  ultimaBuscaClientes = Date.now();
-  
-  return todosClientes;
-}
-
-async function buscarClientePorCnpjPaginado(cnpj) {
+// ========================= BUSCAR CLIENTE POR CNPJ OTIMIZADO =========================
+async function buscarClientePorCnpjOmie(cnpj) {
   const cnpjLimpo = normalizarCnpj(cnpj);
   if (!cnpjLimpo || cnpjLimpo.length !== 14) {
-    console.error(`CNPJ inválido: ${cnpj}`);
+    console.error(`❌ CNPJ inválido: ${cnpj}`);
     return null;
   }
   
   console.log(`🔍 Buscando cliente com CNPJ: ${cnpjLimpo}`);
   
-  let pagina = 1;
-  const MAX_PAGINAS = 613;
-  let tentativas = 0;
-  const MAX_TENTATIVAS = 3;
+  // TENTATIVA 1: Usar a API de ConsultarCliente com CNPJ
+  try {
+    const payload = {
+      endpoint: 'geral/clientes',
+      call: 'ConsultarCliente',
+      param: [{
+        cnpj_cpf: cnpjLimpo
+      }]
+    };
+    
+    console.log('📤 Tentando consulta direta por CNPJ...');
+    const response = await fetchOmieProxy(payload);
+    const data = await response.json();
+    
+    if (data && !data.fault) {
+      const codigo = data.codigo_cliente_omie || data.codigo_cliente;
+      if (codigo) {
+        console.log(`✅ Cliente encontrado via consulta direta!`);
+        console.log(`   Nome: ${data.razao_social}`);
+        console.log(`   Código: ${codigo}`);
+        return {
+          ...data,
+          codigo_cliente: codigo
+        };
+      }
+    }
+  } catch (err) {
+    console.log('⚠️ Consulta direta falhou, tentando método alternativo...');
+  }
   
-  while (pagina <= MAX_PAGINAS && tentativas < MAX_TENTATIVAS) {
+  // TENTATIVA 2: Usar ListarClientes com filtro por CNPJ (página 1 apenas)
+  try {
+    const payload = {
+      endpoint: 'geral/clientes',
+      call: 'ListarClientes',
+      param: [{
+        pagina: 1,
+        registros_por_pagina: 100,
+        filtrar_por_cnpj: cnpjLimpo
+      }]
+    };
+    
+    console.log('📤 Tentando listar com filtro por CNPJ...');
+    const response = await fetchOmieProxy(payload);
+    const data = await response.json();
+    
+    if (data && !data.fault) {
+      const clientes = data.clientes_cadastro || data.clientes || [];
+      
+      if (clientes.length > 0) {
+        for (const cliente of clientes) {
+          const cnpjCliente = normalizarCnpj(cliente.cnpj_cpf || cliente.cnpj || '');
+          if (cnpjCliente === cnpjLimpo) {
+            const codigo = cliente.codigo_cliente_omie || cliente.codigo_cliente;
+            console.log(`✅ Cliente encontrado via listagem com filtro!`);
+            console.log(`   Nome: ${cliente.razao_social}`);
+            console.log(`   Código: ${codigo}`);
+            return {
+              ...cliente,
+              codigo_cliente: codigo
+            };
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.log('⚠️ Listagem com filtro falhou, tentando método alternativo...');
+  }
+  
+  // TENTATIVA 3: Busca paginada com timeout e cache
+  try {
+    console.log('📤 Buscando em páginas com timeout...');
+    const cliente = await buscarClientePaginadoComTimeout(cnpjLimpo);
+    if (cliente) {
+      return cliente;
+    }
+  } catch (err) {
+    console.log('⚠️ Busca paginada com timeout falhou:', err.message);
+  }
+  
+  console.log(`❌ Cliente com CNPJ ${cnpj} não encontrado.`);
+  return null;
+}
+
+/**
+ * Busca cliente paginado com timeout e cache
+ */
+async function buscarClientePaginadoComTimeout(cnpjLimpo) {
+  // Verificar cache primeiro
+  const cacheKey = `cliente_${cnpjLimpo}`;
+  const cacheData = sessionStorage.getItem(cacheKey);
+  if (cacheData) {
     try {
-      console.log(`📄 Buscando página ${pagina} de ${MAX_PAGINAS}...`);
+      const parsed = JSON.parse(cacheData);
+      const tempoCache = Date.now() - parsed.timestamp;
+      // Cache válido por 30 minutos
+      if (tempoCache < 30 * 60 * 1000) {
+        console.log(`📦 Cliente encontrado no cache!`);
+        return parsed.data;
+      }
+    } catch (e) {
+      // Ignorar erro de parse
+    }
+  }
+  
+  let pagina = 1;
+  const MAX_PAGINAS = 50;
+  const TIMEOUT_PAGINA = 5000; // 5 segundos por página
+  
+  let inicioBusca = Date.now();
+  const TEMPO_MAXIMO_BUSCA = 30000; // 30 segundos no total
+  
+  while (pagina <= MAX_PAGINAS) {
+    // Verificar timeout total
+    if (Date.now() - inicioBusca > TEMPO_MAXIMO_BUSCA) {
+      console.log(`⏰ Tempo máximo de busca excedido (${TEMPO_MAXIMO_BUSCA/1000}s)`);
+      break;
+    }
+    
+    try {
+      console.log(`📄 Buscando página ${pagina}...`);
+      
       const payload = {
         endpoint: 'geral/clientes',
         call: 'ListarClientes',
-        param: [{ 
-          pagina: pagina, 
+        param: [{
+          pagina: pagina,
           registros_por_pagina: 100
         }]
       };
       
-      const response = await fetchOmieProxy(payload);
+      // Promise com timeout para cada página
+      const responsePromise = fetchOmieProxy(payload);
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Timeout na página')), TIMEOUT_PAGINA);
+      });
+      
+      const response = await Promise.race([responsePromise, timeoutPromise]);
       
       if (!response.ok) {
-        console.error(`HTTP ${response.status} na página ${pagina}`);
+        console.warn(`HTTP ${response.status} na página ${pagina}`);
         pagina++;
-        tentativas = 0;
         continue;
       }
       
@@ -1082,54 +938,88 @@ async function buscarClientePorCnpjPaginado(cnpj) {
       
       if (data.fault) {
         if (data.faultstring && data.faultstring.includes('REDUNDANT')) {
-          const waitTime = parseInt(data.faultstring.match(/\d+/)?.[0] || 30);
+          const waitTime = parseInt(data.faultstring.match(/\d+/)?.[0] || 5);
           console.log(`⏳ Aguardando ${waitTime} segundos...`);
-          await new Promise(resolve => setTimeout(resolve, (waitTime + 5) * 1000));
-          tentativas++;
-          if (tentativas >= MAX_TENTATIVAS) {
-            console.log(`❌ Muitas tentativas, pulando página ${pagina}...`);
-            pagina++;
-            tentativas = 0;
-          }
+          await new Promise(resolve => setTimeout(resolve, (waitTime + 2) * 1000));
           continue;
         }
         console.error('Erro OMIE:', data.faultstring);
         pagina++;
         continue;
       }
-
+      
       const clientes = data.clientes_cadastro || data.clientes || [];
       
       for (const cliente of clientes) {
         const cnpjCliente = normalizarCnpj(cliente.cnpj_cpf || cliente.cnpj || '');
         if (cnpjCliente === cnpjLimpo) {
           const codigo = cliente.codigo_cliente_omie || cliente.codigo_cliente;
-          console.log(`✅ Cliente encontrado na página ${pagina}: ${cliente.razao_social}`);
-          console.log(`   CNPJ: ${cliente.cnpj_cpf || cliente.cnpj}`);
+          const resultado = {
+            ...cliente,
+            codigo_cliente: codigo
+          };
+          
+          // Salvar no cache
+          sessionStorage.setItem(cacheKey, JSON.stringify({
+            data: resultado,
+            timestamp: Date.now()
+          }));
+          
+          console.log(`✅ Cliente encontrado na página ${pagina}!`);
+          console.log(`   Nome: ${cliente.razao_social}`);
           console.log(`   Código: ${codigo}`);
-          return cliente;
+          return resultado;
         }
       }
       
-      console.log(`📄 Página ${pagina}: ${clientes.length} clientes, nenhum match`);
-      pagina++;
-      tentativas = 0;
+      // Verificar se chegamos ao fim
+      const totalPaginas = data.total_paginas || data.nTotPaginas || MAX_PAGINAS;
+      if (pagina >= totalPaginas) {
+        console.log(`📄 Última página ${pagina} atingida.`);
+        break;
+      }
       
-      await new Promise(resolve => setTimeout(resolve, 300));
+      pagina++;
+      
+      // Pequeno delay entre páginas
+      await new Promise(resolve => setTimeout(resolve, 200));
+      
     } catch (err) {
       console.error(`Erro na página ${pagina}:`, err.message);
       pagina++;
-      tentativas = 0;
+      
+      // Se for erro de timeout, esperar um pouco antes de continuar
+      if (err.message === 'Timeout na página') {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
     }
   }
   
-  console.log(`❌ Cliente com CNPJ ${cnpj} não encontrado em ${pagina} páginas.`);
   return null;
 }
 
+// ========================= BUSCA OTIMIZADA DE CÓDIGO DO CLIENTE =========================
 async function buscarCodigoClienteParaOS(unidade) {
   console.log(`🔍 Buscando código do cliente para: ${unidade}`);
   
+  // ===== PASSO 1: Verificar cache em memória =====
+  const cacheKey = `cliente_unidade_${unidade}`;
+  const cacheData = sessionStorage.getItem(cacheKey);
+  if (cacheData) {
+    try {
+      const parsed = JSON.parse(cacheData);
+      const tempoCache = Date.now() - parsed.timestamp;
+      // Cache válido por 24 horas para códigos de cliente
+      if (tempoCache < 24 * 60 * 60 * 1000) {
+        console.log(`📦 Código encontrado no cache: ${parsed.codigo}`);
+        return parsed.codigo;
+      }
+    } catch (e) {
+      // Ignorar erro de parse
+    }
+  }
+  
+  // ===== PASSO 2: Buscar no banco de dados =====
   const { data: unidadeData, error } = await supabaseClient
     .from('precos')
     .select('id, unidade, cnpj, codigo_cliente_omie')
@@ -1141,8 +1031,13 @@ async function buscarCodigoClienteParaOS(unidade) {
     return null;
   }
   
+  // Se já tem código salvo no banco, retornar e salvar no cache
   if (unidadeData.codigo_cliente_omie) {
-    console.log(`✅ Código já existe: ${unidadeData.codigo_cliente_omie}`);
+    console.log(`✅ Código já existe no banco: ${unidadeData.codigo_cliente_omie}`);
+    sessionStorage.setItem(cacheKey, JSON.stringify({
+      codigo: unidadeData.codigo_cliente_omie,
+      timestamp: Date.now()
+    }));
     return unidadeData.codigo_cliente_omie;
   }
   
@@ -1152,28 +1047,213 @@ async function buscarCodigoClienteParaOS(unidade) {
   }
   
   console.log(`🔍 Buscando cliente na OMIE com CNPJ: ${unidadeData.cnpj}`);
-  const cliente = await buscarClientePorCnpjPaginado(unidadeData.cnpj);
   
-  if (!cliente) {
-    console.error(`❌ Cliente não encontrado na OMIE para CNPJ: ${unidadeData.cnpj}`);
-    return null;
+  // ===== PASSO 3: Buscar na OMIE com 3 tentativas =====
+  const tentativas = [
+    { metodo: 'consulta_direta', label: 'Consulta direta' },
+    { metodo: 'listagem_filtrada', label: 'Listagem com filtro' },
+    { metodo: 'paginado', label: 'Busca paginada' }
+  ];
+  
+  for (let i = 0; i < tentativas.length; i++) {
+    const tentativa = tentativas[i];
+    console.log(`📤 Tentativa ${i + 1}/${tentativas.length}: ${tentativa.label}...`);
+    
+    try {
+      let cliente = null;
+      
+      if (tentativa.metodo === 'consulta_direta') {
+        cliente = await buscarClienteConsultaDireta(unidadeData.cnpj);
+      } else if (tentativa.metodo === 'listagem_filtrada') {
+        cliente = await buscarClienteListagemFiltrada(unidadeData.cnpj);
+      } else if (tentativa.metodo === 'paginado') {
+        cliente = await buscarClientePaginadoRapido(unidadeData.cnpj);
+      }
+      
+      if (cliente) {
+        const codigo = cliente.codigo_cliente_omie || cliente.codigo_cliente;
+        console.log(`✅ Cliente encontrado via ${tentativa.label}: ${cliente.razao_social} (código: ${codigo})`);
+        
+        // Salvar no banco
+        await supabaseClient
+          .from('precos')
+          .update({ codigo_cliente_omie: codigo })
+          .eq('id', unidadeData.id);
+        
+        // Salvar no cache
+        sessionStorage.setItem(cacheKey, JSON.stringify({
+          codigo: codigo,
+          timestamp: Date.now()
+        }));
+        
+        return codigo;
+      }
+    } catch (err) {
+      console.log(`⚠️ Tentativa ${tentativa.label} falhou:`, err.message);
+    }
   }
   
-  const codigo = cliente.codigo_cliente_omie || cliente.codigo_cliente;
-  console.log(`✅ Cliente encontrado: ${cliente.razao_social} (código: ${codigo})`);
+  console.error(`❌ Cliente não encontrado na OMIE para CNPJ: ${unidadeData.cnpj}`);
+  return null;
+}
+
+/**
+ * TENTATIVA 1: Consulta direta por CNPJ (mais rápida)
+ */
+async function buscarClienteConsultaDireta(cnpj) {
+  const cnpjLimpo = normalizarCnpj(cnpj);
+  if (!cnpjLimpo || cnpjLimpo.length !== 14) return null;
   
-  const { error: updateError } = await supabaseClient
-    .from('precos')
-    .update({ codigo_cliente_omie: codigo })
-    .eq('id', unidadeData.id);
-  
-  if (updateError) {
-    console.error('❌ Erro ao salvar código:', updateError);
+  try {
+    const payload = {
+      endpoint: 'geral/clientes',
+      call: 'ConsultarCliente',
+      param: [{ cnpj_cpf: cnpjLimpo }]
+    };
+    
+    // Timeout de 5 segundos
+    const response = await Promise.race([
+      fetchOmieProxy(payload),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
+    ]);
+    
+    const data = await response.json();
+    
+    if (data && !data.fault) {
+      const codigo = data.codigo_cliente_omie || data.codigo_cliente;
+      if (codigo) {
+        return data;
+      }
+    }
+    return null;
+  } catch (err) {
+    console.log('Consulta direta falhou:', err.message);
     return null;
   }
+}
+
+/**
+ * TENTATIVA 2: Listagem com filtro por CNPJ (página 1 apenas)
+ */
+async function buscarClienteListagemFiltrada(cnpj) {
+  const cnpjLimpo = normalizarCnpj(cnpj);
+  if (!cnpjLimpo || cnpjLimpo.length !== 14) return null;
   
-  console.log(`✅ Código ${codigo} salvo para ${unidade}`);
-  return codigo;
+  try {
+    const payload = {
+      endpoint: 'geral/clientes',
+      call: 'ListarClientes',
+      param: [{
+        pagina: 1,
+        registros_por_pagina: 100,
+        filtrar_por_cnpj: cnpjLimpo
+      }]
+    };
+    
+    const response = await Promise.race([
+      fetchOmieProxy(payload),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
+    ]);
+    
+    const data = await response.json();
+    
+    if (data && !data.fault) {
+      const clientes = data.clientes_cadastro || data.clientes || [];
+      for (const cliente of clientes) {
+        const cnpjCliente = normalizarCnpj(cliente.cnpj_cpf || cliente.cnpj || '');
+        if (cnpjCliente === cnpjLimpo) {
+          return cliente;
+        }
+      }
+    }
+    return null;
+  } catch (err) {
+    console.log('Listagem filtrada falhou:', err.message);
+    return null;
+  }
+}
+
+/**
+ * TENTATIVA 3: Busca paginada rápida (máximo 10 páginas)
+ */
+async function buscarClientePaginadoRapido(cnpj) {
+  const cnpjLimpo = normalizarCnpj(cnpj);
+  if (!cnpjLimpo || cnpjLimpo.length !== 14) return null;
+  
+  // Verificar cache de busca paginada
+  const cacheKey = `busca_paginada_${cnpjLimpo}`;
+  const cacheData = sessionStorage.getItem(cacheKey);
+  if (cacheData) {
+    try {
+      const parsed = JSON.parse(cacheData);
+      const tempoCache = Date.now() - parsed.timestamp;
+      if (tempoCache < 5 * 60 * 1000) { // 5 minutos
+        console.log('📦 Cliente encontrado no cache de busca paginada');
+        return parsed.data;
+      }
+    } catch (e) {}
+  }
+  
+  let pagina = 1;
+  const MAX_PAGINAS = 10; // Máximo 10 páginas para não demorar muito
+  
+  for (let i = 0; i < MAX_PAGINAS; i++) {
+    try {
+      const payload = {
+        endpoint: 'geral/clientes',
+        call: 'ListarClientes',
+        param: [{
+          pagina: pagina,
+          registros_por_pagina: 100
+        }]
+      };
+      
+      const response = await Promise.race([
+        fetchOmieProxy(payload),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 8000))
+      ]);
+      
+      const data = await response.json();
+      
+      if (data.fault) {
+        if (data.faultstring && data.faultstring.includes('REDUNDANT')) {
+          const waitTime = parseInt(data.faultstring.match(/\d+/)?.[0] || 5);
+          await new Promise(resolve => setTimeout(resolve, (waitTime + 2) * 1000));
+          continue;
+        }
+        pagina++;
+        continue;
+      }
+      
+      const clientes = data.clientes_cadastro || data.clientes || [];
+      
+      for (const cliente of clientes) {
+        const cnpjCliente = normalizarCnpj(cliente.cnpj_cpf || cliente.cnpj || '');
+        if (cnpjCliente === cnpjLimpo) {
+          // Salvar no cache
+          sessionStorage.setItem(cacheKey, JSON.stringify({
+            data: cliente,
+            timestamp: Date.now()
+          }));
+          return cliente;
+        }
+      }
+      
+      const totalPaginas = data.total_paginas || data.nTotPaginas || MAX_PAGINAS;
+      if (pagina >= totalPaginas) {
+        break;
+      }
+      
+      pagina++;
+      await new Promise(resolve => setTimeout(resolve, 200));
+      
+    } catch (err) {
+      console.log(`Erro na página ${pagina}:`, err.message);
+      pagina++;
+    }
+  }
+  
+  return null;
 }
 
 async function buscarDadosClienteOmie(unidade) {
@@ -1195,20 +1275,15 @@ async function buscarDadosClienteOmie(unidade) {
     }
     
     const cnpjLimpo = normalizarCnpj(unidadeData.cnpj);
-    const clientes = await listarClientesOmie();
+    const cliente = await buscarClientePorCnpjOmie(cnpjLimpo);
     
-    if (!clientes) return null;
-    
-    for (const cliente of clientes) {
-      const cnpjCliente = normalizarCnpj(cliente.cnpj_cpf || cliente.cnpj || '');
-      if (cnpjCliente === cnpjLimpo) {
-        const codigo = cliente.codigo_cliente_omie || cliente.codigo_cliente;
-        return {
-          cnpj: cliente.cnpj_cpf || cliente.cnpj || '',
-          codigo_cliente: codigo,
-          razao_social: cliente.razao_social
-        };
-      }
+    if (cliente) {
+      const codigo = cliente.codigo_cliente_omie || cliente.codigo_cliente;
+      return {
+        cnpj: cliente.cnpj_cpf || cliente.cnpj || '',
+        codigo_cliente: codigo,
+        razao_social: cliente.razao_social
+      };
     }
     
     return null;
@@ -1396,315 +1471,962 @@ async function exportarPrecos() {
 }
 
 // ========================= BOLETOS =========================
-function getStatusBoleto(row) {
-  const hoje = new Date();
-  hoje.setHours(0, 0, 0, 0);
-  
-  if (!row.omie_os_id || row.omie_status !== 'criado') {
-    return { status: 'naogerado', label: 'Não Gerado', class: 'secondary', icon: 'fa-file' };
-  }
-  
-  if (row.pago) {
-    return { status: 'pago', label: 'Pago', class: 'success', icon: 'fa-check-circle' };
-  }
-  
-  if (row.data_vencimento) {
-    const venc = new Date(row.data_vencimento + 'T00:00:00');
-    const diffDays = Math.ceil((venc - hoje) / (1000 * 60 * 60 * 24));
+let boletosCache = null;
+let ultimaBuscaBoletos = 0;
+const BOLETOS_CACHE_TTL = 60000;
+
+async function buscarBoletosOmie(filtros = {}) {
+    console.log('🔍 Buscando boletos a receber na OMIE...');
     
-    if (diffDays < 0) {
-      return { status: 'vencido', label: 'Vencido', class: 'danger', icon: 'fa-exclamation-circle' };
-    } else if (diffDays <= 3) {
-      return { status: 'avencer', label: 'Vence em breve', class: 'warning', icon: 'fa-clock' };
-    } else {
-      return { status: 'avencer', label: 'A Vencer', class: 'info', icon: 'fa-hourglass-half' };
-    }
-  }
-  
-  return { status: 'naogerado', label: 'Não Gerado', class: 'secondary', icon: 'fa-file' };
-}
-
-function getStatusNota(row) {
-  if (!row.omie_os_id || row.omie_status !== 'criado') {
-    return { status: 'naoemitida', label: 'Não Emitida', class: 'secondary', icon: 'fa-file' };
-  }
-  
-  if (row.nota_emitida) {
-    if (row.nota_status === 'rejeitada') {
-      return { status: 'rejeitada', label: 'Rejeitada', class: 'danger', icon: 'fa-times-circle' };
-    } else if (row.nota_status === 'aceita') {
-      return { status: 'aceita', label: 'Aceita', class: 'success', icon: 'fa-check-circle' };
-    } else {
-      return { status: 'gerada', label: 'Gerada', class: 'info', icon: 'fa-file-pdf' };
-    }
-  }
-  
-  return { status: 'naoemitida', label: 'Não Emitida', class: 'secondary', icon: 'fa-file' };
-}
-
-async function carregarBoletos(mes = 0, ano = 0, unidadeFiltro = '', statusFiltro = 'todos') {
-  let query = supabaseClient.from('faturamento').select('*');
-
-  if (mes > 0) query = query.eq('mes', mes);
-  if (ano > 0) query = query.eq('ano', ano);
-  if (unidadeFiltro) query = query.ilike('unidade', `%${unidadeFiltro}%`);
-
-  const { data, error } = await query.order('ano', { ascending: false }).order('mes', { ascending: false });
-  
-  if (error) {
-    mostrarAlerta('Erro ao carregar boletos: ' + error.message, 'danger');
-    return;
-  }
-
-  let dadosFiltrados = data || [];
-  if (statusFiltro !== 'todos') {
-    dadosFiltrados = dadosFiltrados.filter(row => {
-      const status = getStatusBoleto(row);
-      return status.status === statusFiltro;
-    });
-  }
-
-  atualizarCardsBoletos(data || []);
-  renderizarTabelaBoletos(dadosFiltrados);
-}
-
-function atualizarCardsBoletos(dados) {
-  let pagos = 0;
-  let vencidos = 0;
-  let aVencer = 0;
-  let naoGerados = 0;
-
-  dados.forEach(row => {
-    const status = getStatusBoleto(row);
-    if (status.status === 'pago') pagos++;
-    else if (status.status === 'vencido') vencidos++;
-    else if (status.status === 'avencer') aVencer++;
-    else if (status.status === 'naogerado') naoGerados++;
-  });
-
-  document.getElementById('totalBoletosPagos').textContent = pagos;
-  document.getElementById('totalBoletosVencidos').textContent = vencidos;
-  document.getElementById('totalBoletosAVencer').textContent = aVencer;
-  document.getElementById('totalBoletosNaoGerados').textContent = naoGerados;
-}
-
-function renderizarTabelaBoletos(dados) {
-  const tbody = document.getElementById('boletosBody');
-  
-  if (!dados || dados.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted py-4">Nenhum boleto encontrado</td></tr>`;
-    return;
-  }
-
-  const meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
-
-  let html = '';
-  dados.forEach(row => {
-    const mesNome = meses[row.mes - 1];
-    const statusBoleto = getStatusBoleto(row);
-    const statusNota = getStatusNota(row);
-    const dataVenc = row.data_vencimento ? new Date(row.data_vencimento + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
-    const isPago = row.pago;
-
-    html += `<tr>
-      <td><strong>${row.unidade}</strong></td>
-      <td>${mesNome}/${row.ano}</td>
-      <td class="text-end">R$ ${row.valor_total.toFixed(2)}</td>
-      <td class="text-center">
-        <span class="badge bg-${statusBoleto.class}">
-          <i class="fas ${statusBoleto.icon}"></i> ${statusBoleto.label}
-        </span>
-      </td>
-      <td class="text-center">
-        <span class="badge bg-${statusNota.class}">
-          <i class="fas ${statusNota.icon}"></i> ${statusNota.label}
-        </span>
-      </td>
-      <td class="text-center">${dataVenc}</td>
-      <td class="text-end">
-        <button class="btn btn-sm toggle-status-boletos ${isPago ? 'btn-success' : 'btn-outline-secondary'}" 
-                data-id="${row.id}" data-field="pago" title="${isPago ? 'Marcar como não pago' : 'Marcar como pago'}">
-          <i class="fas ${isPago ? 'fa-check-circle' : 'fa-circle'}"></i>
-        </button>
-        <button class="btn btn-sm btn-outline-info btn-ver-nota" 
-                data-id="${row.id}" 
-                data-unidade="${row.unidade}"
-                data-os-id="${row.omie_os_id || ''}"
-                title="Ver detalhes da nota">
-          <i class="fas fa-file-pdf"></i>
-        </button>
-      </td>
-    </tr>`;
-  });
-
-  tbody.innerHTML = html;
-
-  document.querySelectorAll('.toggle-status-boletos').forEach(btn => {
-    btn.addEventListener('click', async function() {
-      const id = this.dataset.id;
-      const isPago = this.classList.contains('btn-success');
-      
-      try {
-        const { error } = await supabaseClient
-          .from('faturamento')
-          .update({ pago: !isPago })
-          .eq('id', id);
-        
-        if (error) throw error;
-        
-        mostrarAlerta(`Boleto ${isPago ? 'desmarcado como pago' : 'marcado como pago'}!`, 'success');
-        
-        const mes = parseInt(document.getElementById('boletoFiltroMes').value);
-        const ano = parseInt(document.getElementById('boletoFiltroAno').value);
-        const unidade = document.getElementById('boletoFiltroUnidade').value.trim();
-        const status = document.getElementById('boletoFiltroStatus').value;
-        carregarBoletos(mes, ano, unidade, status);
-        
-      } catch (err) {
-        mostrarAlerta('Erro ao atualizar status: ' + err.message, 'danger');
-      }
-    });
-  });
-
-  document.querySelectorAll('.btn-ver-nota').forEach(btn => {
-    btn.addEventListener('click', function() {
-      const unidade = this.dataset.unidade;
-      const osId = this.dataset.osId;
-      
-      if (!osId) {
-        mostrarAlerta('Nenhuma OS associada a esta unidade.', 'warning');
-        return;
-      }
-      
-      mostrarAlerta(`Nota fiscal para ${unidade}. ID OS: ${osId}`, 'info');
-    });
-  });
-}
-
-async function atualizarStatusBoletos() {
-  const btn = document.getElementById('btnAtualizarStatusBoletos');
-  const originalText = btn.innerHTML;
-  
-  btn.disabled = true;
-  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Atualizando...';
-  
-  try {
-    const { data, error } = await supabaseClient
-      .from('faturamento')
-      .select('*')
-      .not('omie_os_id', 'is', null)
-      .eq('omie_status', 'criado');
+    const {
+        pagina = 1,
+        registros_por_pagina = 200,
+        status = 'todos',
+        dataInicio = null,
+        dataFim = null,
+        codigoCliente = null
+    } = filtros;
     
-    if (error) throw error;
-    
-    let atualizados = 0;
-    
-    for (const row of data) {
-      try {
-        const payload = {
-          endpoint: 'servicos/os',
-          call: 'ConsultarOS',
-          param: [{
-            nCodOS: parseInt(row.omie_os_id)
-          }]
+    try {
+        const params = {
+            pagina: pagina,
+            registros_por_pagina: registros_por_pagina
         };
         
+        if (codigoCliente) {
+            params.filtrar_por_codigo_cliente = parseInt(codigoCliente);
+        }
+        
+        if (dataInicio) {
+            params.data_vencimento_de = dataInicio;
+        }
+        
+        if (dataFim) {
+            params.data_vencimento_ate = dataFim;
+        }
+        
+        params.apenas_importado_api = 'N';
+        
+        const payload = {
+            endpoint: 'financas/contareceber',
+            call: 'ListarContasReceber',
+            param: [params]
+        };
+        
+        console.log('📤 Payload:', JSON.stringify(payload, null, 2));
+        
         const response = await fetchOmieProxy(payload);
-        const osData = await response.json();
         
-        if (osData.fault) continue;
-        
-        const notaStatus = osData.notaFiscal?.cStatus || 'gerada';
-        const isPago = osData.boletos?.some(b => b.cStatus === 'Pago') || false;
-        
-        const updateData = {};
-        
-        if (notaStatus === 'Aceita' || notaStatus === 'Autorizada') {
-          updateData.nota_status = 'aceita';
-        } else if (notaStatus === 'Rejeitada' || notaStatus === 'Cancelada') {
-          updateData.nota_status = 'rejeitada';
-        } else {
-          updateData.nota_status = 'gerada';
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('❌ Erro na resposta:', errorText);
+            throw new Error(`HTTP ${response.status}: ${errorText}`);
         }
         
-        if (isPago) {
-          updateData.pago = true;
+        const data = await response.json();
+        
+        if (data.fault) {
+            throw new Error(`Erro OMIE: ${data.fault.faultstring}`);
         }
         
-        if (osData.notaFiscal) {
-          updateData.nota_emitida = true;
-          updateData.boleto_enviado = true;
+        const contas = data.contas_receber || [];
+        console.log(`📋 ${contas.length} contas a receber encontradas`);
+        
+        const boletos = await Promise.all(contas.map(async (conta) => {
+            const codigoLancamento = conta.codigo_lancamento_omie || conta.codigo_lancamento;
+            
+            const temBoleto = conta.titulo_gerado === 'S' || 
+                             (conta.boletos && conta.boletos.length > 0) ||
+                             (conta.codigo_boleto);
+            
+            let boletoInfo = null;
+            if (temBoleto && codigoLancamento) {
+                try {
+                    const boletoPayload = {
+                        endpoint: 'financas/contareceberboleto',
+                        call: 'ObterBoleto',
+                        param: [{
+                            nCodTitulo: parseInt(codigoLancamento)
+                        }]
+                    };
+                    
+                    const boletoResponse = await fetchOmieProxy(boletoPayload);
+                    const boletoData = await boletoResponse.json();
+                    
+                    if (!boletoData.fault) {
+                        boletoInfo = boletoData;
+                    }
+                } catch (err) {
+                    console.log(`⚠️ Não foi possível obter boleto para ${codigoLancamento}:`, err.message);
+                }
+            }
+            
+            const hoje = new Date();
+            hoje.setHours(0, 0, 0, 0);
+            
+            let dataVencimento = null;
+            if (conta.data_vencimento) {
+                const partes = conta.data_vencimento.split('/');
+                if (partes.length === 3) {
+                    dataVencimento = new Date(parseInt(partes[2]), parseInt(partes[1]) - 1, parseInt(partes[0]));
+                }
+            }
+            
+            const isPago = conta.status === 'Pago' || 
+                          (conta.saldo !== undefined && parseFloat(conta.saldo) === 0) ||
+                          (conta.valor_pago && parseFloat(conta.valor_pago) > 0);
+            
+            let statusBoleto = 'naogerado';
+            let statusLabel = 'Não Gerado';
+            let statusClass = 'secondary';
+            let statusIcon = 'fa-file';
+            
+            if (temBoleto && codigoLancamento) {
+                if (isPago) {
+                    statusBoleto = 'pago';
+                    statusLabel = 'Pago ✅';
+                    statusClass = 'success';
+                    statusIcon = 'fa-check-circle';
+                } else if (dataVencimento) {
+                    const diffDays = Math.ceil((dataVencimento - hoje) / (1000 * 60 * 60 * 24));
+                    if (diffDays < 0) {
+                        statusBoleto = 'vencido';
+                        statusLabel = 'Vencido ❌';
+                        statusClass = 'danger';
+                        statusIcon = 'fa-exclamation-circle';
+                    } else if (diffDays <= 3) {
+                        statusBoleto = 'avencer';
+                        statusLabel = 'Vence em breve ⚠️';
+                        statusClass = 'warning';
+                        statusIcon = 'fa-clock';
+                    } else {
+                        statusBoleto = 'avencer';
+                        statusLabel = 'A Vencer';
+                        statusClass = 'info';
+                        statusIcon = 'fa-hourglass-half';
+                    }
+                } else {
+                    statusBoleto = 'naogerado';
+                    statusLabel = 'Sem data';
+                    statusClass = 'secondary';
+                    statusIcon = 'fa-file';
+                }
+            }
+            
+            let nomeCliente = conta.razao_social || conta.nome_cliente || 'Cliente não identificado';
+            
+            return {
+                codigo_lancamento: codigoLancamento,
+                codigo_cliente: conta.codigo_cliente_fornecedor || conta.codigo_cliente,
+                nome_cliente: nomeCliente,
+                documento: conta.numero_documento || conta.numero_documento_fatura || '',
+                tem_boleto: temBoleto,
+                codigo_boleto: conta.codigo_boleto || null,
+                valor_documento: parseFloat(conta.valor_documento) || 0,
+                valor_pago: parseFloat(conta.valor_pago) || 0,
+                saldo: parseFloat(conta.saldo) || 0,
+                data_vencimento: dataVencimento,
+                data_vencimento_str: conta.data_vencimento || '',
+                data_emissao: conta.data_emissao || '',
+                data_pagamento: conta.data_pagamento || '',
+                status: conta.status || 'Aberto',
+                isPago: isPago,
+                status_boleto: statusBoleto,
+                status_label: statusLabel,
+                status_class: statusClass,
+                status_icon: statusIcon,
+                observacao: conta.observacao || '',
+                boleto_info: boletoInfo,
+                raw: conta
+            };
+        }));
+        
+        let boletosFiltrados = boletos;
+        if (status !== 'todos') {
+            boletosFiltrados = boletos.filter(b => b.status_boleto === status);
         }
         
-        await supabaseClient
-          .from('faturamento')
-          .update(updateData)
-          .eq('id', row.id);
+        const ordemStatus = { 'vencido': 0, 'avencer': 1, 'pago': 2, 'naogerado': 3 };
+        boletosFiltrados.sort((a, b) => {
+            return (ordemStatus[a.status_boleto] || 99) - (ordemStatus[b.status_boleto] || 99);
+        });
         
-        atualizados++;
+        console.log(`📊 ${boletosFiltrados.length} boletos após filtros`);
         
-      } catch (err) {
-        console.error(`Erro ao processar OS ${row.omie_os_id}:`, err.message);
-      }
+        boletosCache = boletosFiltrados;
+        ultimaBuscaBoletos = Date.now();
+        
+        return boletosFiltrados;
+        
+    } catch (err) {
+        console.error('❌ Erro ao buscar boletos:', err.message);
+        throw err;
+    }
+}
+
+// ========================= CRIAR OS EM LOTE =========================
+let loteRegistros = [];
+let loteStatus = {};
+let loteProgresso = 0;
+
+/**
+ * Abre o modal de criar OS em lote
+ */
+async function abrirModalCriarOSLote() {
+  console.log('🚀 Abrindo modal de criar OS em lote...');
+  
+  const mes = parseInt(document.getElementById('filterMonth').value);
+  const ano = parseInt(document.getElementById('filterYear').value);
+  const filtroHolding = document.getElementById('filterHolding')?.value?.trim() || '';
+  const filtroGrupo = document.getElementById('filterGrupo')?.value?.trim() || '';
+  const filtroUnidade = document.getElementById('filterUnit')?.value?.trim() || '';
+  
+  let query = supabaseClient
+    .from('faturamento')
+    .select('*')
+    .is('omie_os_id', null)
+    .or('omie_status.is.null,omie_status.eq.erro');
+  
+  if (mes > 0) query = query.eq('mes', mes);
+  if (ano > 0) query = query.eq('ano', ano);
+  
+  if (filtroHolding || filtroGrupo || filtroUnidade) {
+    let queryPrecos = supabaseClient.from('precos').select('unidade, holding, grupo');
+    
+    if (filtroHolding) {
+      queryPrecos = queryPrecos.ilike('holding', `%${filtroHolding}%`);
+    }
+    if (filtroGrupo) {
+      queryPrecos = queryPrecos.ilike('grupo', `%${filtroGrupo}%`);
+    }
+    if (filtroUnidade) {
+      queryPrecos = queryPrecos.ilike('unidade', `%${filtroUnidade}%`);
     }
     
-    mostrarAlerta(`Status atualizado para ${atualizados} registros!`, 'success');
+    const { data: unidadesFiltradas } = await queryPrecos;
+    if (unidadesFiltradas && unidadesFiltradas.length > 0) {
+      const listaUnidades = unidadesFiltradas.map(u => u.unidade);
+      query = query.in('unidade', listaUnidades);
+    } else {
+      mostrarAlerta('Nenhuma unidade encontrada com os filtros aplicados.', 'warning');
+      return;
+    }
+  }
+  
+  const { data: registros, error } = await query;
+  
+  if (error) {
+    mostrarAlerta('Erro ao buscar registros: ' + error.message, 'danger');
+    return;
+  }
+  
+  if (!registros || registros.length === 0) {
+    mostrarAlerta('Nenhum registro sem OS encontrado com os filtros atuais.', 'info');
+    return;
+  }
+  
+  loteRegistros = registros;
+  console.log(`📋 ${loteRegistros.length} registros para processar`);
+  
+  loteStatus = {};
+  loteProgresso = 0;
+  
+  const modal = new bootstrap.Modal(document.getElementById('criarOSLoteModal'));
+  modal.show();
+  
+  await renderizarJanelasLote();
+}
+
+/**
+ * Renderiza as janelas de cada unidade no modal
+ */
+async function renderizarJanelasLote() {
+  const container = document.getElementById('loteJanelasContainer');
+  const statusGeral = document.getElementById('loteStatusGeral');
+  const progressBar = document.getElementById('loteProgressBar');
+  const btnCriar = document.getElementById('btnCriarTodasOSLote');
+  
+  progressBar.style.display = 'block';
+  atualizarProgressoLote(0);
+  
+  statusGeral.className = 'alert alert-info';
+  statusGeral.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Verificando ${loteRegistros.length} unidades...`;
+  
+  btnCriar.disabled = true;
+  btnCriar.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verificando...';
+  
+  let html = '';
+  let totalVerificados = 0;
+  let totalEncontrados = 0;
+  
+  for (let i = 0; i < loteRegistros.length; i++) {
+    const registro = loteRegistros[i];
+    const unidade = registro.unidade;
     
-    const mes = parseInt(document.getElementById('boletoFiltroMes').value);
-    const ano = parseInt(document.getElementById('boletoFiltroAno').value);
-    const unidade = document.getElementById('boletoFiltroUnidade').value.trim();
-    const status = document.getElementById('boletoFiltroStatus').value;
-    carregarBoletos(mes, ano, unidade, status);
+    if (registro.omie_os_id) {
+      loteStatus[unidade] = {
+        status: 'ja_criada',
+        mensagem: 'OS já criada',
+        codigoCliente: null
+      };
+      totalVerificados++;
+      continue;
+    }
     
+    try {
+      const codigoCliente = await buscarCodigoClienteParaOS(unidade);
+      
+      if (codigoCliente) {
+        loteStatus[unidade] = {
+          status: 'encontrado',
+          mensagem: 'Cliente encontrado',
+          codigoCliente: codigoCliente
+        };
+        totalEncontrados++;
+      } else {
+        loteStatus[unidade] = {
+          status: 'nao_encontrado',
+          mensagem: '❌ Cliente não encontrado',
+          codigoCliente: null
+        };
+      }
+    } catch (err) {
+      loteStatus[unidade] = {
+        status: 'erro',
+        mensagem: `❌ Erro: ${err.message}`,
+        codigoCliente: null
+      };
+    }
+    
+    totalVerificados++;
+    
+    const percentual = Math.round((totalVerificados / loteRegistros.length) * 100);
+    atualizarProgressoLote(percentual);
+    
+    let allHtml = '';
+    for (let j = 0; j <= i; j++) {
+      const reg = loteRegistros[j];
+      const status = loteStatus[reg.unidade] || { status: 'verificando', mensagem: '⏳ Verificando...', codigoCliente: null };
+      allHtml += criarJanelaUnidade(reg, status);
+    }
+    container.innerHTML = allHtml;
+    
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  
+  const total = loteRegistros.length;
+  const encontrados = Object.values(loteStatus).filter(s => s.status === 'encontrado').length;
+  const naoEncontrados = Object.values(loteStatus).filter(s => s.status === 'nao_encontrado' || s.status === 'erro').length;
+  const jaCriados = Object.values(loteStatus).filter(s => s.status === 'ja_criada').length;
+  
+  if (encontrados === 0 && jaCriados === total) {
+    statusGeral.className = 'alert alert-warning';
+    statusGeral.innerHTML = `⚠️ Todas as ${total} unidades já possuem OS criada ou nenhuma foi encontrada.`;
+    btnCriar.disabled = true;
+    btnCriar.innerHTML = '<i class="fas fa-check"></i> Nenhuma para criar';
+  } else if (encontrados > 0) {
+    statusGeral.className = 'alert alert-success';
+    statusGeral.innerHTML = `
+      <i class="fas fa-check-circle"></i> 
+      <strong>${encontrados} unidades prontas para criar OS</strong>
+      ${naoEncontrados > 0 ? ` | ${naoEncontrados} não encontradas` : ''}
+      ${jaCriados > 0 ? ` | ${jaCriados} já criadas` : ''}
+    `;
+    btnCriar.disabled = false;
+    btnCriar.innerHTML = `<i class="fas fa-file-invoice"></i> Criar ${encontrados} OS`;
+  } else {
+    statusGeral.className = 'alert alert-danger';
+    statusGeral.innerHTML = `
+      <i class="fas fa-exclamation-triangle"></i> 
+      Nenhum cliente encontrado para criar OS.
+    `;
+    btnCriar.disabled = true;
+    btnCriar.innerHTML = '<i class="fas fa-times"></i> Sem clientes';
+  }
+  
+  setTimeout(() => {
+    progressBar.style.display = 'none';
+  }, 500);
+}
+
+function criarJanelaUnidade(registro, status) {
+  const unidade = registro.unidade;
+  const valor = registro.valor_total;
+  
+  let statusIcon = 'fa-clock';
+  let statusColor = 'secondary';
+  let statusText = 'Verificando...';
+  let showRetry = false;
+  
+  if (status.status === 'encontrado') {
+    statusIcon = 'fa-check-circle';
+    statusColor = 'success';
+    statusText = `✅ Cliente: ${status.codigoCliente}`;
+  } else if (status.status === 'nao_encontrado') {
+    statusIcon = 'fa-times-circle';
+    statusColor = 'danger';
+    statusText = '❌ Cliente não encontrado';
+    showRetry = true;
+  } else if (status.status === 'erro') {
+    statusIcon = 'fa-exclamation-triangle';
+    statusColor = 'danger';
+    statusText = status.mensagem;
+    showRetry = true;
+  } else if (status.status === 'ja_criada') {
+    statusIcon = 'fa-check-circle';
+    statusColor = 'info';
+    statusText = '✅ OS já criada';
+  } else if (status.status === 'criado') {
+    statusIcon = 'fa-check-circle';
+    statusColor = 'success';
+    statusText = `✅ OS ${status.osId || ''}`;
+  } else if (status.status === 'erro_criacao') {
+    statusIcon = 'fa-exclamation-triangle';
+    statusColor = 'danger';
+    statusText = status.mensagem;
+    showRetry = true;
+  } else {
+    statusIcon = 'fa-spinner fa-spin';
+    statusColor = 'secondary';
+    statusText = '⏳ Verificando...';
+  }
+  
+  const temErro = status.status === 'nao_encontrado' || status.status === 'erro' || status.status === 'erro_criacao';
+  const jaCriada = status.status === 'ja_criada' || status.status === 'criado';
+  const encontrado = status.status === 'encontrado';
+  
+  let borderClass = 'border-secondary';
+  if (encontrado) borderClass = 'border-success';
+  else if (temErro) borderClass = 'border-danger';
+  else if (jaCriada) borderClass = 'border-info';
+  
+  const resumoItens = gerarResumoItens(registro.detalhes || {});
+  
+  return `
+    <div class="col-md-6 col-lg-4">
+      <div class="card border-2 ${borderClass} h-100" style="border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
+        <div class="card-header bg-transparent d-flex justify-content-between align-items-center" style="border-bottom: 1px solid #e9ecef; padding: 10px 14px;">
+          <div class="d-flex align-items-center gap-2" style="min-width: 0; flex: 1;">
+            <span class="badge bg-${statusColor}"><i class="fas ${statusIcon}"></i></span>
+            <strong style="font-size: 0.85rem; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${unidade}">${unidade}</strong>
+          </div>
+          <span class="badge bg-primary">R$ ${valor.toFixed(2)}</span>
+        </div>
+        <div class="card-body" style="padding: 10px 14px;">
+          <div class="d-flex justify-content-between align-items-start flex-wrap gap-1">
+            <span class="text-${statusColor}" style="font-size: 0.8rem;">
+              <i class="fas ${statusIcon} me-1"></i> ${statusText}
+            </span>
+            <div class="d-flex gap-1">
+              ${encontrado ? `<span class="badge bg-success" style="font-size: 0.7rem;"><i class="fas fa-check"></i> OK</span>` : ''}
+              ${temErro ? `<span class="badge bg-danger" style="font-size: 0.7rem;"><i class="fas fa-times"></i> Erro</span>` : ''}
+              ${jaCriada ? `<span class="badge bg-info" style="font-size: 0.7rem;"><i class="fas fa-check"></i> Criada</span>` : ''}
+            </div>
+          </div>
+          ${status.codigoCliente ? `<div class="mt-1"><small class="text-muted">Código: ${status.codigoCliente}</small></div>` : ''}
+          
+          <div class="mt-2" style="font-size: 0.75rem; color: #6c757d; max-height: 50px; overflow: hidden; text-overflow: ellipsis;">
+            ${resumoItens}
+          </div>
+          
+          <div class="d-flex gap-1 mt-2">
+            <button class="btn btn-outline-primary btn-sm flex-grow-1" 
+                    style="font-size: 0.75rem; border-radius: 6px;"
+                    onclick="abrirDescricaoOS(${registro.id})">
+              <i class="fas fa-file-alt me-1"></i> Descrição
+            </button>
+            ${showRetry ? `
+              <button class="btn btn-outline-warning btn-sm" 
+                      style="font-size: 0.75rem; border-radius: 6px;"
+                      onclick="tentarNovamenteBuscarCliente(${registro.id})"
+                      title="Tentar buscar cliente novamente">
+                <i class="fas fa-sync"></i>
+              </button>
+            ` : ''}
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Função para tentar buscar o cliente novamente
+ */
+async function tentarNovamenteBuscarCliente(registroId) {
+  console.log(`🔄 Tentando buscar cliente novamente para o registro ${registroId}`);
+  
+  const registro = loteRegistros.find(r => r.id === registroId);
+  if (!registro) {
+    mostrarAlerta('Registro não encontrado.', 'danger');
+    return;
+  }
+  
+  const unidade = registro.unidade;
+  
+  // Mostrar loading
+  loteStatus[unidade] = {
+    status: 'verificando',
+    mensagem: '⏳ Buscando novamente...',
+    codigoCliente: null
+  };
+  
+  // Atualizar a janela
+  const container = document.getElementById('loteJanelasContainer');
+  let allHtml = '';
+  for (const reg of loteRegistros) {
+    const st = loteStatus[reg.unidade] || { status: 'verificando', mensagem: '⏳ Verificando...', codigoCliente: null };
+    allHtml += criarJanelaUnidade(reg, st);
+  }
+  container.innerHTML = allHtml;
+  
+  // Forçar limpeza do cache para esta unidade
+  const cacheKey = `cliente_unidade_${unidade}`;
+  sessionStorage.removeItem(cacheKey);
+  
+  // Tentar buscar novamente
+  try {
+    const codigoCliente = await buscarCodigoClienteParaOS(unidade);
+    
+    if (codigoCliente) {
+      loteStatus[unidade] = {
+        status: 'encontrado',
+        mensagem: 'Cliente encontrado',
+        codigoCliente: codigoCliente
+      };
+      mostrarAlerta(`✅ Cliente encontrado para ${unidade}!`, 'success');
+    } else {
+      loteStatus[unidade] = {
+        status: 'nao_encontrado',
+        mensagem: '❌ Cliente não encontrado',
+        codigoCliente: null
+      };
+      mostrarAlerta(`❌ Cliente não encontrado para ${unidade}.`, 'danger');
+    }
   } catch (err) {
-    mostrarAlerta('Erro ao atualizar status: ' + err.message, 'danger');
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = originalText;
+    loteStatus[unidade] = {
+      status: 'erro',
+      mensagem: `❌ Erro: ${err.message}`,
+      codigoCliente: null
+    };
+    mostrarAlerta(`Erro ao buscar cliente: ${err.message}`, 'danger');
+  }
+  
+  // Re-renderizar todas as janelas
+  let allHtmlFinal = '';
+  for (const reg of loteRegistros) {
+    const st = loteStatus[reg.unidade] || { status: 'verificando', mensagem: '⏳ Verificando...', codigoCliente: null };
+    allHtmlFinal += criarJanelaUnidade(reg, st);
+  }
+  container.innerHTML = allHtmlFinal;
+  
+  // Atualizar status geral e botão
+  const total = loteRegistros.length;
+  const encontrados = Object.values(loteStatus).filter(s => s.status === 'encontrado').length;
+  const naoEncontrados = Object.values(loteStatus).filter(s => s.status === 'nao_encontrado' || s.status === 'erro').length;
+  const jaCriados = Object.values(loteStatus).filter(s => s.status === 'ja_criada').length;
+  
+  const statusGeral = document.getElementById('loteStatusGeral');
+  const btnCriar = document.getElementById('btnCriarTodasOSLote');
+  
+  if (encontrados > 0) {
+    statusGeral.className = 'alert alert-success';
+    statusGeral.innerHTML = `
+      <i class="fas fa-check-circle"></i> 
+      <strong>${encontrados} unidades prontas para criar OS</strong>
+      ${naoEncontrados > 0 ? ` | ${naoEncontrados} não encontradas` : ''}
+      ${jaCriados > 0 ? ` | ${jaCriados} já criadas` : ''}
+    `;
+    btnCriar.disabled = false;
+    btnCriar.innerHTML = `<i class="fas fa-file-invoice"></i> Criar ${encontrados} OS`;
+  } else {
+    statusGeral.className = 'alert alert-danger';
+    statusGeral.innerHTML = `
+      <i class="fas fa-exclamation-triangle"></i> 
+      Nenhum cliente encontrado para criar OS.
+    `;
+    btnCriar.disabled = true;
+    btnCriar.innerHTML = '<i class="fas fa-times"></i> Sem clientes';
   }
 }
 
-function exportarBoletosCSV() {
-  const table = document.getElementById('boletosTable');
-  if (!table) return;
+/**
+ * Gera resumo dos itens para exibir na janela
+ */
+function gerarResumoItens(detalhes) {
+  if (!detalhes || Object.keys(detalhes).length === 0) {
+    return '⚠️ Nenhum item';
+  }
   
-  let csv = 'Unidade,Mês/Ano,Valor (R$),Status Boleto,Status Nota,Data Vencimento\n';
-  const rows = table.querySelectorAll('tbody tr');
+  let itens = [];
   
-  rows.forEach(row => {
-    const cols = row.querySelectorAll('td');
-    if (cols.length >= 6) {
-      const unidade = cols[0]?.textContent?.trim() || '';
-      const mesAno = cols[1]?.textContent?.trim() || '';
-      const valor = cols[2]?.textContent?.trim()?.replace('R$ ', '') || '';
-      const statusBoleto = cols[3]?.textContent?.trim() || '';
-      const statusNota = cols[4]?.textContent?.trim() || '';
-      const dataVenc = cols[5]?.textContent?.trim() || '';
-      
-      csv += `"${unidade}","${mesAno}",${valor},"${statusBoleto}","${statusNota}","${dataVenc}"\n`;
+  if (detalhes.mensalidade) {
+    itens.push(`📌 Mensalidade`);
+  }
+  if (detalhes['vidas (NR-1)']) {
+    itens.push(`👥 ${detalhes['vidas (NR-1)'].quantidade || 0} vidas`);
+  }
+  
+  const exames = ['exame_clinico', 'audiometria', 'acuidade_visual', 'eletrocardiograma', 
+                  'eletroencefalograma', 'espirometria', 'raio_x_torax', 'hemograma',
+                  'anti_hbs', 'anti_hcv', 'anti_hbs_ag', 'vdrl', 'coprocultura',
+                  'parasitologico', 'gama_gt', 'glicose', 'pesquisa_fungos', 
+                  'dinamometria', 'visita_tec', 'transporte'];
+  
+  const nomesResumo = {
+    'exame_clinico': 'Ex. Clínico',
+    'audiometria': 'Audiometria',
+    'acuidade_visual': 'Acuidade Visual',
+    'eletrocardiograma': 'ECG',
+    'eletroencefalograma': 'EEG',
+    'espirometria': 'Espirometria',
+    'raio_x_torax': 'Raio X',
+    'hemograma': 'Hemograma',
+    'anti_hbs': 'Anti Hbs',
+    'anti_hcv': 'Anti Hcv',
+    'anti_hbs_ag': 'Anti Hbs AG',
+    'vdrl': 'VDRL',
+    'coprocultura': 'Coprocultura',
+    'parasitologico': 'Parasitológico',
+    'gama_gt': 'Gama GT',
+    'glicose': 'Glicose',
+    'pesquisa_fungos': 'Fungos',
+    'dinamometria': 'Dinamometria',
+    'visita_tec': 'Visita Técnica',
+    'transporte': 'Transporte'
+  };
+  
+  for (const exame of exames) {
+    if (detalhes[exame]) {
+      const info = detalhes[exame];
+      const qtd = info.quantidade || 0;
+      if (qtd > 0) {
+        itens.push(`${nomesResumo[exame] || exame} (${qtd})`);
+      }
     }
+  }
+  
+  return itens.length > 0 ? itens.join(' | ') : '⚠️ Nenhum item';
+}
+
+/**
+ * Gera a descrição completa da OS
+ */
+function gerarDescricaoOS(registro) {
+  const detalhes = registro.detalhes || {};
+  const mes = registro.mes;
+  const ano = registro.ano;
+  const unidade = registro.unidade;
+  const valorTotal = registro.valor_total;
+  
+  let descricao = `📋 FATURAMENTO ${mes}/${ano}\n`;
+  descricao += `🏢 UNIDADE: ${unidade}\n`;
+  descricao += `💰 VALOR TOTAL: R$ ${valorTotal.toFixed(2)}\n`;
+  descricao += `━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+  
+  if (detalhes.mensalidade) {
+    const mens = detalhes.mensalidade;
+    const valor = mens.precoUnitario || 0;
+    descricao += `📌 MENSALIDADE:\n`;
+    descricao += `   Valor: R$ ${valor.toFixed(2)}\n\n`;
+  }
+  
+  if (detalhes['vidas (NR-1)']) {
+    const vidas = detalhes['vidas (NR-1)'];
+    const qtd = vidas.quantidade || 0;
+    const valor = vidas.precoUnitario || 0;
+    const subtotal = qtd * valor;
+    descricao += `👥 VIDAS NR-1:\n`;
+    descricao += `   Quantidade: ${qtd}\n`;
+    descricao += `   Valor unitário: R$ ${valor.toFixed(2)}\n`;
+    descricao += `   Subtotal: R$ ${subtotal.toFixed(2)}\n\n`;
+  }
+  
+  const exames = ['exame_clinico', 'audiometria', 'acuidade_visual', 'eletrocardiograma', 
+                  'eletroencefalograma', 'espirometria', 'raio_x_torax', 'hemograma',
+                  'anti_hbs', 'anti_hcv', 'anti_hbs_ag', 'vdrl', 'coprocultura',
+                  'parasitologico', 'gama_gt', 'glicose', 'pesquisa_fungos', 
+                  'dinamometria', 'visita_tec', 'transporte'];
+  
+  const nomesExames = {
+    'exame_clinico': 'Exame Clínico',
+    'audiometria': 'Audiometria Ocupacional',
+    'acuidade_visual': 'Acuidade Visual',
+    'eletrocardiograma': 'Eletrocardiograma',
+    'eletroencefalograma': 'Eletroencefalograma',
+    'espirometria': 'Espirometria',
+    'raio_x_torax': 'Raio X Tórax',
+    'hemograma': 'Hemograma Completo',
+    'anti_hbs': 'Anti Hbs',
+    'anti_hcv': 'Anti Hcv',
+    'anti_hbs_ag': 'Anti Hbs AG',
+    'vdrl': 'VDRL',
+    'coprocultura': 'Coprocultura',
+    'parasitologico': 'Parasitológico',
+    'gama_gt': 'Gama GT',
+    'glicose': 'Glicose',
+    'pesquisa_fungos': 'Pesquisa de Fungos',
+    'dinamometria': 'Dinamometria',
+    'visita_tec': 'Visita Técnica',
+    'transporte': 'Transporte'
+  };
+  
+  let temExames = false;
+  for (const exame of exames) {
+    if (detalhes[exame]) {
+      const info = detalhes[exame];
+      const qtd = info.quantidade || 0;
+      const valor = info.precoUnitario || 0;
+      const funcionarios = info.funcionarios || [];
+      const subtotal = qtd * valor;
+      
+      if (qtd > 0 || valor > 0) {
+        temExames = true;
+        descricao += `🔬 ${nomesExames[exame] || exame}:\n`;
+        descricao += `   Quantidade: ${qtd}\n`;
+        descricao += `   Valor unitário: R$ ${valor.toFixed(2)}\n`;
+        descricao += `   Subtotal: R$ ${subtotal.toFixed(2)}\n`;
+        
+        if (funcionarios.length > 0) {
+          descricao += `   Funcionários:\n`;
+          funcionarios.forEach(f => {
+            descricao += `      - ${f.nome} (${f.data || 'data não informada'})\n`;
+          });
+        }
+        descricao += `\n`;
+      }
+    }
+  }
+  
+  if (!temExames && !detalhes.mensalidade && !detalhes['vidas (NR-1)']) {
+    descricao += `⚠️ Nenhum item encontrado para faturamento.\n`;
+  }
+  
+  descricao += `━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  descricao += `📅 Vencimento: ${registro.data_vencimento || 'N/A'}\n`;
+  
+  return descricao;
+}
+
+/**
+ * Abre o modal com a descrição completa da OS
+ */
+function abrirDescricaoOS(registroId) {
+  const registro = loteRegistros.find(r => r.id === registroId);
+  if (!registro) {
+    mostrarAlerta('Registro não encontrado.', 'danger');
+    return;
+  }
+  
+  const descricao = gerarDescricaoOS(registro);
+  const unidade = registro.unidade;
+  const valor = registro.valor_total;
+  
+  document.getElementById('descricaoModalTitle').textContent = `📋 Detalhes - ${unidade}`;
+  document.getElementById('descricaoModalValor').textContent = `Valor Total: R$ ${valor.toFixed(2)}`;
+  document.getElementById('descricaoModalBody').textContent = descricao;
+  
+  const modal = new bootstrap.Modal(document.getElementById('descricaoModal'));
+  modal.show();
+}
+
+/**
+ * Copia a descrição para a área de transferência
+ */
+function copiarDescricao() {
+  const texto = document.getElementById('descricaoModalBody').textContent;
+  navigator.clipboard.writeText(texto).then(() => {
+    mostrarAlerta('Descrição copiada para a área de transferência!', 'success');
+  }).catch(() => {
+    const textarea = document.createElement('textarea');
+    textarea.value = texto;
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand('copy');
+    document.body.removeChild(textarea);
+    mostrarAlerta('Descrição copiada para a área de transferência!', 'success');
+  });
+}
+
+/**
+ * Atualiza a barra de progresso
+ */
+function atualizarProgressoLote(percentual) {
+  const progressBar = document.querySelector('#loteProgressBar .progress-bar');
+  if (progressBar) {
+    progressBar.style.width = percentual + '%';
+    progressBar.textContent = percentual + '%';
+  }
+}
+
+/**
+ * Cria todas as OS em lote
+ */
+async function criarTodasOSLote() {
+  const btnCriar = document.getElementById('btnCriarTodasOSLote');
+  const statusGeral = document.getElementById('loteStatusGeral');
+  const progressBar = document.getElementById('loteProgressBar');
+  
+  const registrosParaCriar = loteRegistros.filter(reg => {
+    const status = loteStatus[reg.unidade];
+    return status && status.status === 'encontrado' && status.codigoCliente;
   });
   
-  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
-  const link = document.createElement('a');
-  link.href = URL.createObjectURL(blob);
-  link.download = `boletos_${new Date().toISOString().slice(0,10)}.csv`;
-  link.click();
+  if (registrosParaCriar.length === 0) {
+    mostrarAlerta('Nenhuma OS pronta para criar.', 'warning');
+    return;
+  }
+  
+  if (!confirm(`Deseja criar ${registrosParaCriar.length} OS?`)) {
+    return;
+  }
+  
+  btnCriar.disabled = true;
+  btnCriar.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Criando...';
+  progressBar.style.display = 'block';
+  
+  let criados = 0;
+  let erros = 0;
+  
+  for (let i = 0; i < registrosParaCriar.length; i++) {
+    const registro = registrosParaCriar[i];
+    const status = loteStatus[registro.unidade];
+    const codigoCliente = status.codigoCliente;
+    
+    const percentual = Math.round(((i + 1) / registrosParaCriar.length) * 100);
+    atualizarProgressoLote(percentual);
+    
+    statusGeral.innerHTML = `
+      <i class="fas fa-spinner fa-spin"></i> 
+      Criando OS ${i + 1}/${registrosParaCriar.length}: ${registro.unidade}...
+    `;
+    
+    try {
+      const resultado = await criarOrdemServicoOmie(registro, codigoCliente);
+      const osId = resultado.nCodOS || resultado.cabecalho?.nCodOS;
+      
+      if (osId) {
+        await supabaseClient
+          .from('faturamento')
+          .update({
+            omie_os_id: osId,
+            omie_status: 'criado',
+            nota_emitida: false,
+            boleto_enviado: false
+          })
+          .eq('id', registro.id);
+        
+        criados++;
+        loteStatus[registro.unidade] = {
+          status: 'criado',
+          mensagem: `✅ OS ${osId}`,
+          codigoCliente: codigoCliente,
+          osId: osId
+        };
+      } else {
+        throw new Error('ID da OS não retornado');
+      }
+    } catch (err) {
+      erros++;
+      loteStatus[registro.unidade] = {
+        status: 'erro_criacao',
+        mensagem: `❌ Erro: ${err.message}`,
+        codigoCliente: codigoCliente
+      };
+    }
+    
+    const container = document.getElementById('loteJanelasContainer');
+    let allHtml = '';
+    for (const reg of loteRegistros) {
+      const st = loteStatus[reg.unidade] || { status: 'verificando', mensagem: '⏳ Verificando...', codigoCliente: null };
+      allHtml += criarJanelaUnidade(reg, st);
+    }
+    container.innerHTML = allHtml;
+    
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+  
+  progressBar.style.display = 'none';
+  
+  if (erros === 0) {
+    statusGeral.className = 'alert alert-success';
+    statusGeral.innerHTML = `
+      <i class="fas fa-check-circle"></i> 
+      <strong>${criados} OS criadas com sucesso!</strong>
+    `;
+    mostrarAlerta(`${criados} OS criadas com sucesso!`, 'success');
+  } else {
+    statusGeral.className = 'alert alert-warning';
+    statusGeral.innerHTML = `
+      <i class="fas fa-exclamation-triangle"></i> 
+      <strong>${criados} criadas, ${erros} erros</strong>
+      <br><small>Verifique os detalhes nas janelas.</small>
+    `;
+    mostrarAlerta(`${criados} OS criadas, ${erros} erros.`, 'warning');
+  }
+  
+  btnCriar.disabled = true;
+  btnCriar.innerHTML = '<i class="fas fa-check"></i> Concluído';
+  
+  setTimeout(() => {
+    const mes = parseInt(document.getElementById('filterMonth').value);
+    const ano = parseInt(document.getElementById('filterYear').value);
+    const unidade = document.getElementById('filterUnit').value.trim();
+    carregarRelatorio(mes, ano, unidade, statusFiltroAtual);
+  }, 2000);
 }
 
 // ========================= FUNÇÕES DE RELATÓRIO =========================
-async function carregarRelatorio(mes = 0, ano = 0, unidadeFiltro = '', status = 'todos') {
+async function carregarRelatorio(mes = 0, ano = 0, filtroUnidade = '', status = 'todos') {
+  const filtroHolding = document.getElementById('filterHolding')?.value?.trim() || '';
+  const filtroGrupo = document.getElementById('filterGrupo')?.value?.trim() || '';
+  
   let query = supabaseClient.from('faturamento').select('*');
 
   if (mes > 0) query = query.eq('mes', mes);
   if (ano > 0) query = query.eq('ano', ano);
-  if (unidadeFiltro) query = query.ilike('unidade', `%${unidadeFiltro}%`);
+  
+  if (filtroHolding || filtroGrupo || filtroUnidade) {
+    let queryPrecos = supabaseClient.from('precos').select('unidade, holding, grupo');
+    
+    if (filtroHolding) {
+      queryPrecos = queryPrecos.ilike('holding', `%${filtroHolding}%`);
+    }
+    if (filtroGrupo) {
+      queryPrecos = queryPrecos.ilike('grupo', `%${filtroGrupo}%`);
+    }
+    if (filtroUnidade) {
+      queryPrecos = queryPrecos.ilike('unidade', `%${filtroUnidade}%`);
+    }
+    
+    const { data: unidadesFiltradas, error: filtroError } = await queryPrecos;
+    
+    if (filtroError) {
+      console.error('Erro ao buscar unidades por filtro:', filtroError);
+    }
+    
+    if (unidadesFiltradas && unidadesFiltradas.length > 0) {
+      const listaUnidades = unidadesFiltradas.map(u => u.unidade);
+      query = query.in('unidade', listaUnidades);
+    } else {
+      const { data, error } = await query;
+      if (error) {
+        mostrarAlerta('Erro ao carregar relatório: ' + error.message, 'danger');
+        return;
+      }
+      atualizarDashboards([]);
+      const tbody = document.getElementById('resultsBody');
+      tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted py-4">Nenhum registro encontrado</td></tr>`;
+      return;
+    }
+  }
 
   if (status === 'pendentes') {
-    query = query.eq('nota_emitida', false).eq('boleto_enviado', false).eq('pago', false);
-  } else if (status === 'enviado') {
-    query = query.eq('nota_emitida', true).eq('boleto_enviado', true).eq('pago', false);
+    query = query.is('omie_os_id', null);
+  } else if (status === 'criado') {
+    query = query.eq('omie_status', 'criado');
+  } else if (status === 'faturado') {
+    query = query.eq('omie_status', 'faturado');
   } else if (status === 'pago') {
     query = query.eq('pago', true);
   }
@@ -1715,11 +2437,29 @@ async function carregarRelatorio(mes = 0, ano = 0, unidadeFiltro = '', status = 
     return;
   }
 
+  let mapaUnidades = {};
+  if (data && data.length > 0) {
+    const unidades = [...new Set(data.map(item => item.unidade))];
+    const { data: precosData, error: precosError } = await supabaseClient
+      .from('precos')
+      .select('unidade, holding, grupo')
+      .in('unidade', unidades);
+    
+    if (!precosError && precosData) {
+      precosData.forEach(item => {
+        mapaUnidades[item.unidade] = {
+          holding: item.holding || 'N/A',
+          grupo: item.grupo || 'N/A'
+        };
+      });
+    }
+  }
+
   atualizarDashboards(data);
 
   const tbody = document.getElementById('resultsBody');
   if (!data || data.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted py-4">Nenhum registro encontrado</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted py-4">Nenhum registro encontrado</td></tr>`;
     return;
   }
 
@@ -1730,56 +2470,90 @@ async function carregarRelatorio(mes = 0, ano = 0, unidadeFiltro = '', status = 
   let html = '';
   data.forEach(row => {
     const mesNome = meses[row.mes - 1];
+    const infoUnidade = mapaUnidades[row.unidade] || { holding: 'N/A', grupo: 'N/A' };
     
-    let statusClass = 'secondary';
-    let statusIcon = 'fa-clock';
-    let statusText = 'Pendente';
+    let statusOSClass = 'secondary';
+    let statusOSText = 'Pendente';
+    let statusOSIcon = 'fa-clock';
+    
+    if (row.omie_status === 'criado') {
+      statusOSClass = 'primary';
+      statusOSText = 'Criado OS';
+      statusOSIcon = 'fa-file-invoice';
+    } else if (row.omie_status === 'faturado' || row.omie_status === 'aprovado') {
+      statusOSClass = 'success';
+      statusOSText = 'Faturado ✅';
+      statusOSIcon = 'fa-check-circle';
+    } else if (row.omie_status === 'rejeitado') {
+      statusOSClass = 'danger';
+      statusOSText = 'Rejeitado ❌';
+      statusOSIcon = 'fa-times-circle';
+    } else if (row.omie_status === 'cancelado') {
+      statusOSClass = 'danger';
+      statusOSText = 'Cancelado ⛔';
+      statusOSIcon = 'fa-ban';
+    } else if (row.omie_status === 'erro') {
+      statusOSClass = 'danger';
+      statusOSText = 'Erro';
+      statusOSIcon = 'fa-exclamation-triangle';
+    }
+    
+    let statusPagamentoClass = 'secondary';
+    let statusPagamentoText = 'Pendente';
+    let statusPagamentoIcon = 'fa-hourglass-half';
+    
     if (row.pago) {
-      statusClass = 'success';
-      statusIcon = 'fa-check-circle';
-      statusText = 'Pago';
+      statusPagamentoClass = 'success';
+      statusPagamentoText = 'Pago';
+      statusPagamentoIcon = 'fa-check-circle';
     } else if (row.data_vencimento) {
       const venc = new Date(row.data_vencimento + 'T00:00:00');
       const diffDays = Math.ceil((venc - hoje) / (1000 * 60 * 60 * 24));
       if (diffDays < 0) {
-        statusClass = 'danger';
-        statusIcon = 'fa-times-circle';
-        statusText = 'Vencido';
+        statusPagamentoClass = 'danger';
+        statusPagamentoText = 'Vencido';
+        statusPagamentoIcon = 'fa-times-circle';
       } else if (diffDays <= 2) {
-        statusClass = 'warning';
-        statusIcon = 'fa-exclamation-triangle';
-        statusText = 'Próx. venc.';
-      } else {
-        statusClass = 'info';
-        statusIcon = 'fa-hourglass-half';
-        statusText = 'Aguardando';
+        statusPagamentoClass = 'warning';
+        statusPagamentoText = 'Próx. venc.';
+        statusPagamentoIcon = 'fa-exclamation-triangle';
       }
     }
 
     const dataVenc = row.data_vencimento ? new Date(row.data_vencimento + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
-    const isEnviado = row.nota_emitida && row.boleto_enviado;
-    const isPago = row.pago;
     
     const temOs = row.omie_os_id && row.omie_status === 'criado';
-    const osErro = row.omie_status === 'erro';
+    const osFaturada = row.omie_status === 'faturado' || row.omie_status === 'aprovado';
+    const osErro = row.omie_status === 'erro' || row.omie_status === 'rejeitado';
+
+    const coresHolding = {
+      'Métodos': 'primary',
+      'DOP': 'success',
+      'Eficaz': 'info',
+      'Exata': 'warning',
+      'VMK': 'danger',
+      'WL': 'secondary'
+    };
+    const corHolding = coresHolding[infoUnidade.holding] || 'secondary';
 
     html += `<tr>
       <td><strong>${row.unidade}</strong></td>
+      <td><span class="badge bg-${corHolding}">${infoUnidade.holding}</span></td>
+      <td><span class="badge bg-secondary">${infoUnidade.grupo}</span></td>
       <td>${mesNome}/${row.ano}</td>
       <td class="text-end">R$ ${row.valor_total.toFixed(2)}</td>
       <td class="text-center">
-        <span class="badge bg-${statusClass}"><i class="fas ${statusIcon}"></i> ${statusText}</span>
+        <span class="badge bg-${statusOSClass}">
+          <i class="fas ${statusOSIcon}"></i> ${statusOSText}
+        </span>
+      </td>
+      <td class="text-center">
+        <span class="badge bg-${statusPagamentoClass}">
+          <i class="fas ${statusPagamentoIcon}"></i> ${statusPagamentoText}
+        </span>
       </td>
       <td class="text-center">${dataVenc}</td>
       <td class="text-center">
-        <button class="btn btn-sm toggle-status ${isEnviado ? 'btn-success' : 'btn-outline-secondary'}" 
-                data-id="${row.id}" data-field="enviado" title="Marcar como enviado para unidade">
-          <i class="fas fa-envelope"></i>
-        </button>
-        <button class="btn btn-sm toggle-status ${isPago ? 'btn-success' : 'btn-outline-secondary'}" 
-                data-id="${row.id}" data-field="pago" title="Marcar como pago">
-          <i class="fas fa-money-bill-wave"></i>
-        </button>
         <button class="btn btn-sm btn-outline-primary btn-detalhes" 
                 data-id="${row.id}" 
                 data-unidade="${row.unidade}"
@@ -1789,53 +2563,36 @@ async function carregarRelatorio(mes = 0, ano = 0, unidadeFiltro = '', status = 
                 title="Ver detalhes">
           <i class="fas fa-eye"></i>
         </button>
-        <button class="btn btn-sm ${temOs ? 'btn-success' : (osErro ? 'btn-danger' : 'btn-outline-primary')} btn-criar-os" 
+        ${!temOs && !osFaturada ? `
+          <button class="btn btn-sm ${osErro ? 'btn-danger' : 'btn-outline-primary'} btn-criar-os" 
+                  data-id="${row.id}" 
+                  data-unidade="${row.unidade}"
+                  data-valor="${row.valor_total}"
+                  data-mes="${row.mes}"
+                  data-ano="${row.ano}"
+                  data-detalhes='${JSON.stringify(row.detalhes)}'
+                  data-os-id="${row.omie_os_id || ''}"
+                  data-os-status="${row.omie_status || ''}"
+                  data-os-erro="${row.omie_erro || ''}"
+                  title="${osErro ? 'Erro ao criar OS' : 'Criar OS na Etapa 50'}">
+            <i class="fas ${osErro ? 'fa-exclamation-triangle' : 'fa-file-invoice'}"></i>
+            ${osErro ? 'Erro' : 'Criar OS'}
+          </button>
+        ` : `
+          <button class="btn btn-sm ${osFaturada ? 'btn-success' : 'btn-primary'}" disabled>
+            <i class="fas ${osFaturada ? 'fa-check-circle' : 'fa-file-invoice'}"></i>
+            ${osFaturada ? 'Faturado' : 'OS OK'}
+          </button>
+        `}
+        <button class="btn btn-sm btn-outline-info btn-atualizar-status-individual" 
                 data-id="${row.id}" 
-                data-unidade="${row.unidade}"
-                data-valor="${row.valor_total}"
-                data-mes="${row.mes}"
-                data-ano="${row.ano}"
-                data-detalhes='${JSON.stringify(row.detalhes)}'
-                data-os-id="${row.omie_os_id || ''}"
-                data-os-status="${row.omie_status || ''}"
-                data-os-erro="${row.omie_erro || ''}"
-                title="${temOs ? 'OS já criada (Etapa 50)' : (osErro ? 'Erro ao criar OS' : 'Criar OS na Etapa 50')}">
-          <i class="fas ${temOs ? 'fa-check-circle' : (osErro ? 'fa-exclamation-triangle' : 'fa-file-invoice')}"></i>
-          ${temOs ? 'OS OK' : (osErro ? 'Erro' : 'Criar OS')}
+                title="Atualizar status desta OS">
+          <i class="fas fa-sync"></i>
         </button>
       </td>
     </tr>`;
   });
   tbody.innerHTML = html;
-
-  document.querySelectorAll('.toggle-status').forEach(btn => {
-    btn.addEventListener('click', async function() {
-      const id = this.dataset.id;
-      const field = this.dataset.field;
-      let updateData = {};
-      if (field === 'enviado') {
-        const isAtivo = this.classList.contains('btn-success');
-        const novoStatus = !isAtivo;
-        updateData = { nota_emitida: novoStatus, boleto_enviado: novoStatus };
-      } else if (field === 'pago') {
-        const isAtivo = this.classList.contains('btn-success');
-        updateData = { pago: !isAtivo };
-      }
-      try {
-        const { error } = await supabaseClient
-          .from('faturamento')
-          .update(updateData)
-          .eq('id', id);
-        if (error) throw error;
-        const mesFiltro = parseInt(document.getElementById('filterMonth').value);
-        const anoFiltro = parseInt(document.getElementById('filterYear').value);
-        const unidadeFiltro = document.getElementById('filterUnit').value.trim();
-        carregarRelatorio(mesFiltro, anoFiltro, unidadeFiltro, statusFiltroAtual);
-      } catch (err) {
-        mostrarAlerta('Erro ao atualizar status: ' + err.message, 'danger');
-      }
-    });
-  });
 
   document.querySelectorAll('.btn-detalhes').forEach(btn => {
     btn.addEventListener('click', function() {
@@ -1865,6 +2622,80 @@ async function carregarRelatorio(mes = 0, ano = 0, unidadeFiltro = '', status = 
       abrirModalCriarOs(id, unidade, valor, mes, ano, detalhes);
     });
   });
+
+  document.querySelectorAll('.btn-atualizar-status-individual').forEach(btn => {
+    btn.addEventListener('click', async function() {
+      const id = this.dataset.id;
+      const originalHtml = this.innerHTML;
+      
+      this.disabled = true;
+      this.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+      
+      try {
+        await atualizarStatusOSIndividual(id);
+        mostrarAlerta('Status atualizado com sucesso!', 'success');
+        
+        const mes = parseInt(document.getElementById('filterMonth').value);
+        const ano = parseInt(document.getElementById('filterYear').value);
+        const unidade = document.getElementById('filterUnit').value.trim();
+        await carregarRelatorio(mes, ano, unidade, statusFiltroAtual);
+        
+      } catch (err) {
+        mostrarAlerta('Erro ao atualizar: ' + err.message, 'danger');
+      } finally {
+        this.disabled = false;
+        this.innerHTML = originalHtml;
+      }
+    });
+  });
+}
+
+// ========================= CARREGAR GRUPOS PARA FILTRO =========================
+async function carregarGruposParaFiltro() {
+    try {
+        const { data, error } = await supabaseClient
+            .from('precos')
+            .select('grupo')
+            .order('grupo');
+
+        if (error) throw error;
+
+        const grupos = [...new Set(data.map(item => item.grupo).filter(Boolean))];
+        const datalist = document.getElementById('grupoList');
+        
+        if (datalist) {
+            datalist.innerHTML = grupos.map(g => `<option value="${g}">`).join('');
+        }
+        
+        return grupos;
+    } catch (err) {
+        console.error('Erro ao carregar grupos:', err);
+        return [];
+    }
+}
+
+// ========================= CARREGAR HOLDINGS PARA FILTRO =========================
+async function carregarHoldingsParaFiltro() {
+    try {
+        const { data, error } = await supabaseClient
+            .from('precos')
+            .select('holding')
+            .order('holding');
+
+        if (error) throw error;
+
+        const holdings = [...new Set(data.map(item => item.holding).filter(Boolean))];
+        const datalist = document.getElementById('holdingList');
+        
+        if (datalist) {
+            datalist.innerHTML = holdings.map(h => `<option value="${h}">`).join('');
+        }
+        
+        return holdings;
+    } catch (err) {
+        console.error('Erro ao carregar holdings:', err);
+        return [];
+    }
 }
 
 function mostrarDetalhes(unidade, mes, ano, detalhes) {
@@ -1932,10 +2763,33 @@ function abrirModalCriarOs(id, unidade, valor, mes, ano, detalhes) {
   document.getElementById('osValorTotal').value = 'R$ ' + formatarMoeda(valor);
   
   const confirmBtn = document.getElementById('confirmarCriarOsBtn');
+  const statusMessage = document.getElementById('osStatusMessage');
+  
+  const row = document.querySelector(`.btn-criar-os[data-id="${id}"]`);
+  const osStatus = row ? row.dataset.osStatus : '';
+  const osId = row ? row.dataset.osId : '';
+  
+  if (osStatus === 'criado' && osId) {
+    statusMessage.innerHTML = `
+      <div class="alert alert-success">
+        <i class="fas fa-check-circle"></i> 
+        <strong>OS já criada com sucesso!</strong><br>
+        ID OMIE: <strong>${osId}</strong><br>
+        <small>A OS está na Etapa 50 (Pronta para faturar).</small>
+        <br><br>
+        <div class="alert alert-info">
+          <i class="fas fa-info-circle"></i> 
+          Agora você pode usar o botão <strong>"Faturar em Lote"</strong> para enviar todas as OS para a Etapa 60.
+        </div>
+      </div>
+    `;
+    confirmBtn.disabled = true;
+    confirmBtn.innerHTML = '<i class="fas fa-check-circle"></i> OS já criada';
+    return;
+  }
+  
   confirmBtn.disabled = true;
   confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Buscando cliente...';
-  
-  const statusMessage = document.getElementById('osStatusMessage');
   statusMessage.innerHTML = '<div class="alert alert-info"><i class="fas fa-spinner fa-spin"></i> Buscando código do cliente na OMIE...</div>';
   
   buscarCodigoClienteParaOS(unidade).then(async (codigoCliente) => {
@@ -2329,6 +3183,338 @@ document.addEventListener('DOMContentLoaded', function () {
     if (btnTodos) btnTodos.classList.add('active');
   }
 
+  async function verificarStatusOS(idFaturamento) {
+    const { data, error } = await supabaseClient
+      .from('faturamento')
+      .select('omie_os_id, omie_status')
+      .eq('id', idFaturamento)
+      .single();
+    
+    if (error) return null;
+    return data;
+  }
+
+  async function atualizarStatusOSFaturadas() {
+    try {
+      const { data, error } = await supabaseClient
+        .from('faturamento')
+        .select('*')
+        .eq('omie_status', 'criado');
+      
+      if (error) throw error;
+      
+      let atualizados = 0;
+      
+      for (const row of data) {
+        if (!row.omie_os_id) continue;
+        
+        try {
+          const payload = {
+            endpoint: 'servicos/os',
+            call: 'ConsultarOS',
+            param: [{ nCodOS: parseInt(row.omie_os_id) }]
+          };
+          
+          const response = await fetchOmieProxy(payload);
+          const osData = await response.json();
+          
+          if (osData.fault) continue;
+          
+          const etapa = osData.Cabecalho?.cEtapa || osData.cabecalho?.cEtapa || '';
+          const isFaturada = etapa === '60' || osData.Cabecalho?.cFaturada === 'S';
+          
+          if (isFaturada) {
+            await supabaseClient
+              .from('faturamento')
+              .update({ 
+                omie_status: 'faturado',
+                nota_emitida: true,
+                boleto_enviado: true
+              })
+              .eq('id', row.id);
+            atualizados++;
+          }
+        } catch (err) {
+          console.error(`Erro ao verificar OS ${row.omie_os_id}:`, err.message);
+        }
+      }
+      
+      console.log(`✅ ${atualizados} OS atualizadas para status "faturado"`);
+      return atualizados;
+      
+    } catch (err) {
+      console.error('❌ Erro:', err);
+      return 0;
+    }
+  }
+
+  async function consultarStatusFaturamentoOS() {
+    console.log('🔍 Consultando status de faturamento das OS criadas pelo sistema...');
+    
+    try {
+      const { data: registros, error } = await supabaseClient
+        .from('faturamento')
+        .select('*')
+        .eq('omie_status', 'criado')
+        .not('omie_os_id', 'is', null);
+      
+      if (error) throw error;
+      
+      if (registros.length === 0) {
+        console.log('📋 Nenhuma OS aguardando faturamento.');
+        mostrarAlerta('Nenhuma OS criada aguardando faturamento.', 'info');
+        return { atualizados: 0, erros: 0 };
+      }
+      
+      console.log(`📋 ${registros.length} OS para verificar status`);
+      
+      const payload = {
+        endpoint: 'produtos/etapafat',
+        call: 'ListarEtapasFaturamento',
+        param: [{
+          pagina: 1,
+          registros_por_pagina: 100
+        }]
+      };
+      
+      console.log('📤 Buscando NFS-e na OMIE...');
+      const response = await fetchOmieProxy(payload);
+      const data = await response.json();
+      
+      if (data.fault) {
+        throw new Error(`Erro ao consultar NFS-e: ${data.fault.faultstring}`);
+      }
+      
+      const nfses = data.nfseEncontradas || [];
+      console.log(`📋 ${nfses.length} NFS-e encontradas na OMIE`);
+      
+      let atualizados = 0;
+      let erros = 0;
+      let detalhesAtualizacao = [];
+      
+      for (const registro of registros) {
+        try {
+          const osId = registro.omie_os_id;
+          console.log(`🔍 Verificando OS ${osId} - ${registro.unidade}`);
+          
+          const nfseVinculada = nfses.find(n => {
+            const nCodOS = n.OrdemServico?.nCodigoOS || n.OrdemServico?.nCodOS;
+            return nCodOS && parseInt(nCodOS) === parseInt(osId);
+          });
+          
+          if (nfseVinculada) {
+            const statusNFSe = nfseVinculada.Cabecalho?.cStatusNFSe || '';
+            const numeroNFSe = nfseVinculada.Cabecalho?.nNumeroNFSe || '';
+            const valorNFSe = nfseVinculada.Cabecalho?.nValorNFSe || 0;
+            
+            let statusMap = {
+              'F': 'faturado',
+              'A': 'aprovado',
+              'R': 'rejeitado',
+              'C': 'cancelado'
+            };
+            
+            const novoStatus = statusMap[statusNFSe] || statusNFSe;
+            
+            await supabaseClient
+              .from('faturamento')
+              .update({
+                omie_status: novoStatus,
+                nota_emitida: true,
+                boleto_enviado: true,
+                nota_numero: numeroNFSe,
+                nota_valor: valorNFSe,
+                nota_status: novoStatus,
+                nota_data_emissao: nfseVinculada.Emissao?.cDataEmissao || null
+              })
+              .eq('id', registro.id);
+            
+            console.log(`✅ OS ${osId} - NFS-e ${numeroNFSe} - Status: ${novoStatus}`);
+            detalhesAtualizacao.push(`${registro.unidade}: NFS-e ${numeroNFSe} - ${novoStatus}`);
+            atualizados++;
+            
+          } else {
+            console.log(`⏳ OS ${osId} sem NFS-e encontrada, verificando etapa...`);
+            
+            const payloadOS = {
+              endpoint: 'servicos/os',
+              call: 'ConsultarOS',
+              param: [{ nCodOS: parseInt(osId) }]
+            };
+            
+            const responseOS = await fetchOmieProxy(payloadOS);
+            const osData = await responseOS.json();
+            
+            if (osData.fault) {
+              console.error(`❌ Erro ao consultar OS ${osId}:`, osData.fault.faultstring);
+              erros++;
+              continue;
+            }
+            
+            const etapa = osData.Cabecalho?.cEtapa || osData.cabecalho?.cEtapa || '';
+            const isFaturada = etapa === '60' || etapa === '70' || etapa === '80';
+            
+            if (isFaturada) {
+              await supabaseClient
+                .from('faturamento')
+                .update({
+                  omie_status: 'faturado',
+                  nota_emitida: true,
+                  boleto_enviado: true
+                })
+                .eq('id', registro.id);
+              
+              console.log(`✅ OS ${osId} - Faturada (Etapa ${etapa})`);
+              detalhesAtualizacao.push(`${registro.unidade}: Faturada (Etapa ${etapa})`);
+              atualizados++;
+            } else {
+              console.log(`⏳ OS ${osId} - Etapa ${etapa} (aguardando faturamento)`);
+            }
+          }
+          
+          await new Promise(resolve => setTimeout(resolve, 100));
+          
+        } catch (err) {
+          console.error(`❌ Erro ao processar OS ${registro.omie_os_id}:`, err.message);
+          erros++;
+        }
+      }
+      
+      let mensagem = `${atualizados} OS atualizadas!`;
+      if (detalhesAtualizacao.length > 0) {
+        mensagem += '\n\n' + detalhesAtualizacao.join('\n');
+      }
+      if (erros > 0) {
+        mensagem += `\n\n${erros} erros encontrados.`;
+      }
+      
+      mostrarAlerta(mensagem, atualizados > 0 ? 'success' : 'info');
+      console.log(`📊 ${atualizados} OS atualizadas, ${erros} erros`);
+      return { atualizados, erros, detalhes: detalhesAtualizacao };
+      
+    } catch (err) {
+      console.error('❌ Erro ao consultar status:', err);
+      mostrarAlerta('Erro ao atualizar status: ' + err.message, 'danger');
+      return { atualizados: 0, erros: 1 };
+    }
+  }
+
+  async function atualizarStatusOSIndividual(idFaturamento) {
+    console.log(`🔄 Atualizando status da OS ID: ${idFaturamento}`);
+    
+    try {
+      const { data: registro, error } = await supabaseClient
+        .from('faturamento')
+        .select('*')
+        .eq('id', idFaturamento)
+        .single();
+      
+      if (error) throw error;
+      
+      if (!registro.omie_os_id) {
+        throw new Error('Esta OS não possui ID na OMIE.');
+      }
+      
+      const osId = registro.omie_os_id;
+      
+      const payload = {
+        endpoint: 'produtos/etapafat',
+        call: 'ListarEtapasFaturamento',
+        param: [{
+          pagina: 1,
+          registros_por_pagina: 100
+        }]
+      };
+      
+      const response = await fetchOmieProxy(payload);
+      const data = await response.json();
+      
+      if (data.fault) {
+        throw new Error(`Erro ao consultar NFS-e: ${data.fault.faultstring}`);
+      }
+      
+      const nfses = data.nfseEncontradas || [];
+      const nfseVinculada = nfses.find(n => {
+        const nCodOS = n.OrdemServico?.nCodigoOS || n.OrdemServico?.nCodOS;
+        return nCodOS && parseInt(nCodOS) === parseInt(osId);
+      });
+      
+      let updateData = {};
+      
+      if (nfseVinculada) {
+        const statusNFSe = nfseVinculada.Cabecalho?.cStatusNFSe || '';
+        const numeroNFSe = nfseVinculada.Cabecalho?.nNumeroNFSe || '';
+        const valorNFSe = nfseVinculada.Cabecalho?.nValorNFSe || 0;
+        
+        let statusMap = {
+          'F': 'faturado',
+          'A': 'aprovado',
+          'R': 'rejeitado',
+          'C': 'cancelado'
+        };
+        
+        const novoStatus = statusMap[statusNFSe] || statusNFSe;
+        
+        updateData = {
+          omie_status: novoStatus,
+          nota_emitida: true,
+          boleto_enviado: true,
+          nota_numero: numeroNFSe,
+          nota_valor: valorNFSe,
+          nota_status: novoStatus,
+          nota_data_emissao: nfseVinculada.Emissao?.cDataEmissao || null
+        };
+        
+        console.log(`✅ NFS-e ${numeroNFSe} encontrada - Status: ${novoStatus}`);
+        
+      } else {
+        const payloadOS = {
+          endpoint: 'servicos/os',
+          call: 'ConsultarOS',
+          param: [{ nCodOS: parseInt(osId) }]
+        };
+        
+        const responseOS = await fetchOmieProxy(payloadOS);
+        const osData = await responseOS.json();
+        
+        if (osData.fault) {
+          throw new Error(`Erro ao consultar OS: ${osData.fault.faultstring}`);
+        }
+        
+        const etapa = osData.Cabecalho?.cEtapa || osData.cabecalho?.cEtapa || '';
+        const isFaturada = etapa === '60' || etapa === '70' || etapa === '80';
+        
+        if (isFaturada) {
+          updateData = {
+            omie_status: 'faturado',
+            nota_emitida: true,
+            boleto_enviado: true
+          };
+          console.log(`✅ OS faturada (Etapa ${etapa})`);
+        } else {
+          updateData = {
+            omie_status: 'criado',
+            nota_emitida: false,
+            boleto_enviado: false
+          };
+          console.log(`⏳ OS ainda na Etapa ${etapa}`);
+        }
+      }
+      
+      await supabaseClient
+        .from('faturamento')
+        .update(updateData)
+        .eq('id', idFaturamento);
+      
+      console.log('📊 Status atualizado:', updateData);
+      return updateData;
+      
+    } catch (err) {
+      console.error('❌ Erro:', err);
+      throw err;
+    }
+  }
+
   function mostrarDashboard(user) {
     loginPage.classList.add('hidden');
     menuPage.classList.add('hidden');
@@ -2341,7 +3527,9 @@ document.addEventListener('DOMContentLoaded', function () {
     carregarGraficos(anoAtual);
     carregarPrecos();
     
-    // Carregar boletos na primeira vez
+    carregarHoldingsParaFiltro();
+    carregarGruposParaFiltro();
+    
     setTimeout(() => {
       const mes = parseInt(document.getElementById('boletoFiltroMes')?.value || 0);
       const ano = parseInt(document.getElementById('boletoFiltroAno')?.value || 0);
@@ -2367,7 +3555,6 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   });
 
-  // Verificar sessão ao carregar
   supabaseClient.auth.getSession().then(({ data }) => {
     if (data.session) {
       mostrarMenu(data.session.user);
@@ -2504,6 +3691,15 @@ document.addEventListener('DOMContentLoaded', function () {
     carregarRelatorio(mes, ano, unidade, statusFiltroAtual);
   });
 
+  document.getElementById('clearFiltersBtn').addEventListener('click', function() {
+    document.getElementById('filterMonth').value = '0';
+    document.getElementById('filterYear').value = new Date().getFullYear();
+    document.getElementById('filterHolding').value = '';
+    document.getElementById('filterGrupo').value = '';
+    document.getElementById('filterUnit').value = '';
+    carregarRelatorio(0, new Date().getFullYear(), '', statusFiltroAtual);
+  });
+
   document.querySelectorAll('[data-status]').forEach(btn => {
     btn.addEventListener('click', function() {
       document.querySelectorAll('[data-status]').forEach(b => b.classList.remove('active'));
@@ -2518,7 +3714,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
   document.getElementById('exportPrecosBtn').addEventListener('click', exportarPrecos);
 
-  // ========================= EVENTO BOTÃO CONFIRMAR CRIAR OS =========================
+  // ========================= CONFIRMAR CRIAR OS =========================
   document.getElementById('confirmarCriarOsBtn').addEventListener('click', async function() {
     const id = document.getElementById('osFaturamentoId').value;
     const unidade = document.getElementById('osCliente').value;
@@ -2568,10 +3764,9 @@ document.addEventListener('DOMContentLoaded', function () {
       
       statusMessage.innerHTML = `
         <div class="alert alert-success">
-          <i class="fas fa-check-circle"></i> OS criada com sucesso! 
-          <br>
-          ID OMIE: <strong>${osId}</strong>
-          <br>
+          <i class="fas fa-check-circle"></i> 
+          <strong>OS criada com sucesso!</strong><br>
+          ID OMIE: <strong>${osId}</strong><br>
           Nº OS: <strong>${resultado.cNumOS || 'N/A'}</strong>
           <br><br>
           <div class="alert alert-info">
@@ -2585,14 +3780,20 @@ document.addEventListener('DOMContentLoaded', function () {
         </div>
       `;
       
+      confirmBtn.disabled = true;
+      confirmBtn.innerHTML = '<i class="fas fa-check-circle"></i> OS criada';
+      
       mostrarAlerta(`OS criada com sucesso! ID: ${osId} (Etapa 50)`, 'success');
       
+      const mesF = parseInt(document.getElementById('filterMonth').value);
+      const anoF = parseInt(document.getElementById('filterYear').value);
+      const unidadeF = document.getElementById('filterUnit').value.trim();
+      await carregarRelatorio(mesF, anoF, unidadeF, statusFiltroAtual);
+      
       setTimeout(() => {
-        const mesF = parseInt(document.getElementById('filterMonth').value);
-        const anoF = parseInt(document.getElementById('filterYear').value);
-        const unidadeF = document.getElementById('filterUnit').value.trim();
-        carregarRelatorio(mesF, anoF, unidadeF, statusFiltroAtual);
-      }, 2000);
+        const modal = bootstrap.Modal.getInstance(document.getElementById('criarOsModal'));
+        if (modal) modal.hide();
+      }, 3000);
       
     } catch (err) {
       await supabaseClient
@@ -2609,10 +3810,10 @@ document.addEventListener('DOMContentLoaded', function () {
         <button class="btn btn-secondary" onclick="fecharModalCriarOs()">Fechar</button>
       </div>`;
       
-      mostrarAlerta('Erro ao criar OS: ' + err.message, 'danger');
-    } finally {
       confirmBtn.disabled = false;
       confirmBtn.innerHTML = '<i class="fas fa-save"></i> Criar OS (Etapa 50)';
+      
+      mostrarAlerta('Erro ao criar OS: ' + err.message, 'danger');
     }
   });
 
@@ -2626,102 +3827,98 @@ document.addEventListener('DOMContentLoaded', function () {
     carregarRelatorio(mesF, anoF, unidadeF, statusFiltroAtual);
   };
 
- // ========================= EVENTO BOTÃO FATURAR EM LOTE =========================
-document.getElementById('btnFaturarLote').addEventListener('click', async function() {
-  const btn = this;
-  const statusEl = document.getElementById('faturarLoteStatus');
-  
-  let statusElement = statusEl;
-  if (!statusElement) {
-    const alertArea = document.getElementById('alertArea');
-    if (alertArea) {
-      alertArea.innerHTML = `<div id="faturarLoteStatus" class="alert alert-info">⏳ Processando...</div>`;
-      statusElement = document.getElementById('faturarLoteStatus');
-    }
-  }
-  
-  if (statusElement) {
-    statusElement.innerHTML = '⏳ Verificando OS prontas para faturar (Etapa 50)...';
-    statusElement.className = 'alert alert-info';
-  }
-  
-  try {
-    // Usar a função correta: faturarLoteOSCorrigido
-    const osList = await listarOSProntasParaFaturar();
+  // ========================= FATURAR EM LOTE =========================
+  document.getElementById('btnFaturarLote').addEventListener('click', async function() {
+    const btn = this;
+    const statusEl = document.getElementById('faturarLoteStatus');
     
-    if (osList.length === 0) {
-      if (statusElement) {
-        statusElement.innerHTML = '⚠️ Nenhuma OS pronta para faturar (Etapa 50).';
-        statusElement.className = 'alert alert-warning';
+    let statusElement = statusEl;
+    if (!statusElement) {
+      const alertArea = document.getElementById('alertArea');
+      if (alertArea) {
+        alertArea.innerHTML = `<div id="faturarLoteStatus" class="alert alert-info">⏳ Processando...</div>`;
+        statusElement = document.getElementById('faturarLoteStatus');
       }
-      return;
     }
-    
-    if (!confirm(`Deseja faturar ${osList.length} OS em lote? (Etapa 50 → 60)`)) {
-      if (statusElement) {
-        statusElement.innerHTML = 'Operação cancelada.';
-        statusElement.className = 'alert alert-muted';
-      }
-      return;
-    }
-    
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Faturando...';
     
     if (statusElement) {
-      statusElement.innerHTML = `⏳ Enviando ${osList.length} OS para faturamento (Etapa 50 → 60)...`;
+      statusElement.innerHTML = '⏳ Verificando OS prontas para faturar (Etapa 50)...';
       statusElement.className = 'alert alert-info';
     }
     
-    // CHAMAR A FUNÇÃO CORRETA: faturarLoteOSCorrigido
-    const resultado = await faturarLoteOSCorrigido('50');
-    
-    if (resultado && resultado.nIdLoteFat) {
-      if (statusElement) {
-        statusElement.innerHTML = `
-          ✅ ${resultado.nQtdeFat || 0} OS enviadas para faturamento!<br>
-          <small>ID do Lote: ${resultado.nIdLoteFat}</small>
-          <br><br>
-          <div class="alert alert-success">
-            <i class="fas fa-check-circle"></i> 
-            As OS estão sendo movidas da <strong>Etapa 50</strong> para a <strong>Etapa 60</strong> (Faturadas).
-          </div>
-          <br>
-          <button class="btn btn-sm btn-primary" onclick="verificarStatusLote(${resultado.nIdLoteFat})">
-            <i class="fas fa-sync"></i> Verificar Status
-          </button>
-        `;
-        statusElement.className = 'alert alert-success';
+    try {
+      const osList = await listarOSProntasParaFaturar();
+      
+      if (osList.length === 0) {
+        if (statusElement) {
+          statusElement.innerHTML = '⚠️ Nenhuma OS pronta para faturar (Etapa 50).';
+          statusElement.className = 'alert alert-warning';
+        }
+        return;
       }
       
-      mostrarAlerta(`${resultado.nQtdeFat || 0} OS enviadas para faturamento em lote!`, 'success');
+      if (!confirm(`Deseja faturar ${osList.length} OS em lote? (Etapa 50 → 60)`)) {
+        if (statusElement) {
+          statusElement.innerHTML = 'Operação cancelada.';
+          statusElement.className = 'alert alert-muted';
+        }
+        return;
+      }
       
-      setTimeout(() => {
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Faturando...';
+      
+      if (statusElement) {
+        statusElement.innerHTML = `⏳ Enviando ${osList.length} OS para faturamento (Etapa 50 → 60)...`;
+        statusElement.className = 'alert alert-info';
+      }
+      
+      const resultado = await faturarLoteOSCorrigido('50');
+      
+      if (resultado && resultado.nIdLoteFat) {
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        const atualizados = await atualizarStatusOSFaturadas();
+        
+        if (statusElement) {
+          statusElement.innerHTML = `
+            ✅ ${resultado.nQtdeFat || 0} OS enviadas para faturamento!<br>
+            📋 ${atualizados} OS atualizadas para status "Faturado"<br>
+            <small>ID do Lote: ${resultado.nIdLoteFat}</small>
+            <br><br>
+            <div class="alert alert-success">
+              <i class="fas fa-check-circle"></i> 
+              As OS foram movidas da <strong>Etapa 50</strong> para a <strong>Etapa 60</strong> (Faturadas).
+            </div>
+          `;
+          statusElement.className = 'alert alert-success';
+        }
+        
+        mostrarAlerta(`${resultado.nQtdeFat || 0} OS faturadas e ${atualizados} status atualizados!`, 'success');
+        
         const mesF = parseInt(document.getElementById('filterMonth')?.value || 0);
         const anoF = parseInt(document.getElementById('filterYear')?.value || 0);
         const unidadeF = document.getElementById('filterUnit')?.value?.trim() || '';
-        carregarRelatorio(mesF, anoF, unidadeF, statusFiltroAtual || 'todos');
-      }, 5000);
+        await carregarRelatorio(mesF, anoF, unidadeF, statusFiltroAtual || 'todos');
+        
+      } else {
+        if (statusElement) {
+          statusElement.innerHTML = '❌ Erro ao faturar em lote.';
+          statusElement.className = 'alert alert-danger';
+        }
+      }
       
-    } else {
+    } catch (err) {
+      console.error('❌ Erro:', err);
       if (statusElement) {
-        statusElement.innerHTML = '❌ Erro ao faturar em lote.';
+        statusElement.innerHTML = `❌ Erro: ${err.message}`;
         statusElement.className = 'alert alert-danger';
       }
+      mostrarAlerta('Erro ao faturar em lote: ' + err.message, 'danger');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-file-invoice-dollar"></i> Faturar em Lote (50→60)';
     }
-    
-  } catch (err) {
-    console.error('❌ Erro:', err);
-    if (statusElement) {
-      statusElement.innerHTML = `❌ Erro: ${err.message}`;
-      statusElement.className = 'alert alert-danger';
-    }
-    mostrarAlerta('Erro ao faturar em lote: ' + err.message, 'danger');
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = '<i class="fas fa-file-invoice-dollar"></i> Faturar em Lote (50→60)';
-  }
-});
+  });
 
   window.verificarStatusLote = async function(nIdLoteFat) {
     console.log(`🔍 Verificando status do lote: ${nIdLoteFat}`);
@@ -3000,191 +4197,6 @@ document.getElementById('btnFaturarLote').addEventListener('click', async functi
     });
   }
 
-  // ========================= CRIAR OS (SEM TENTAR PREENCHER TRIBUTAÇÃO) =========================
-async function criarOS(registro, codigoCliente) {
-  const now = new Date();
-  const timestamp = now.getTime();
-  const random = Math.floor(Math.random() * 10000);
-  const codigoIntegracao = `OS-${registro.ano}${String(registro.mes).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${timestamp}-${random}`;
-
-  const emailCliente = await buscarEmailClienteOmie(codigoCliente);
-
-  let descricaoCompleta = '';
-  const detalhes = registro.detalhes || {};
-  
-  if (detalhes.mensalidade) {
-    descricaoCompleta += `MENSALIDADE: R$ ${detalhes.mensalidade.precoUnitario?.toFixed(2) || 0}\n`;
-  }
-  if (detalhes['vidas (NR-1)']) {
-    const vidas = detalhes['vidas (NR-1)'];
-    descricaoCompleta += `VIDAS NR-1: ${vidas.quantidade} x R$ ${vidas.precoUnitario?.toFixed(2) || 0} = R$ ${(vidas.quantidade * vidas.precoUnitario || 0).toFixed(2)}\n`;
-  }
-  for (let [exame, info] of Object.entries(detalhes)) {
-    if (exame === 'mensalidade' || exame === 'vidas (NR-1)') continue;
-    if (typeof info === 'object' && info.funcionarios) {
-      info.funcionarios.forEach(f => {
-        descricaoCompleta += `${exame.toUpperCase()} - ${f.nome} - ${f.data} - R$ ${info.precoUnitario?.toFixed(2) || 0}\n`;
-      });
-    }
-  }
-  
-  if (!descricaoCompleta) {
-    descricaoCompleta = `Faturamento ${registro.mes}/${registro.ano} - ${registro.unidade}`;
-  }
-
-  // Data de vencimento compensada
-  let dataVencimentoOriginal = '01/08/2026';
-  if (registro.data_vencimento) {
-    const partes = registro.data_vencimento.split('-');
-    const ano = parseInt(partes[0]), mes = parseInt(partes[1]), dia = parseInt(partes[2]);
-    let mesCorrigido = mes - 1, anoCorrigido = ano;
-    if (mesCorrigido === 0) { mesCorrigido = 12; anoCorrigido = ano - 1; }
-    const dataCorrigida = new Date(anoCorrigido, mesCorrigido - 1, dia);
-    dataVencimentoOriginal = dataCorrigida.toLocaleDateString('pt-BR');
-  }
-
-  const cabecalho = {
-    cCodIntOS: codigoIntegracao,
-    nCodCli: parseInt(codigoCliente),
-    dDtPrevisao: dataVencimentoOriginal,
-    cEtapa: '50',
-    nQtdeParc: 1,
-    cCodParc: '999'
-  };
-
-  const servicosPrestados = [{
-    cCodServMun: CODIGO_SERVICO_OMIE,
-    cCodServLC116: CODIGO_SERVICO_LC116,
-    cDescServ: descricaoCompleta,
-    nQtde: 1,
-    nValUnit: registro.valor_total,
-    cDadosAdicItem: descricaoCompleta,
-    cTribServ: "1",
-    cRetemISS: "N",
-    impostos: {
-      nAliqISS: 2.01
-    }
-  }];
-
-  const informacoesAdicionais = {
-    cCidPrestServ: 'ARAUCARIA (PR)',
-    cCodCateg: '1.01.02',
-    nCodCC: CODIGO_CONTA_CORRENTE,
-    cDadosAdicNF: descricaoCompleta
-  };
-
-  const email = {
-    cEnvBoleto: 'S',
-    cEnvLink: 'S',
-    cEnviarPara: emailCliente
-  };
-
-  const payloadCriar = {
-    endpoint: 'servicos/os',
-    call: 'IncluirOS',
-    param: [{
-      cabecalho: cabecalho,
-      servicosPrestados: servicosPrestados,
-      informacoesAdicionais: informacoesAdicionais,
-      email: email
-    }]
-  };
-
-  console.log('📤 Criando OS...');
-  const response = await fetchOmieProxy(payloadCriar);
-  const result = await response.json();
-
-  if (result.fault) {
-    throw new Error(`Erro ao criar OS: ${result.fault.faultstring}`);
-  }
-
-  return result;
-}
-
-// ========================= ATUALIZAR TRIBUTAÇÃO VIA ALTERAROS =========================
-async function atualizarTributacaoOS(codigoOS) {
-  console.log(`🔄 Atualizando tributação da OS ${codigoOS}...`);
-  
-  // Primeiro, consultar a OS para pegar o nIdItem
-  const payloadConsulta = {
-    endpoint: 'servicos/os',
-    call: 'ConsultarOS',
-    param: [{ nCodOS: parseInt(codigoOS) }]
-  };
-  
-  const responseConsulta = await fetchOmieProxy(payloadConsulta);
-  const osData = await responseConsulta.json();
-  
-  if (osData.fault) {
-    throw new Error(`Erro ao consultar OS: ${osData.fault.faultstring}`);
-  }
-  
-  const nIdItem = osData.ServicosPrestados?.[0]?.nIdItem;
-  const servico = osData.ServicosPrestados?.[0];
-  
-  if (!nIdItem) {
-    throw new Error('Não foi possível encontrar o serviço da OS');
-  }
-  
-  // Agora atualizar com a tributação
-  const payloadAlterar = {
-    endpoint: 'servicos/os',
-    call: 'AlterarOS',
-    param: [{
-      nCodOS: parseInt(codigoOS),
-      servicosPrestados: [{
-        nIdItem: nIdItem,
-        cCodServMun: servico.cCodServMun,
-        cCodServLC116: servico.cCodServLC116,
-        cDescServ: servico.cDescServ,
-        nQtde: servico.nQtde,
-        nValUnit: servico.nValUnit,
-        cDadosAdicItem: servico.cDadosAdicItem || '',
-        cTribServ: "1",
-        cRetemISS: "N",
-        cCodCategItem: "1.01.02", // ← TENTAR AQUI NO ALTERAR
-        impostos: {
-          nAliqISS: 2.01
-        }
-      }]
-    }]
-  };
-  
-  console.log('📤 Atualizando OS com tributação...');
-  const response = await fetchOmieProxy(payloadAlterar);
-  const result = await response.json();
-  
-  if (result.fault) {
-    throw new Error(`Erro ao atualizar tributação: ${result.fault.faultstring}`);
-  }
-  
-  console.log(`✅ Tributação da OS ${codigoOS} atualizada!`);
-  return result;
-}
-
-// ========================= CRIAR OS E ATUALIZAR TRIBUTAÇÃO =========================
-async function criarOSComTributacao(registro, codigoCliente) {
-  try {
-    // 1. Criar a OS
-    console.log('📌 Passo 1: Criando OS...');
-    const resultCriar = await criarOS(registro, codigoCliente);
-    
-    const osId = resultCriar.nCodOS || resultCriar.cabecalho?.nCodOS;
-    console.log(`✅ OS criada com ID: ${osId}`);
-    
-    // 2. Atualizar a tributação
-    console.log('📌 Passo 2: Atualizando tributação...');
-    await atualizarTributacaoOS(osId);
-    
-    console.log(`✅ OS ${osId} criada com tributação "Exigível"!`);
-    return resultCriar;
-    
-  } catch (err) {
-    console.error('❌ Erro:', err.message);
-    throw err;
-  }
-}
-
   // ========================= BOLETOS =========================
   function popularAnosBoletos() {
     const select = document.getElementById('boletoFiltroAno');
@@ -3219,8 +4231,44 @@ async function criarOSComTributacao(registro, codigoCliente) {
     carregarBoletos(mes, ano, unidade, status);
   });
 
-  document.getElementById('btnAtualizarStatusBoletos').addEventListener('click', atualizarStatusBoletos);
+  document.getElementById('btnAtualizarStatusBoletos').addEventListener('click', atualizarStatusTodosBoletos);
   document.getElementById('btnExportarBoletos').addEventListener('click', exportarBoletosCSV);
+
+  // ========================= ATUALIZAR STATUS NFS-e =========================
+  document.getElementById('btnAtualizarStatusNFSe').addEventListener('click', async function() {
+    const btn = this;
+    const originalText = btn.innerHTML;
+    
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Atualizando...';
+    
+    try {
+      const resultado = await consultarStatusFaturamentoOS();
+      
+      const mes = parseInt(document.getElementById('filterMonth').value);
+      const ano = parseInt(document.getElementById('filterYear').value);
+      const unidade = document.getElementById('filterUnit').value.trim();
+      await carregarRelatorio(mes, ano, unidade, statusFiltroAtual);
+      
+    } catch (err) {
+      mostrarAlerta('Erro ao atualizar status: ' + err.message, 'danger');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = originalText;
+    }
+  });
+
+  // ========================= EVENTO BOTÃO CRIAR OS EM LOTE =========================
+  document.getElementById('btnCriarOSLote').addEventListener('click', abrirModalCriarOSLote);
+
+  // ========================= EVENTO BOTÃO CRIAR TODAS OS =========================
+  document.getElementById('btnCriarTodasOSLote').addEventListener('click', criarTodasOSLote);
+
+  // ========================= FECHAR MODAL LOTE =========================
+  document.getElementById('fecharModalLote').addEventListener('click', function() {
+    const modal = bootstrap.Modal.getInstance(document.getElementById('criarOSLoteModal'));
+    if (modal) modal.hide();
+  });
 
   // ========================= OUTROS =========================
   function popularAnos() {
@@ -3282,4 +4330,316 @@ async function criarOSComTributacao(registro, codigoCliente) {
     });
   }
 
+  carregarHoldingsParaFiltro();
+  carregarGruposParaFiltro();
+
 });
+
+// ========================= FUNÇÕES DE BOLETOS (CACHE E RENDER) =========================
+async function carregarBoletos(mes = 0, ano = 0, unidadeFiltro = '', statusFiltro = 'todos') {
+  console.log('📊 Carregando boletos da OMIE...');
+  
+  const tbody = document.getElementById('boletosBody');
+  if (tbody) {
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4"><i class="fas fa-spinner fa-spin me-2"></i> Carregando boletos...</td></tr>';
+  }
+  
+  try {
+    const boletos = await buscarBoletosOmie({
+      status: statusFiltro,
+      registros_por_pagina: 200
+    });
+    
+    let boletosFiltrados = boletos;
+    if (mes > 0 && ano > 0) {
+      boletosFiltrados = boletosFiltrados.filter(b => {
+        if (!b.data_vencimento) return false;
+        return b.data_vencimento.getMonth() + 1 === mes && 
+               b.data_vencimento.getFullYear() === ano;
+      });
+    }
+    
+    if (unidadeFiltro) {
+      const filtroLower = unidadeFiltro.toLowerCase().trim();
+      boletosFiltrados = boletosFiltrados.filter(b => 
+        b.nome_cliente.toLowerCase().includes(filtroLower)
+      );
+    }
+    
+    atualizarCardsBoletos(boletosFiltrados);
+    renderizarTabelaBoletosOmie(boletosFiltrados);
+    
+    console.log(`📊 ${boletosFiltrados.length} boletos exibidos`);
+    
+  } catch (err) {
+    console.error('❌ Erro ao carregar boletos:', err);
+    if (tbody) {
+      tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger py-4">
+        <i class="fas fa-exclamation-triangle me-2"></i> Erro ao carregar boletos: ${err.message}
+      </td></tr>`;
+    }
+    mostrarAlerta('Erro ao carregar boletos: ' + err.message, 'danger');
+  }
+}
+
+function atualizarCardsBoletos(boletos) {
+  let pagos = 0;
+  let vencidos = 0;
+  let aVencer = 0;
+  let naoGerados = 0;
+  let valorTotal = 0;
+  let valorPago = 0;
+  let valorPendente = 0;
+
+  boletos.forEach(b => {
+    valorTotal += b.valor_documento;
+    if (b.isPago) {
+      pagos++;
+      valorPago += b.valor_documento;
+    } else {
+      valorPendente += b.saldo || b.valor_documento;
+    }
+    
+    if (b.status_boleto === 'vencido') vencidos++;
+    else if (b.status_boleto === 'avencer') aVencer++;
+    else if (b.status_boleto === 'naogerado') naoGerados++;
+  });
+
+  const elementos = {
+    'totalBoletosPagos': pagos,
+    'totalBoletosVencidos': vencidos,
+    'totalBoletosAVencer': aVencer,
+    'totalBoletosNaoGerados': naoGerados
+  };
+  
+  Object.entries(elementos).forEach(([id, valor]) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = valor;
+  });
+  
+  const valorTotalEl = document.getElementById('boletosValorTotal');
+  if (valorTotalEl) valorTotalEl.textContent = 'R$ ' + formatarMoeda(valorTotal);
+  
+  const valorPagoEl = document.getElementById('boletosValorPago');
+  if (valorPagoEl) valorPagoEl.textContent = 'R$ ' + formatarMoeda(valorPago);
+  
+  const valorPendenteEl = document.getElementById('boletosValorPendente');
+  if (valorPendenteEl) valorPendenteEl.textContent = 'R$ ' + formatarMoeda(valorPendente);
+}
+
+function renderizarTabelaBoletosOmie(boletos) {
+  const tbody = document.getElementById('boletosBody');
+  
+  if (!tbody) return;
+  
+  if (!boletos || boletos.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted py-4">
+      <i class="fas fa-info-circle me-2"></i> Nenhum boleto encontrado
+    </td></tr>`;
+    return;
+  }
+
+  let html = '';
+  boletos.forEach(b => {
+    const dataVenc = b.data_vencimento ? 
+      b.data_vencimento.toLocaleDateString('pt-BR') : 
+      (b.data_vencimento_str || '—');
+    
+    const valorFormatado = 'R$ ' + b.valor_documento.toFixed(2);
+    const saldoFormatado = b.saldo > 0 ? 'R$ ' + b.saldo.toFixed(2) : '—';
+    
+    let linkBoleto = '';
+    if (b.codigo_boleto || b.boleto_info?.url) {
+      const url = b.boleto_info?.url || '#';
+      linkBoleto = `<a href="${url}" target="_blank" class="btn btn-sm btn-outline-primary" title="Visualizar boleto">
+        <i class="fas fa-file-pdf"></i>
+      </a>`;
+    }
+
+    html += `<tr>
+      <td>
+        <strong>${b.nome_cliente}</strong>
+        ${b.documento ? `<br><small class="text-muted">Doc: ${b.documento}</small>` : ''}
+      </td>
+      <td>${dataVenc}</td>
+      <td class="text-end">${valorFormatado}</td>
+      <td class="text-end">${saldoFormatado}</td>
+      <td class="text-center">
+        <span class="badge bg-${b.status_class}">
+          <i class="fas ${b.status_icon}"></i> ${b.status_label}
+        </span>
+      </td>
+      <td class="text-center">
+        <span class="badge bg-${b.isPago ? 'success' : 'secondary'}">
+          ${b.isPago ? 'Pago' : 'Pendente'}
+        </span>
+      </td>
+      <td class="text-center">
+        <div class="btn-group btn-group-sm" role="group">
+          ${linkBoleto}
+          <button class="btn btn-outline-info btn-consultar-status" 
+                  data-codigo="${b.codigo_lancamento}" 
+                  title="Consultar status atualizado">
+            <i class="fas fa-sync"></i>
+          </button>
+        </div>
+      </td>
+    </tr>`;
+  });
+
+  tbody.innerHTML = html;
+
+  document.querySelectorAll('.btn-consultar-status').forEach(btn => {
+    btn.addEventListener('click', async function() {
+      const codigo = this.dataset.codigo;
+      if (!codigo) return;
+      
+      try {
+        this.disabled = true;
+        this.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        
+        const result = await consultarStatusBoletoIndividual(codigo);
+        
+        if (result) {
+          mostrarAlerta(`Status do boleto ${codigo}: ${result.status}`, 
+            result.isPago ? 'success' : 'info');
+          
+          const mes = parseInt(document.getElementById('boletoFiltroMes')?.value || 0);
+          const ano = parseInt(document.getElementById('boletoFiltroAno')?.value || 0);
+          const unidade = document.getElementById('boletoFiltroUnidade')?.value?.trim() || '';
+          const status = document.getElementById('boletoFiltroStatus')?.value || 'todos';
+          await carregarBoletos(mes, ano, unidade, status);
+        }
+      } catch (err) {
+        mostrarAlerta('Erro ao consultar status: ' + err.message, 'danger');
+      } finally {
+        this.disabled = false;
+        this.innerHTML = '<i class="fas fa-sync"></i>';
+      }
+    });
+  });
+}
+
+async function consultarStatusBoletoIndividual(codigoLancamento) {
+  console.log(`🔍 Consultando status do boleto: ${codigoLancamento}`);
+  
+  try {
+    const payload = {
+      endpoint: 'financas/contareceber',
+      call: 'ConsultarContaReceber',
+      param: [{
+        codigo_lancamento_omie: parseInt(codigoLancamento)
+      }]
+    };
+    
+    const response = await fetchOmieProxy(payload);
+    const data = await response.json();
+    
+    if (data.fault) {
+      throw new Error(`Erro OMIE: ${data.fault.faultstring}`);
+    }
+    
+    const isPago = data.status === 'Pago' || 
+                  (data.saldo !== undefined && parseFloat(data.saldo) === 0) ||
+                  (data.valor_pago && parseFloat(data.valor_pago) > 0);
+    
+    return {
+      status: data.status || 'Desconhecido',
+      isPago: isPago,
+      valorTotal: data.valor_documento || 0,
+      valorPago: data.valor_pago || 0,
+      saldo: data.saldo || 0,
+      dataVencimento: data.data_vencimento || '',
+      dataPagamento: data.data_pagamento || '',
+      dados: data
+    };
+    
+  } catch (err) {
+    console.error('❌ Erro:', err);
+    throw err;
+  }
+}
+
+async function atualizarStatusTodosBoletos() {
+  console.log('🔄 Atualizando status de todos os boletos...');
+  
+  const btn = document.getElementById('btnAtualizarStatusBoletos');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Atualizando...';
+  }
+  
+  try {
+    const boletos = await buscarBoletosOmie({
+      registros_por_pagina: 200
+    });
+    
+    let atualizados = 0;
+    let erros = 0;
+    
+    for (const b of boletos) {
+      if (!b.codigo_lancamento) continue;
+      
+      try {
+        await consultarStatusBoletoIndividual(b.codigo_lancamento);
+        atualizados++;
+      } catch (err) {
+        console.error(`Erro ao atualizar boleto ${b.codigo_lancamento}:`, err.message);
+        erros++;
+      }
+    }
+    
+    console.log(`📊 ${atualizados} boletos atualizados, ${erros} erros`);
+    mostrarAlerta(`Status atualizado para ${atualizados} boletos!`, 'success');
+    
+    const mes = parseInt(document.getElementById('boletoFiltroMes')?.value || 0);
+    const ano = parseInt(document.getElementById('boletoFiltroAno')?.value || 0);
+    const unidade = document.getElementById('boletoFiltroUnidade')?.value?.trim() || '';
+    const status = document.getElementById('boletoFiltroStatus')?.value || 'todos';
+    await carregarBoletos(mes, ano, unidade, status);
+    
+  } catch (err) {
+    console.error('❌ Erro:', err);
+    mostrarAlerta('Erro ao atualizar status: ' + err.message, 'danger');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-sync me-1"></i> Atualizar Status dos Boletos';
+    }
+  }
+}
+
+function exportarBoletosCSV() {
+  const tbody = document.getElementById('boletosBody');
+  if (!tbody) return;
+  
+  const rows = tbody.querySelectorAll('tr');
+  if (rows.length === 0 || rows[0].textContent.includes('Nenhum boleto encontrado')) {
+    mostrarAlerta('Não há dados para exportar.', 'warning');
+    return;
+  }
+  
+  let csv = 'Cliente,Data Vencimento,Valor (R$),Saldo (R$),Status Boleto,Status Pagamento\n';
+  
+  rows.forEach(row => {
+    const cols = row.querySelectorAll('td');
+    if (cols.length >= 6) {
+      const cliente = cols[0]?.textContent?.trim()?.replace(/\n/g, ' ') || '';
+      const dataVenc = cols[1]?.textContent?.trim() || '';
+      const valor = cols[2]?.textContent?.trim()?.replace('R$ ', '')?.replace('.', '')?.replace(',', '.') || '';
+      const saldo = cols[3]?.textContent?.trim()?.replace('R$ ', '')?.replace('.', '')?.replace(',', '.') || '0';
+      const statusBoleto = cols[4]?.textContent?.trim() || '';
+      const statusPagamento = cols[5]?.textContent?.trim() || '';
+      
+      csv += `"${cliente}","${dataVenc}",${valor},${saldo},"${statusBoleto}","${statusPagamento}"\n`;
+    }
+  });
+  
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `boletos_${new Date().toISOString().slice(0,10)}.csv`;
+  link.click();
+  
+  mostrarAlerta('Arquivo CSV exportado com sucesso!', 'success');
+}

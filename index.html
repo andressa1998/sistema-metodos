@@ -372,115 +372,159 @@
       .navbar-custom .brand .brand-text .name { font-size: 1.1rem; }
       .navbar-custom .brand .brand-text .slogan-nav { font-size: 0.5rem; }
     }
+
     /* ===== MENU PRINCIPAL ===== */
-.menu-wrapper {
-  min-height: 80vh;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  padding: 40px 20px;
-  background: linear-gradient(135deg, #f4f7fc 0%, #e8edf9 100%);
+    .menu-wrapper {
+      min-height: 80vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 40px 20px;
+      background: linear-gradient(135deg, #f4f7fc 0%, #e8edf9 100%);
+    }
+    .menu-header {
+      margin-bottom: 50px;
+    }
+    .menu-icon {
+      font-size: 4rem;
+      color: #213b7c;
+      background: rgba(33, 59, 124, 0.08);
+      padding: 20px;
+      border-radius: 50%;
+      margin-bottom: 10px;
+    }
+    .menu-title {
+      font-weight: 800;
+      font-size: 2.8rem;
+      color: #213b7c;
+      letter-spacing: -1px;
+      margin: 0;
+    }
+    .menu-slogan {
+      font-size: 1rem;
+      color: #41bae8;
+      font-weight: 600;
+      letter-spacing: 2px;
+      margin-top: 4px;
+    }
+    .menu-cards-container {
+      width: 100%;
+      max-width: 800px;
+    }
+    .menu-card {
+      cursor: pointer;
+      border: none;
+      border-radius: 24px;
+      box-shadow: 0 8px 30px rgba(33, 59, 124, 0.08);
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+      height: 100%;
+      padding: 20px;
+      background: #ffffff;
+    }
+    .menu-card:hover {
+      transform: translateY(-8px);
+      box-shadow: 0 20px 50px rgba(33, 59, 124, 0.12);
+    }
+    .menu-card-icon {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      background: #e8edf9;
+      color: #213b7c;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 16px;
+      font-size: 2.2rem;
+      transition: 0.3s;
+    }
+    .menu-card:hover .menu-card-icon {
+      background: #213b7c;
+      color: #fff;
+    }
+    .menu-card .card-title {
+      font-weight: 700;
+      color: #1e293b;
+      font-size: 1.3rem;
+    }
+    .menu-card .card-text {
+      color: #64748b;
+      font-size: 0.95rem;
+      margin-bottom: 16px;
+    }
+    .menu-card .badge {
+      font-weight: 600;
+      padding: 6px 20px;
+      border-radius: 30px;
+      font-size: 0.8rem;
+    }
+    .bg-primary-custom {
+      background: #213b7c;
+      color: #fff;
+    }
+
+    /* Responsivo */
+    @media (max-width: 768px) {
+      .menu-title { font-size: 2rem; }
+      .menu-icon { font-size: 3rem; padding: 16px; }
+      .menu-card-icon { width: 60px; height: 60px; font-size: 1.6rem; }
+    }
+    /* Estilos para as janelas do lote */
+#loteJanelasContainer .card {
+  transition: all 0.3s ease;
+  cursor: default;
 }
 
-.menu-header {
-  margin-bottom: 50px;
+#loteJanelasContainer .card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(0,0,0,0.1);
 }
 
-.menu-icon {
-  font-size: 4rem;
-  color: #213b7c;
-  background: rgba(33, 59, 124, 0.08);
-  padding: 20px;
-  border-radius: 50%;
-  margin-bottom: 10px;
-}
-
-.menu-title {
-  font-weight: 800;
-  font-size: 2.8rem;
-  color: #213b7c;
-  letter-spacing: -1px;
-  margin: 0;
-}
-
-.menu-slogan {
-  font-size: 1rem;
-  color: #41bae8;
-  font-weight: 600;
-  letter-spacing: 2px;
-  margin-top: 4px;
-}
-
-.menu-cards-container {
-  width: 100%;
-  max-width: 800px;
-}
-
-.menu-card {
-  cursor: pointer;
-  border: none;
-  border-radius: 24px;
-  box-shadow: 0 8px 30px rgba(33, 59, 124, 0.08);
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
-  height: 100%;
-  padding: 20px;
-  background: #ffffff;
-}
-
-.menu-card:hover {
-  transform: translateY(-8px);
-  box-shadow: 0 20px 50px rgba(33, 59, 124, 0.12);
-}
-
-.menu-card-icon {
-  width: 80px;
-  height: 80px;
-  border-radius: 50%;
-  background: #e8edf9;
-  color: #213b7c;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0 auto 16px;
-  font-size: 2.2rem;
-  transition: 0.3s;
-}
-
-.menu-card:hover .menu-card-icon {
-  background: #213b7c;
-  color: #fff;
-}
-
-.menu-card .card-title {
-  font-weight: 700;
-  color: #1e293b;
-  font-size: 1.3rem;
-}
-
-.menu-card .card-text {
-  color: #64748b;
-  font-size: 0.95rem;
-  margin-bottom: 16px;
-}
-
-.menu-card .badge {
-  font-weight: 600;
-  padding: 6px 20px;
-  border-radius: 30px;
+#loteJanelasContainer .card-header strong {
   font-size: 0.8rem;
 }
 
-.bg-primary-custom {
-  background: #213b7c;
-  color: #fff;
+/* Scroll personalizado no modal */
+#criarOSLoteModal .modal-body::-webkit-scrollbar {
+  width: 6px;
 }
 
-/* Responsivo */
-@media (max-width: 768px) {
-  .menu-title { font-size: 2rem; }
-  .menu-icon { font-size: 3rem; padding: 16px; }
-  .menu-card-icon { width: 60px; height: 60px; font-size: 1.6rem; }
+#criarOSLoteModal .modal-body::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 10px;
+}
+
+#criarOSLoteModal .modal-body::-webkit-scrollbar-thumb {
+  background: #213b7c;
+  border-radius: 10px;
+}
+
+#criarOSLoteModal .modal-body::-webkit-scrollbar-thumb:hover {
+  background: #152b5a;
+}
+/* Estilos para o modal de descrição */
+#descricaoModalBody {
+  tab-size: 2;
+  line-height: 1.6;
+}
+
+#descricaoModalBody::-webkit-scrollbar {
+  width: 6px;
+}
+
+#descricaoModalBody::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 10px;
+}
+
+#descricaoModalBody::-webkit-scrollbar-thumb {
+  background: #213b7c;
+  border-radius: 10px;
+}
+
+#descricaoModalBody::-webkit-scrollbar-thumb:hover {
+  background: #152b5a;
 }
   </style>
 </head>
@@ -527,105 +571,43 @@
   </div>
 
   <!-- ==================== MENU PRINCIPAL ==================== -->
-<div id="menuPage" class="hidden">
-  <div class="menu-wrapper">
-    <div class="menu-header text-center">
-      <i class="fas fa-heartbeat menu-icon"></i>
-      <h1 class="menu-title">MÉTODOS</h1>
-      <p class="menu-slogan">ESPECIALISTA EM CUIDAR DE QUEM TRABALHA</p>
-    </div>
-    <div class="menu-cards-container">
-      <div class="row justify-content-center g-4">
-        <div class="col-md-5 col-lg-4">
-          <div class="card menu-card" data-target="faturamento">
-            <div class="card-body text-center">
-              <div class="menu-card-icon">
-                <i class="fas fa-file-invoice-dollar"></i>
+  <div id="menuPage" class="hidden">
+    <div class="menu-wrapper">
+      <div class="menu-header text-center">
+        <i class="fas fa-heartbeat menu-icon"></i>
+        <h1 class="menu-title">MÉTODOS</h1>
+        <p class="menu-slogan">ESPECIALISTA EM CUIDAR DE QUEM TRABALHA</p>
+      </div>
+      <div class="menu-cards-container">
+        <div class="row justify-content-center g-4">
+          <div class="col-md-5 col-lg-4">
+            <div class="card menu-card" data-target="faturamento">
+              <div class="card-body text-center">
+                <div class="menu-card-icon">
+                  <i class="fas fa-file-invoice-dollar"></i>
+                </div>
+                <h5 class="card-title">Faturamento</h5>
+                <p class="card-text">Gerencie o faturamento mensal, dashboards e status de pagamento.</p>
+                <span class="badge bg-primary-custom">Acessar</span>
               </div>
-              <h5 class="card-title">Faturamento</h5>
-              <p class="card-text">Gerencie o faturamento mensal, dashboards e status de pagamento.</p>
-              <span class="badge bg-primary-custom">Acessar</span>
             </div>
           </div>
-        </div>
-        <div class="col-md-5 col-lg-4">
-          <div class="card menu-card" data-target="esocial">
-            <div class="card-body text-center">
-              <div class="menu-card-icon" style="background: #e1f5fe; color: #41bae8;">
-                <i class="fas fa-upload"></i>
+          <div class="col-md-5 col-lg-4">
+            <div class="card menu-card" data-target="esocial">
+              <div class="card-body text-center">
+                <div class="menu-card-icon" style="background: #e1f5fe; color: #41bae8;">
+                  <i class="fas fa-upload"></i>
+                </div>
+                <h5 class="card-title">E-Social</h5>
+                <p class="card-text">Automatize o envio de eventos e-Social para seus colaboradores.</p>
+                <span class="badge bg-secondary">Em breve</span>
               </div>
-              <h5 class="card-title">E-Social</h5>
-              <p class="card-text">Automatize o envio de eventos e-Social para seus colaboradores.</p>
-              <span class="badge bg-secondary">Em breve</span>
             </div>
           </div>
         </div>
       </div>
     </div>
   </div>
-</div>
-
-<!-- Modal Criar OS -->
-<div class="modal fade" id="criarOsModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-xl">
-    <div class="modal-content">
-      <div class="modal-header" style="background:#213b7c; color:#fff; border-radius:24px 24px 0 0;">
-        <h5 class="modal-title" id="criarOsModalLabel" style="color:#fff;">
-          <i class="fas fa-file-invoice"></i> Criar Ordem de Serviço
-        </h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <form id="criarOsForm">
-          <input type="hidden" id="osFaturamentoId" />
-
-          <div class="row g-3">
-            <div class="col-md-6">
-              <label class="fw-semibold">Unidade</label>
-              <input type="text" id="osCliente" class="form-control" readonly />
-            </div>
-            <div class="col-md-3">
-              <label class="fw-semibold">CNPJ (Omie)</label>
-              <input type="text" id="osCnpj" class="form-control" readonly />
-            </div>
-            <div class="col-md-3">
-              <label class="fw-semibold">Valor Total</label>
-              <input type="text" id="osValorTotal" class="form-control" readonly />
-            </div>
-          </div>
-
-          <div class="mt-3">
-            <label class="fw-semibold">Descrição</label>
-            <textarea id="osDescricao" class="form-control" rows="8" readonly style="font-family: monospace;"></textarea>
-          </div>
-
-          <div class="mt-3">
-            <div class="form-check">
-              <input class="form-check-input" type="checkbox" id="osEnviarBoleto" checked disabled />
-              <label class="form-check-label" for="osEnviarBoleto">
-                <i class="fas fa-envelope"></i> Enviar Boleto de Cobrança (sempre ativo)
-              </label>
-            </div>
-            <div class="form-check">
-              <input class="form-check-input" type="checkbox" id="osEnviarNfse" checked disabled />
-              <label class="form-check-label" for="osEnviarNfse">
-                <i class="fas fa-file-pdf"></i> Enviar link da NFS-e (sempre ativo)
-              </label>
-            </div>
-          </div>
-
-          <div id="osStatusMessage" class="mt-3"></div>
-        </form>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-        <button type="button" class="btn btn-success" id="confirmarCriarOsBtn">
-          <i class="fas fa-save"></i> Criar e Emitir
-        </button>
-      </div>
-    </div>
-  </div>
-</div>
 
   <!-- ==================== DASHBOARD ==================== -->
   <div id="dashboardPage" class="hidden dashboard-wrapper">
@@ -640,12 +622,12 @@
           </div>
         </a>
         <div class="user-info">
-        <button class="btn btn-outline-light btn-sm me-2" id="btnVoltarMenu" title="Voltar ao menu principal">
-          <i class="fas fa-arrow-left"></i> Voltar
-        </button>
-        <span class="user-email" id="userEmail"></span>
-        <button class="btn btn-logout" id="logoutBtn"><i class="fas fa-sign-out-alt me-1"></i> Sair</button>
-      </div>
+          <button class="btn btn-outline-light btn-sm me-2" id="btnVoltarMenu" title="Voltar ao menu principal">
+            <i class="fas fa-arrow-left"></i> Voltar
+          </button>
+          <span class="user-email" id="userEmail"></span>
+          <button class="btn btn-logout" id="logoutBtn"><i class="fas fa-sign-out-alt me-1"></i> Sair</button>
+        </div>
       </div>
     </nav>
 
@@ -678,126 +660,160 @@
       </ul>
 
       <div class="tab-content">
-
         <!-- ====== ABA BOLETOS ====== -->
-<div class="tab-pane fade" id="boletos" role="tabpanel">
-  <!-- Filtros de Boletos -->
-  <div class="row g-3 align-items-end mb-4 mt-3">
-    <div class="col-md-3">
-      <label for="boletoFiltroStatus" class="form-label fw-semibold">Status do Boleto</label>
-      <select id="boletoFiltroStatus" class="form-select">
-        <option value="todos">Todos</option>
-        <option value="pago">Pagos</option>
-        <option value="vencido">Vencidos</option>
-        <option value="avencer">A Vencer</option>
-        <option value="naogerado">Não Gerado</option>
-      </select>
-    </div>
-    <div class="col-md-3">
-      <label for="boletoFiltroMes" class="form-label fw-semibold">Mês</label>
-      <select id="boletoFiltroMes" class="form-select">
-        <option value="0">Todos</option>
-        <option value="1">Janeiro</option><option value="2">Fevereiro</option>
-        <option value="3">Março</option><option value="4">Abril</option>
-        <option value="5">Maio</option><option value="6">Junho</option>
-        <option value="7">Julho</option><option value="8">Agosto</option>
-        <option value="9">Setembro</option><option value="10">Outubro</option>
-        <option value="11">Novembro</option><option value="12">Dezembro</option>
-      </select>
-    </div>
-    <div class="col-md-3">
-      <label for="boletoFiltroAno" class="form-label fw-semibold">Ano</label>
-      <select id="boletoFiltroAno" class="form-select"></select>
-    </div>
-    <div class="col-md-3">
-      <label for="boletoFiltroUnidade" class="form-label fw-semibold">Unidade</label>
-      <input type="text" id="boletoFiltroUnidade" class="form-control" placeholder="Filtrar unidade..." />
-    </div>
-  </div>
+        <div class="tab-pane fade" id="boletos" role="tabpanel">
+          <!-- Filtros de Boletos -->
+          <div class="row g-3 align-items-end mb-4 mt-3">
+            <div class="col-md-3">
+              <label for="boletoFiltroStatus" class="form-label fw-semibold">Status do Boleto</label>
+              <select id="boletoFiltroStatus" class="form-select">
+                <option value="todos">Todos</option>
+                <option value="pago">Pagos</option>
+                <option value="vencido">Vencidos</option>
+                <option value="avencer">A Vencer</option>
+                <option value="naogerado">Não Gerado</option>
+              </select>
+            </div>
+            <div class="col-md-3">
+              <label for="boletoFiltroMes" class="form-label fw-semibold">Mês</label>
+              <select id="boletoFiltroMes" class="form-select">
+                <option value="0">Todos</option>
+                <option value="1">Janeiro</option><option value="2">Fevereiro</option>
+                <option value="3">Março</option><option value="4">Abril</option>
+                <option value="5">Maio</option><option value="6">Junho</option>
+                <option value="7">Julho</option><option value="8">Agosto</option>
+                <option value="9">Setembro</option><option value="10">Outubro</option>
+                <option value="11">Novembro</option><option value="12">Dezembro</option>
+              </select>
+            </div>
+            <div class="col-md-3">
+              <label for="boletoFiltroAno" class="form-label fw-semibold">Ano</label>
+              <select id="boletoFiltroAno" class="form-select"></select>
+            </div>
+            <div class="col-md-3">
+              <label for="boletoFiltroUnidade" class="form-label fw-semibold">Unidade</label>
+              <input type="text" id="boletoFiltroUnidade" class="form-control" placeholder="Filtrar unidade..." />
+            </div>
+          </div>
 
-  <!-- Botões de ação -->
-  <div class="row mb-3">
-    <div class="col-md-12">
-      <button class="btn btn-primary-custom" id="btnAplicarFiltroBoletos">
-        <i class="fas fa-filter me-1"></i> Aplicar Filtros
-      </button>
-      <button class="btn btn-success" id="btnAtualizarStatusBoletos">
-        <i class="fas fa-sync me-1"></i> Atualizar Status dos Boletos
-      </button>
-      <button class="btn btn-warning" id="btnExportarBoletos">
-        <i class="fas fa-file-excel me-1"></i> Exportar Boletos
-      </button>
-    </div>
-  </div>
+          <!-- Botões de ação -->
+          <div class="row mb-3">
+            <div class="col-md-12">
+              <button class="btn btn-primary-custom" id="btnAplicarFiltroBoletos">
+                <i class="fas fa-filter me-1"></i> Aplicar Filtros
+              </button>
+              <button class="btn btn-success" id="btnAtualizarStatusBoletos">
+                <i class="fas fa-sync me-1"></i> Atualizar Status dos Boletos
+              </button>
+              <button class="btn btn-warning" id="btnExportarBoletos">
+                <i class="fas fa-file-excel me-1"></i> Exportar Boletos
+              </button>
+            </div>
+          </div>
 
-  <!-- Cards de resumo de boletos -->
-  <div class="row g-3 mb-4">
-    <div class="col-md-3">
-      <div class="card text-white bg-success h-100">
-        <div class="card-body">
-          <h6 class="card-title"><i class="fas fa-check-circle me-2"></i> Pagos</h6>
-          <h2 class="card-text" id="totalBoletosPagos">0</h2>
-        </div>
-      </div>
-    </div>
-    <div class="col-md-3">
-      <div class="card text-white bg-danger h-100">
-        <div class="card-body">
-          <h6 class="card-title"><i class="fas fa-exclamation-circle me-2"></i> Vencidos</h6>
-          <h2 class="card-text" id="totalBoletosVencidos">0</h2>
-        </div>
-      </div>
-    </div>
-    <div class="col-md-3">
-      <div class="card text-white bg-warning h-100">
-        <div class="card-body">
-          <h6 class="card-title"><i class="fas fa-clock me-2"></i> A Vencer</h6>
-          <h2 class="card-text" id="totalBoletosAVencer">0</h2>
-        </div>
-      </div>
-    </div>
-    <div class="col-md-3">
-      <div class="card text-white bg-secondary h-100">
-        <div class="card-body">
-          <h6 class="card-title"><i class="fas fa-file me-2"></i> Não Gerados</h6>
-          <h2 class="card-text" id="totalBoletosNaoGerados">0</h2>
-        </div>
-      </div>
-    </div>
-  </div>
+          <!-- Cards de resumo de boletos (contagem) -->
+          <div class="row g-3 mb-4">
+            <div class="col-md-3">
+              <div class="card text-white bg-success h-100">
+                <div class="card-body">
+                  <h6 class="card-title"><i class="fas fa-check-circle me-2"></i> Pagos</h6>
+                  <h2 class="card-text" id="totalBoletosPagos">0</h2>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="card text-white bg-danger h-100">
+                <div class="card-body">
+                  <h6 class="card-title"><i class="fas fa-exclamation-circle me-2"></i> Vencidos</h6>
+                  <h2 class="card-text" id="totalBoletosVencidos">0</h2>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="card text-white bg-warning h-100">
+                <div class="card-body">
+                  <h6 class="card-title"><i class="fas fa-clock me-2"></i> A Vencer</h6>
+                  <h2 class="card-text" id="totalBoletosAVencer">0</h2>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="card text-white bg-secondary h-100">
+                <div class="card-body">
+                  <h6 class="card-title"><i class="fas fa-file me-2"></i> Não Gerados</h6>
+                  <h2 class="card-text" id="totalBoletosNaoGerados">0</h2>
+                </div>
+              </div>
+            </div>
+          </div>
 
-  <!-- Tabela de boletos -->
-  <div class="card-modern card">
-    <div class="card-header d-flex justify-content-between align-items-center">
-      <span><i class="fas fa-barcode me-2 text-primary"></i> Boletos por Unidade</span>
-    </div>
-    <div class="card-body p-0">
-      <div class="table-responsive">
-        <table class="table table-modern" id="boletosTable">
-          <thead>
-            <tr>
-              <th>Unidade</th>
-              <th>Mês/Ano</th>
-              <th class="text-end">Valor (R$)</th>
-              <th class="text-center">Status Boleto</th>
-              <th class="text-center">Status Nota Fiscal</th>
-              <th class="text-center">Data Vencimento</th>
-              <th class="text-end">Ações</th>
-            </tr>
-          </thead>
-          <tbody id="boletosBody">
-            <tr><td colspan="7" class="text-center text-muted py-4">Carregando boletos...</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-</div>
-        <!-- ====== ABA RELATÓRIO ====== -->
+          <!-- Cards de valores financeiros -->
+          <div class="row g-3 mb-4">
+            <div class="col-md-4">
+              <div class="card h-100">
+                <div class="card-header" style="background:#213b7c; color:#fff;">
+                  <i class="fas fa-dollar-sign me-2"></i> Valor Total
+                </div>
+                <div class="card-body text-center">
+                  <h2 class="text-primary" id="boletosValorTotal">R$ 0,00</h2>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="card h-100">
+                <div class="card-header" style="background:#41bae8; color:#fff;">
+                  <i class="fas fa-check-circle me-2"></i> Valor Pago
+                </div>
+                <div class="card-body text-center">
+                  <h2 class="text-success" id="boletosValorPago">R$ 0,00</h2>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="card h-100">
+                <div class="card-header" style="background:#f59e0b; color:#fff;">
+                  <i class="fas fa-hourglass-half me-2"></i> Valor Pendente
+                </div>
+                <div class="card-body text-center">
+                  <h2 class="text-warning" id="boletosValorPendente">R$ 0,00</h2>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tabela de boletos -->
+          <div class="card-modern card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+              <span><i class="fas fa-barcode me-2 text-primary"></i> Boletos por Unidade</span>
+            </div>
+            <div class="card-body p-0">
+              <div class="table-responsive">
+                <table class="table table-modern" id="boletosTable">
+                  <thead>
+                    <tr>
+                      <th>Unidade / Cliente</th>
+                      <th>Data Vencimento</th>
+                      <th class="text-end">Valor (R$)</th>
+                      <th class="text-end">Saldo (R$)</th>
+                      <th class="text-center">Status Boleto</th>
+                      <th class="text-center">Status Pagamento</th>
+                      <th class="text-center">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody id="boletosBody">
+                    <tr><td colspan="7" class="text-center text-muted py-4">Carregando boletos...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ====== ABA RELATÓRIO / PROCESSAMENTO ====== -->
         <div class="tab-pane fade show active" id="relatorio" role="tabpanel">
           <!-- Filtros -->
           <div class="row g-3 align-items-end mb-4">
-            <div class="col-md-3">
+            <div class="col-md-2">
               <label for="filterMonth" class="form-label fw-semibold">Mês</label>
               <select id="filterMonth" class="form-select">
                 <option value="0">Todos</option>
@@ -809,34 +825,66 @@
                 <option value="11">Novembro</option><option value="12">Dezembro</option>
               </select>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
               <label for="filterYear" class="form-label fw-semibold">Ano</label>
               <select id="filterYear" class="form-select"></select>
             </div>
-            <div class="col-md-3">
-              <label for="filterUnit" class="form-label fw-semibold">Unidade</label>
-              <input type="text" id="filterUnit" class="form-control" placeholder="Filtrar unidade ou holding..." />
+            <div class="col-md-2">
+              <label for="filterHolding" class="form-label fw-semibold">Holding</label>
+              <input type="text" id="filterHolding" class="form-control" placeholder="Filtrar por holding..." list="holdingList" />
+              <datalist id="holdingList">
+                <!-- Será preenchido dinamicamente -->
+              </datalist>
             </div>
-            <div class="col-md-3">
-              <button class="btn btn-primary-custom w-100" id="applyFiltersBtn"><i class="fas fa-filter me-1"></i> Aplicar</button>
+            <div class="col-md-2">
+              <label for="filterGrupo" class="form-label fw-semibold">Grupo</label>
+              <input type="text" id="filterGrupo" class="form-control" placeholder="Filtrar por grupo..." list="grupoList" />
+              <datalist id="grupoList">
+                <!-- Será preenchido dinamicamente -->
+              </datalist>
+            </div>
+            <div class="col-md-2">
+              <label for="filterUnit" class="form-label fw-semibold">Unidade</label>
+              <input type="text" id="filterUnit" class="form-control" placeholder="Filtrar por unidade..." />
+            </div>
+            <div class="col-md-2">
+              <div class="d-flex gap-2">
+                <button class="btn btn-primary-custom w-100" id="applyFiltersBtn"><i class="fas fa-filter me-1"></i> Aplicar</button>
+                <button class="btn btn-outline-secondary" id="clearFiltersBtn" title="Limpar filtros">
+                  <i class="fas fa-times"></i>
+                </button>
+              </div>
             </div>
           </div>
 
-          <!-- Filtros de Status -->
-        <div class="row mb-4">
-          <div class="col-md-12">
-            <label class="fw-semibold me-3">Status:</label>
-            <div class="btn-group" role="group">
-              <button class="btn btn-outline-primary btn-sm active" data-status="todos">Todos</button>
-              <button class="btn btn-outline-warning btn-sm" data-status="pendentes">Pendentes</button>
-              <button class="btn btn-outline-info btn-sm" data-status="enviado">Enviado p/ Unidade</button>
-              <button class="btn btn-outline-success btn-sm" data-status="pago">Pago</button>
+          <!-- Botão Faturar em Lote -->
+          <div class="row mb-4">
+            <div class="col-md-12">
+              <button class="btn btn-warning" id="btnFaturarLote">
+                <i class="fas fa-file-invoice-dollar"></i> Faturar em Lote
+              </button>
+              <button class="btn btn-primary" id="btnCriarOSLote">
+        <i class="fas fa-layer-group"></i> Criar OS em Lote
+      </button>
+              <div id="faturarLoteStatus" class="mt-2"></div>
             </div>
-            <button class="btn btn-warning" id="btnFaturarLote">
-              <i class="fas fa-file-invoice-dollar"></i> Faturar em Lote
-            </button>
           </div>
-        </div>
+
+          <!-- ===== BOTÕES DE FILTRO POR STATUS ===== -->
+          <div class="row mb-3">
+            <div class="col-md-12">
+              <div class="btn-group" role="group" aria-label="Filtros de status">
+                <button type="button" class="btn btn-outline-secondary active" data-status="todos">Todos</button>
+                <button type="button" class="btn btn-outline-primary" data-status="pendentes">Pendentes</button>
+                <button type="button" class="btn btn-outline-primary" data-status="criado">OS Criada</button>
+                <button type="button" class="btn btn-outline-success" data-status="faturado">Faturado</button>
+                <button type="button" class="btn btn-outline-success" data-status="pago">Pago</button>
+              </div>
+              <button class="btn btn-info ms-2" id="btnAtualizarStatusNFSe">
+                <i class="fas fa-sync me-1"></i> Atualizar Status NFS-e
+              </button>
+            </div>
+          </div>
 
           <!-- Upload -->
           <div class="row g-3 mb-4">
@@ -852,22 +900,20 @@
                   <span id="uploadStatus" class="d-block mt-2 fw-semibold" style="font-size:0.9rem;"></span>
                   <div id="uploadFeedback" class="mt-2"></div>
                 </div>
-                
               </div>
-              
             </div>
-            
           </div>
 
-          
           <!-- Tabela de resultados -->
           <div class="card-modern card">
             <div class="card-header d-flex justify-content-between align-items-center">
               <span><i class="fas fa-chart-line me-2 text-primary"></i> Faturamento por Unidade</span>
-              <button class="btn btn-soft-primary" id="exportCsvBtn"><i class="fas fa-file-csv me-1"></i> CSV</button>
-              <button class="btn btn-outline-danger btn-sm" id="btnExcluirProcessamento">
-              <i class="fas fa-trash"></i> Excluir Processamento
-            </button>
+              <div>
+                <button class="btn btn-soft-primary me-2" id="exportCsvBtn"><i class="fas fa-file-csv me-1"></i> CSV</button>
+                <button class="btn btn-outline-danger btn-sm" id="btnExcluirProcessamento">
+                  <i class="fas fa-trash"></i> Excluir Processamento
+                </button>
+              </div>
             </div>
             <div class="card-body p-0">
               <div class="table-responsive">
@@ -875,15 +921,18 @@
                   <thead>
                     <tr>
                       <th>Unidade</th>
+                      <th>Holding</th>
+                      <th>Grupo</th>
                       <th>Mês/Ano</th>
                       <th class="text-end">Valor Total (R$)</th>
-                      <th class="text-center">Status</th>
+                      <th class="text-center">Status OS</th>
+                      <th class="text-center">Status Pagamento</th>
                       <th class="text-center">Vencimento</th>
-                      <th class="text-end">Ações</th>
+                      <th class="text-center">Ações</th>
                     </tr>
                   </thead>
                   <tbody id="resultsBody">
-                    <tr><td colspan="8" class="text-center text-muted py-4">Nenhum registro encontrado</td></tr>
+                    <tr><td colspan="9" class="text-center text-muted py-4">Nenhum registro encontrado</td></tr>
                   </tbody>
                 </table>
               </div>
@@ -891,279 +940,418 @@
           </div>
         </div>
 
-        <!-- ====== ABA DASHBOARD ====== -->
-<div class="tab-pane fade" id="dashboard" role="tabpanel">
-  <!-- Filtros específicos do Dashboard -->
-  <div class="row g-3 align-items-end mb-4 mt-3">
-    <div class="col-md-4">
-      <label for="dashboardMonth" class="form-label fw-semibold">Mês</label>
-      <select id="dashboardMonth" class="form-select">
-        <option value="0">Todos</option>
-        <option value="1">Janeiro</option><option value="2">Fevereiro</option>
-        <option value="3">Março</option><option value="4">Abril</option>
-        <option value="5">Maio</option><option value="6">Junho</option>
-        <option value="7">Julho</option><option value="8">Agosto</option>
-        <option value="9">Setembro</option><option value="10">Outubro</option>
-        <option value="11">Novembro</option><option value="12">Dezembro</option>
-      </select>
-    </div>
-    <div class="col-md-4">
-      <label for="dashboardYear" class="form-label fw-semibold">Ano</label>
-      <select id="dashboardYear" class="form-select"></select>
-    </div>
-    <div class="col-md-4">
-      <button class="btn btn-primary-custom w-100" id="applyDashboardFilters"><i class="fas fa-filter me-1"></i> Atualizar Dashboard</button>
-    </div>
-  </div>
-
-  <!-- Cards de resumo -->
-  <div class="row g-3 mb-4">
-    <div class="col-md-3">
-      <div class="card text-white bg-primary h-100">
-        <div class="card-body">
-          <h6 class="card-title"><i class="fas fa-stethoscope me-2"></i> Total de Exames</h6>
-          <h2 class="card-text" id="totalExames">0</h2>
+        <!-- ==================== MODAL CRIAR OS EM LOTE ==================== -->
+<div class="modal fade" id="criarOSLoteModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-fullscreen-lg-down">
+    <div class="modal-content" style="max-height: 90vh;">
+      <div class="modal-header" style="background:#213b7c; color:#fff; border-radius:16px 16px 0 0;">
+        <h5 class="modal-title" style="color:#fff;">
+          <i class="fas fa-layer-group me-2"></i> Criar OS em Lote
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" id="fecharModalLote"></button>
+      </div>
+      <div class="modal-body" style="overflow-y: auto; max-height: 70vh; padding: 20px;">
+        <!-- Barra de progresso -->
+        <div id="loteProgressBar" class="progress mb-3" style="height: 25px; display: none;">
+          <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%;">0%</div>
+        </div>
+        
+        <!-- Status geral -->
+        <div id="loteStatusGeral" class="alert alert-info">
+          <i class="fas fa-info-circle"></i> 
+          Aguardando verificação das unidades...
+        </div>
+        
+        <!-- Container das janelas -->
+        <div id="loteJanelasContainer" class="row g-2">
+          <!-- As janelas serão geradas dinamicamente -->
         </div>
       </div>
-    </div>
-    <div class="col-md-3">
-      <div class="card text-white bg-success h-100">
-        <div class="card-body">
-          <h6 class="card-title"><i class="fas fa-dollar-sign me-2"></i> Valor Total</h6>
-          <h2 class="card-text" id="valorTotal">R$ 0,00</h2>
-        </div>
-      </div>
-    </div>
-    <div class="col-md-3">
-      <div class="card text-white bg-warning h-100">
-        <div class="card-body">
-          <h6 class="card-title"><i class="fas fa-users me-2"></i> Vidas</h6>
-          <h2 class="card-text" id="totalVidas">0</h2>
-        </div>
-      </div>
-    </div>
-    <div class="col-md-3">
-      <div class="card text-white bg-info h-100">
-        <div class="card-body">
-          <h6 class="card-title"><i class="fas fa-file-invoice me-2"></i> Mensalidade</h6>
-          <h2 class="card-text" id="totalMensalidade">R$ 0,00</h2>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Exame Clínico vs Complementares -->
-  <div class="row g-3 mb-4">
-    <div class="col-md-6">
-      <div class="card h-100">
-        <div class="card-header" style="background:#213b7c; color:#fff;">
-          <i class="fas fa-user-md me-2"></i> Exame Clínico
-        </div>
-        <div class="card-body">
-          <p><strong>Quantidade:</strong> <span id="clinicoQtd">0</span></p>
-          <p><strong>Valor:</strong> <span id="clinicoValor">R$ 0,00</span></p>
-        </div>
-      </div>
-    </div>
-    <div class="col-md-6">
-      <div class="card h-100">
-        <div class="card-header" style="background:#41bae8; color:#fff;">
-          <i class="fas fa-flask me-2"></i> Exames Complementares
-        </div>
-        <div class="card-body">
-          <p><strong>Quantidade:</strong> <span id="complementarQtd">0</span></p>
-          <p><strong>Valor:</strong> <span id="complementarValor">R$ 0,00</span></p>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Gráficos -->
-<div class="row g-3 mb-4">
-  <div class="col-md-4">
-    <div class="card h-100">
-      <div class="card-header" style="background:#213b7c; color:#fff;">
-        <i class="fas fa-chart-bar me-2"></i> Valor Total por Mês
-      </div>
-      <div class="card-body">
-        <canvas id="chartTotal"></canvas>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-4">
-    <div class="card h-100">
-      <div class="card-header" style="background:#41bae8; color:#fff;">
-        <i class="fas fa-chart-bar me-2"></i> Exames por Mês
-      </div>
-      <div class="card-body">
-        <canvas id="chartExames"></canvas>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-4">
-    <div class="card h-100">
-      <div class="card-header" style="background:#f59e0b; color:#fff;">
-        <i class="fas fa-chart-bar me-2"></i> Mensalidade por Mês
-      </div>
-      <div class="card-body">
-        <canvas id="chartMensalidade"></canvas>
-      </div>
-    </div>
-  </div>
-</div>
-
-  <!-- Comparativo visual -->
-<div class="row mb-4">
-  <div class="col-md-12">
-    <div class="card">
-      <div class="card-header" style="background:#f59e0b; color:#fff;">
-        <i class="fas fa-chart-bar me-2"></i> Comparativo
-      </div>
-      <div class="card-body">
-        <div class="row">
-          <div class="col-md-3 text-center">
-            <h6>Valor Total</h6>
-            <h3 class="text-primary" id="comparativoTotal">R$ 0,00</h3>
-            <div class="progress" style="height: 10px;">
-              <div class="progress-bar bg-primary" id="barTotal" style="width: 100%;"></div>
-            </div>
-          </div>
-          <div class="col-md-3 text-center">
-            <h6>Mensalidade</h6>
-            <h3 class="text-info" id="comparativoMensalidade">R$ 0,00</h3>
-            <div class="progress" style="height: 10px;">
-              <div class="progress-bar bg-info" id="barMensalidade" style="width: 0%;"></div>
-            </div>
-          </div>
-          <div class="col-md-3 text-center">
-            <h6>Exames</h6>
-            <h3 class="text-success" id="comparativoExames">R$ 0,00</h3>
-            <div class="progress" style="height: 10px;">
-              <div class="progress-bar bg-success" id="barExames" style="width: 0%;"></div>
-            </div>
-          </div>
-          <div class="col-md-3 text-center">
-            <h6>Vidas</h6>
-            <h3 class="text-warning" id="comparativoVidas">R$ 0,00</h3>
-            <div class="progress" style="height: 10px;">
-              <div class="progress-bar bg-warning" id="barVidas" style="width: 0%;"></div>
-            </div>
-          </div>
-        </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-       <!-- ====== ABA CADASTRO DE PREÇOS ====== -->
-<div class="tab-pane fade" id="cadastro" role="tabpanel">
-  <!-- Cards de atualização de vidas -->
-  <div class="row mt-4">
-    <div class="col-md-6">
-      <div class="card h-100">
-        <div class="card-header" style="background:#41bae8; color:#fff;">
-          <i class="fas fa-upload me-2"></i> Atualizar Quantidade de Vidas
-        </div>
-        <div class="card-body">
-          <p class="text-muted">Envie uma planilha <strong>.xlsx</strong> com as colunas <strong>UNIDADE</strong> e <strong>Func.</strong> (quantidade de funcionários).</p>
-          <div class="input-group mb-2">
-            <input type="file" id="uploadVidasInput" class="form-control" accept=".xlsx" />
-            <button class="btn btn-primary-custom" id="processUploadVidasBtn">
-              <i class="fas fa-upload me-1"></i> Atualizar
-            </button>
-          </div>
-          <div id="uploadVidasStatus" class="fw-semibold small"></div>
-          <div id="uploadVidasFeedback"></div>
-        </div>
-      </div>
-    </div>
-    <div class="col-md-6">
-  <div class="card h-100">
-    <div class="card-header" style="background:#f59e0b; color:#fff;">
-      <i class="fas fa-edit me-2"></i> Atualizar Valor por Vida (Holding)
-    </div>
-    <div class="card-body">
-      <p class="text-muted">Selecione uma holding e defina o novo valor de <strong>Vidas (R$ por vida)</strong> para todas as unidades dessa holding.</p>
-      <div class="d-flex gap-2 mb-2">
-        <select id="holdingSelect" class="form-select flex-grow-1">
-          <option value="">Carregando holdings...</option>
-        </select>
-        <button class="btn btn-outline-primary btn-sm" id="btnRecarregarHoldings" title="Recarregar lista de holdings">
-          <i class="fas fa-sync"></i>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-success" id="btnCriarTodasOSLote" disabled>
+          <i class="fas fa-file-invoice"></i> Criar Todas OS
         </button>
       </div>
-      <div class="input-group">
-        <span class="input-group-text">R$</span>
-        <input type="number" step="0.01" id="novoValorVidas" class="form-control" placeholder="Novo valor por vida" />
-        <button class="btn btn-warning" id="atualizarVidasHoldingBtn">
-          <i class="fas fa-sync me-1"></i> Atualizar
-        </button>
-      </div>
-      <div id="holdingUpdateStatus" class="mt-2 fw-semibold small"></div>
-    </div>
-  </div>
-</div>
-  </div>
-
-  <!-- Título e botões de ação -->
-  <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4 mt-4">
-    <h5 class="fw-bold mb-0"><i class="fas fa-dollar-sign text-success me-2"></i> Preços por Unidade</h5>
-    <div class="d-flex flex-wrap gap-3 align-items-center">
-      <div class="search-box">
-        <i class="fas fa-search"></i>
-        <input type="text" id="searchPreco" class="form-control" placeholder="Buscar por grupo, holding ou unidade..." />
-      </div>
-      <button class="btn btn-soft-success" id="exportPrecosBtn" title="Exportar todos os preços para Excel">
-        <i class="fas fa-file-excel"></i> Exportar XLSX
-      </button>
-      <button class="btn btn-primary-custom" id="btnNovoPreco"><i class="fas fa-plus me-1"></i> Novo Preço</button>
-    </div>
-  </div>
-
-  <!-- Tabela de preços -->
-  <div class="card-modern card">
-    <div class="card-body p-0">
-      <div class="table-responsive">
-        <table class="table table-modern" id="precosTable">
-          <thead>
-            <tr>
-              <th>Grupo</th>
-              <th>Holding</th>
-              <th>Unidade</th>
-              <th>Razão Social</th>
-              <th class="text-end">Exame Clínico</th>
-              <th class="text-end">Mensalidade</th>
-              <th class="text-end">Vidas</th>
-              <th class="text-center">Ações</th>
-            </tr>
-          </thead>
-          <tbody id="precosBody">
-            <tr><td colspan="8" class="text-center text-muted py-4">Carregando...</td></tr>
-          </tbody>
-        </table>
-      </div>
     </div>
   </div>
 </div>
 
-<!-- Modal de Detalhes -->
-<div class="modal fade" id="detalhesModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-md">
+<!-- ==================== MODAL DE DESCRIÇÃO DA OS ==================== -->
+<div class="modal fade" id="descricaoModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
     <div class="modal-content">
       <div class="modal-header" style="background:#213b7c; color:#fff; border-radius:16px 16px 0 0;">
-        <h5 class="modal-title" id="detalhesModalLabel" style="color:#fff;">Detalhes</h5>
+        <h5 class="modal-title" id="descricaoModalTitle" style="color:#fff;">
+          <i class="fas fa-file-alt me-2"></i> Descrição da OS
+        </h5>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
-      <div class="modal-body" id="detalhesModalBody">
-        <!-- Conteúdo preenchido via JS -->
+      <div class="modal-body">
+        <div class="alert alert-info" id="descricaoModalValor">
+          Valor Total: R$ 0,00
+        </div>
+        <pre id="descricaoModalBody" style="
+          font-family: 'Courier New', monospace;
+          font-size: 0.85rem;
+          background: #f8f9fa;
+          padding: 16px;
+          border-radius: 8px;
+          max-height: 400px;
+          overflow-y: auto;
+          white-space: pre-wrap;
+          word-wrap: break-word;
+          margin: 0;
+        "></pre>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+        <button type="button" class="btn btn-primary" onclick="copiarDescricao()">
+          <i class="fas fa-copy me-1"></i> Copiar
+        </button>
       </div>
     </div>
   </div>
 </div>
+
+        <!-- ====== ABA DASHBOARD ====== -->
+        <div class="tab-pane fade" id="dashboard" role="tabpanel">
+          <!-- Filtros específicos do Dashboard -->
+          <div class="row g-3 align-items-end mb-4 mt-3">
+            <div class="col-md-4">
+              <label for="dashboardMonth" class="form-label fw-semibold">Mês</label>
+              <select id="dashboardMonth" class="form-select">
+                <option value="0">Todos</option>
+                <option value="1">Janeiro</option><option value="2">Fevereiro</option>
+                <option value="3">Março</option><option value="4">Abril</option>
+                <option value="5">Maio</option><option value="6">Junho</option>
+                <option value="7">Julho</option><option value="8">Agosto</option>
+                <option value="9">Setembro</option><option value="10">Outubro</option>
+                <option value="11">Novembro</option><option value="12">Dezembro</option>
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label for="dashboardYear" class="form-label fw-semibold">Ano</label>
+              <select id="dashboardYear" class="form-select"></select>
+            </div>
+            <div class="col-md-4">
+              <button class="btn btn-primary-custom w-100" id="applyDashboardFilters"><i class="fas fa-filter me-1"></i> Atualizar Dashboard</button>
+            </div>
+          </div>
+
+          <!-- Cards de resumo -->
+          <div class="row g-3 mb-4">
+            <div class="col-md-3">
+              <div class="card text-white bg-primary h-100">
+                <div class="card-body">
+                  <h6 class="card-title"><i class="fas fa-stethoscope me-2"></i> Total de Exames</h6>
+                  <h2 class="card-text" id="totalExames">0</h2>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="card text-white bg-success h-100">
+                <div class="card-body">
+                  <h6 class="card-title"><i class="fas fa-dollar-sign me-2"></i> Valor Total</h6>
+                  <h2 class="card-text" id="valorTotal">R$ 0,00</h2>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="card text-white bg-warning h-100">
+                <div class="card-body">
+                  <h6 class="card-title"><i class="fas fa-users me-2"></i> Vidas</h6>
+                  <h2 class="card-text" id="totalVidas">0</h2>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="card text-white bg-info h-100">
+                <div class="card-body">
+                  <h6 class="card-title"><i class="fas fa-file-invoice me-2"></i> Mensalidade</h6>
+                  <h2 class="card-text" id="totalMensalidade">R$ 0,00</h2>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Exame Clínico vs Complementares -->
+          <div class="row g-3 mb-4">
+            <div class="col-md-6">
+              <div class="card h-100">
+                <div class="card-header" style="background:#213b7c; color:#fff;">
+                  <i class="fas fa-user-md me-2"></i> Exame Clínico
+                </div>
+                <div class="card-body">
+                  <p><strong>Quantidade:</strong> <span id="clinicoQtd">0</span></p>
+                  <p><strong>Valor:</strong> <span id="clinicoValor">R$ 0,00</span></p>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="card h-100">
+                <div class="card-header" style="background:#41bae8; color:#fff;">
+                  <i class="fas fa-flask me-2"></i> Exames Complementares
+                </div>
+                <div class="card-body">
+                  <p><strong>Quantidade:</strong> <span id="complementarQtd">0</span></p>
+                  <p><strong>Valor:</strong> <span id="complementarValor">R$ 0,00</span></p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Gráficos -->
+          <div class="row g-3 mb-4">
+            <div class="col-md-4">
+              <div class="card h-100">
+                <div class="card-header" style="background:#213b7c; color:#fff;">
+                  <i class="fas fa-chart-bar me-2"></i> Valor Total por Mês
+                </div>
+                <div class="card-body">
+                  <canvas id="chartTotal"></canvas>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="card h-100">
+                <div class="card-header" style="background:#41bae8; color:#fff;">
+                  <i class="fas fa-chart-bar me-2"></i> Exames por Mês
+                </div>
+                <div class="card-body">
+                  <canvas id="chartExames"></canvas>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="card h-100">
+                <div class="card-header" style="background:#f59e0b; color:#fff;">
+                  <i class="fas fa-chart-bar me-2"></i> Mensalidade por Mês
+                </div>
+                <div class="card-body">
+                  <canvas id="chartMensalidade"></canvas>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Comparativo visual -->
+          <div class="row mb-4">
+            <div class="col-md-12">
+              <div class="card">
+                <div class="card-header" style="background:#f59e0b; color:#fff;">
+                  <i class="fas fa-chart-bar me-2"></i> Comparativo
+                </div>
+                <div class="card-body">
+                  <div class="row">
+                    <div class="col-md-3 text-center">
+                      <h6>Valor Total</h6>
+                      <h3 class="text-primary" id="comparativoTotal">R$ 0,00</h3>
+                      <div class="progress" style="height: 10px;">
+                        <div class="progress-bar bg-primary" id="barTotal" style="width: 100%;"></div>
+                      </div>
+                    </div>
+                    <div class="col-md-3 text-center">
+                      <h6>Mensalidade</h6>
+                      <h3 class="text-info" id="comparativoMensalidade">R$ 0,00</h3>
+                      <div class="progress" style="height: 10px;">
+                        <div class="progress-bar bg-info" id="barMensalidade" style="width: 0%;"></div>
+                      </div>
+                    </div>
+                    <div class="col-md-3 text-center">
+                      <h6>Exames</h6>
+                      <h3 class="text-success" id="comparativoExames">R$ 0,00</h3>
+                      <div class="progress" style="height: 10px;">
+                        <div class="progress-bar bg-success" id="barExames" style="width: 0%;"></div>
+                      </div>
+                    </div>
+                    <div class="col-md-3 text-center">
+                      <h6>Vidas</h6>
+                      <h3 class="text-warning" id="comparativoVidas">R$ 0,00</h3>
+                      <div class="progress" style="height: 10px;">
+                        <div class="progress-bar bg-warning" id="barVidas" style="width: 0%;"></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ====== ABA CADASTRO DE PREÇOS ====== -->
+        <div class="tab-pane fade" id="cadastro" role="tabpanel">
+          <!-- Cards de atualização de vidas -->
+          <div class="row mt-4">
+            <div class="col-md-6">
+              <div class="card h-100">
+                <div class="card-header" style="background:#41bae8; color:#fff;">
+                  <i class="fas fa-upload me-2"></i> Atualizar Quantidade de Vidas
+                </div>
+                <div class="card-body">
+                  <p class="text-muted">Envie uma planilha <strong>.xlsx</strong> com as colunas <strong>UNIDADE</strong> e <strong>Func.</strong> (quantidade de funcionários).</p>
+                  <div class="input-group mb-2">
+                    <input type="file" id="uploadVidasInput" class="form-control" accept=".xlsx" />
+                    <button class="btn btn-primary-custom" id="processUploadVidasBtn">
+                      <i class="fas fa-upload me-1"></i> Atualizar
+                    </button>
+                  </div>
+                  <div id="uploadVidasStatus" class="fw-semibold small"></div>
+                  <div id="uploadVidasFeedback"></div>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="card h-100">
+                <div class="card-header" style="background:#f59e0b; color:#fff;">
+                  <i class="fas fa-edit me-2"></i> Atualizar Valor por Vida (Holding)
+                </div>
+                <div class="card-body">
+                  <p class="text-muted">Selecione uma holding e defina o novo valor de <strong>Vidas (R$ por vida)</strong> para todas as unidades dessa holding.</p>
+                  <div class="d-flex gap-2 mb-2">
+                    <select id="holdingSelect" class="form-select flex-grow-1">
+                      <option value="">Carregando holdings...</option>
+                    </select>
+                    <button class="btn btn-outline-primary btn-sm" id="btnRecarregarHoldings" title="Recarregar lista de holdings">
+                      <i class="fas fa-sync"></i>
+                    </button>
+                  </div>
+                  <div class="input-group">
+                    <span class="input-group-text">R$</span>
+                    <input type="number" step="0.01" id="novoValorVidas" class="form-control" placeholder="Novo valor por vida" />
+                    <button class="btn btn-warning" id="atualizarVidasHoldingBtn">
+                      <i class="fas fa-sync me-1"></i> Atualizar
+                    </button>
+                  </div>
+                  <div id="holdingUpdateStatus" class="mt-2 fw-semibold small"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Título e botões de ação -->
+          <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4 mt-4">
+            <h5 class="fw-bold mb-0"><i class="fas fa-dollar-sign text-success me-2"></i> Preços por Unidade</h5>
+            <div class="d-flex flex-wrap gap-3 align-items-center">
+              <div class="search-box">
+                <i class="fas fa-search"></i>
+                <input type="text" id="searchPreco" class="form-control" placeholder="Buscar por grupo, holding ou unidade..." />
+              </div>
+              <button class="btn btn-soft-success" id="exportPrecosBtn" title="Exportar todos os preços para Excel">
+                <i class="fas fa-file-excel"></i> Exportar XLSX
+              </button>
+              <button class="btn btn-primary-custom" id="btnNovoPreco"><i class="fas fa-plus me-1"></i> Novo Preço</button>
+            </div>
+          </div>
+
+          <!-- Tabela de preços -->
+          <div class="card-modern card">
+            <div class="card-body p-0">
+              <div class="table-responsive">
+                <table class="table table-modern" id="precosTable">
+                  <thead>
+                    <tr>
+                      <th>Grupo</th>
+                      <th>Holding</th>
+                      <th>Unidade</th>
+                      <th>Razão Social</th>
+                      <th class="text-end">Exame Clínico</th>
+                      <th class="text-end">Mensalidade</th>
+                      <th class="text-end">Vidas</th>
+                      <th class="text-center">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody id="precosBody">
+                    <tr><td colspan="8" class="text-center text-muted py-4">Carregando...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL CRIAR OS ==================== -->
+  <div class="modal fade" id="criarOsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+      <div class="modal-content">
+        <div class="modal-header" style="background:#213b7c; color:#fff; border-radius:24px 24px 0 0;">
+          <h5 class="modal-title" id="criarOsModalLabel" style="color:#fff;">
+            <i class="fas fa-file-invoice"></i> Criar Ordem de Serviço
+          </h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <form id="criarOsForm">
+            <input type="hidden" id="osFaturamentoId" />
+
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="fw-semibold">Unidade</label>
+                <input type="text" id="osCliente" class="form-control" readonly />
+              </div>
+              <div class="col-md-3">
+                <label class="fw-semibold">CNPJ (Omie)</label>
+                <input type="text" id="osCnpj" class="form-control" readonly />
+              </div>
+              <div class="col-md-3">
+                <label class="fw-semibold">Valor Total</label>
+                <input type="text" id="osValorTotal" class="form-control" readonly />
+              </div>
+            </div>
+
+            <div class="mt-3">
+              <label class="fw-semibold">Descrição</label>
+              <textarea id="osDescricao" class="form-control" rows="8" readonly style="font-family: monospace;"></textarea>
+            </div>
+
+            <div class="mt-3">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="osEnviarBoleto" checked disabled />
+                <label class="form-check-label" for="osEnviarBoleto">
+                  <i class="fas fa-envelope"></i> Enviar Boleto de Cobrança (sempre ativo)
+                </label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="osEnviarNfse" checked disabled />
+                <label class="form-check-label" for="osEnviarNfse">
+                  <i class="fas fa-file-pdf"></i> Enviar link da NFS-e (sempre ativo)
+                </label>
+              </div>
+            </div>
+
+            <div id="osStatusMessage" class="mt-3"></div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="button" class="btn btn-success" id="confirmarCriarOsBtn">
+            <i class="fas fa-save"></i> Criar e Emitir
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL DE DETALHES ==================== -->
+  <div class="modal fade" id="detalhesModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-md">
+      <div class="modal-content">
+        <div class="modal-header" style="background:#213b7c; color:#fff; border-radius:16px 16px 0 0;">
+          <h5 class="modal-title" id="detalhesModalLabel" style="color:#fff;">Detalhes</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body" id="detalhesModalBody">
+          <!-- Conteúdo preenchido via JS -->
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- ==================== MODAL DE PREÇOS ==================== -->
   <div class="modal fade" id="precoModal" tabindex="-1" aria-hidden="true">
@@ -1205,16 +1393,20 @@
                 <label for="precoUnidade" class="form-label fw-semibold">Unidade (Empresa) *</label>
                 <input type="text" class="form-control" id="precoUnidade" placeholder="Nome da empresa" required />
               </div>
-             <div class="row">
-            <div class="col-md-4">
-              <label for="precoRazaoSocial" class="form-label fw-semibold">Razão Social</label>
-              <input type="text" class="form-control" id="precoRazaoSocial" placeholder="Razão social da empresa" />
             </div>
-
-            <div class="col-md-4">
-              <label for="precoCnpj" class="form-label fw-semibold">CNPJ</label>
-              <input type="text" class="form-control" id="precoCnpj" placeholder="00.000.000/0000-00" />
-            </div>
+            <div class="row g-3 mt-2">
+              <div class="col-md-4">
+                <label for="precoRazaoSocial" class="form-label fw-semibold">Razão Social</label>
+                <input type="text" class="form-control" id="precoRazaoSocial" placeholder="Razão social da empresa" />
+              </div>
+              <div class="col-md-4">
+                <label for="precoCnpj" class="form-label fw-semibold">CNPJ</label>
+                <input type="text" class="form-control" id="precoCnpj" placeholder="00.000.000/0000-00" />
+              </div>
+              <div class="col-md-4">
+                <label for="precoDiaVencimento" class="form-label fw-semibold">Dia Vencimento</label>
+                <input type="number" class="form-control" id="precoDiaVencimento" value="10" min="1" max="31" />
+              </div>
             </div>
             <hr class="my-3" />
             <div class="row g-3">
@@ -1234,12 +1426,12 @@
                 <label for="precoQtdVidas" class="form-label">Quant. Vidas (NR-1)</label>
                 <input type="number" class="form-control" id="precoQtdVidas" value="0" />
               </div>
+            </div>
+            <div class="row g-3 mt-2">
               <div class="col-md-3">
                 <label for="precoAudiometria" class="form-label">Audiometria Ocupacional</label>
                 <input type="number" step="0.01" class="form-control" id="precoAudiometria" />
               </div>
-            </div>
-            <div class="row g-3 mt-2">
               <div class="col-md-3">
                 <label for="precoAcuidade" class="form-label">Acuidade Visual</label>
                 <input type="number" step="0.01" class="form-control" id="precoAcuidade" />
@@ -1252,12 +1444,12 @@
                 <label for="precoEeg" class="form-label">Eletroencefalograma</label>
                 <input type="number" step="0.01" class="form-control" id="precoEeg" />
               </div>
+            </div>
+            <div class="row g-3 mt-2">
               <div class="col-md-3">
                 <label for="precoEspirometria" class="form-label">Espirometria</label>
                 <input type="number" step="0.01" class="form-control" id="precoEspirometria" />
               </div>
-            </div>
-            <div class="row g-3 mt-2">
               <div class="col-md-3">
                 <label for="precoRaioX" class="form-label">Raio X Tórax</label>
                 <input type="number" step="0.01" class="form-control" id="precoRaioX" />
@@ -1270,12 +1462,12 @@
                 <label for="precoAntiHbs" class="form-label">Anti Hbs</label>
                 <input type="number" step="0.01" class="form-control" id="precoAntiHbs" />
               </div>
+            </div>
+            <div class="row g-3 mt-2">
               <div class="col-md-3">
                 <label for="precoAntiHcv" class="form-label">Anti Hcv</label>
                 <input type="number" step="0.01" class="form-control" id="precoAntiHcv" />
               </div>
-            </div>
-            <div class="row g-3 mt-2">
               <div class="col-md-3">
                 <label for="precoAntiHbsAg" class="form-label">Anti Hbs AG</label>
                 <input type="number" step="0.01" class="form-control" id="precoAntiHbsAg" />
@@ -1288,12 +1480,12 @@
                 <label for="precoCoprocultura" class="form-label">Coprocultura</label>
                 <input type="number" step="0.01" class="form-control" id="precoCoprocultura" />
               </div>
+            </div>
+            <div class="row g-3 mt-2">
               <div class="col-md-3">
                 <label for="precoParasitologico" class="form-label">Parasitológico</label>
                 <input type="number" step="0.01" class="form-control" id="precoParasitologico" />
               </div>
-            </div>
-            <div class="row g-3 mt-2">
               <div class="col-md-3">
                 <label for="precoGamaGt" class="form-label">Gama GT</label>
                 <input type="number" step="0.01" class="form-control" id="precoGamaGt" />
@@ -1306,12 +1498,12 @@
                 <label for="precoPesquisaFungos" class="form-label">Pesquisa de Fungos</label>
                 <input type="number" step="0.01" class="form-control" id="precoPesquisaFungos" />
               </div>
+            </div>
+            <div class="row g-3 mt-2">
               <div class="col-md-3">
                 <label for="precoDinamometria" class="form-label">Dinamometria</label>
                 <input type="number" step="0.01" class="form-control" id="precoDinamometria" />
               </div>
-            </div>
-            <div class="row g-3 mt-2">
               <div class="col-md-3">
                 <label for="precoVisitaTec" class="form-label">Visita Técnica</label>
                 <input type="number" step="0.01" class="form-control" id="precoVisitaTec" />
@@ -1320,10 +1512,6 @@
                 <label for="precoTransporte" class="form-label">Transporte</label>
                 <input type="number" step="0.01" class="form-control" id="precoTransporte" />
               </div>
-              <div class="col-md-3">
-              <label for="precoDiaVencimento" class="form-label">Dia Vencimento</label>
-              <input type="number" class="form-control" id="precoDiaVencimento" value="10" min="1" max="31" />
-            </div>
             </div>
           </form>
         </div>
