@@ -304,10 +304,18 @@ async function criarOrdemServicoOmie(registro, codigoCliente) {
     nQtde: 1,
     nValUnit: registro.valor_total,
     cDadosAdicItem: descricaoCompleta,
-    cTribServ: "1",
+    cTribServ: "16",
     cRetemISS: "N",
     impostos: {
-      nAliqISS: 2.01
+      nAliqISS: 2.01,
+      cRetemPIS: "N",    // 👈 OBRIGATÓRIO: Adicione estas flags para validar o nó de impostos
+      cRetemCOFINS: "N", // 👈 OBRIGATÓRIO
+      cRetemCSLL: "N",   // 👈 OBRIGATÓRIO
+      cRetemIRRF: "N",   // 👈 OBRIGATÓRIO
+      nAliqPIS: 0,
+      nAliqCOFINS: 0,
+      nAliqCSLL: 0,
+      nAliqIRRF: 0
     }
   }];
 
