@@ -273,9 +273,9 @@ async function criarOrdemServicoOmie(registro, codigoCliente) {
   let dataVencimentoOriginal = '01/08/2026';
   if (registro.data_vencimento) {
     const partes = registro.data_vencimento.split('-');
-    const ano = parseInt(partes[2]);
+    const ano = parseInt(partes[0]);
     const mes = parseInt(partes[1]);
-    const dia = parseInt(partes[0]);
+    const dia = parseInt(partes[2]);
     
     let mesCorrigido = mes - 1;
     let anoCorrigido = ano;
@@ -371,6 +371,99 @@ async function criarOrdemServicoOmie(registro, codigoCliente) {
   return resultCriar;
 }
 
+// ========================= CANCELAR NFS-e =========================
+async function cancelarNFSe(codigoOS, codigoNF) {
+  console.log(`🗑️ Cancelando NFS-e da OS ${codigoOS}...`);
+  
+  try {
+    const payloadConsulta = {
+      endpoint: 'servicos/os',
+      call: 'ConsultarOS',
+      param: [{ nCodOS: parseInt(codigoOS) }]
+    };
+    
+    const responseConsulta = await fetchOmieProxy(payloadConsulta);
+    const osData = await responseConsulta.json();
+    
+    if (osData.fault) {
+      throw new Error(`Erro ao consultar OS: ${osData.fault.faultstring}`);
+    }
+    
+    const statusNFSe = osData.NotaFiscal?.cStatus || '';
+    const numeroNFSe = osData.NotaFiscal?.nNumeroNFSe || codigoNF || '';
+    
+    if (statusNFSe === 'C' || statusNFSe === '4') {
+      return { 
+        success: false, 
+        message: `NFS-e ${numeroNFSe} já está cancelada.`,
+        jaCancelada: true
+      };
+    }
+    
+    if (statusNFSe !== 'F' && statusNFSe !== 'A') {
+      return { 
+        success: false, 
+        message: `NFS-e não está faturada (Status: ${statusNFSe || 'N/A'}). Não é possível cancelar.`,
+        jaCancelada: false
+      };
+    }
+    
+    if (!confirm(`Deseja cancelar a NFS-e ${numeroNFSe} da OS ${codigoOS}?`)) {
+      return { success: false, message: 'Cancelamento abortado pelo usuário.', jaCancelada: false };
+    }
+    
+    const payloadCancelar = {
+      endpoint: 'servicos/os',
+      call: 'CancelarOS',
+      param: [{
+        nCodOS: parseInt(codigoOS)
+      }]
+    };
+    
+    console.log('📤 Cancelando OS na OMIE...');
+    const responseCancelar = await fetchOmieProxy(payloadCancelar);
+    const result = await responseCancelar.json();
+    
+    if (result.fault) {
+      throw new Error(`Erro ao cancelar OS: ${result.fault.faultstring}`);
+    }
+    
+    console.log(`✅ OS ${codigoOS} cancelada com sucesso!`);
+    
+    const { data: registro, error } = await supabaseClient
+      .from('faturamento')
+      .select('id')
+      .eq('omie_os_id', codigoOS)
+      .single();
+    
+    if (!error && registro) {
+      await supabaseClient
+        .from('faturamento')
+        .update({
+          omie_status: 'cancelado',
+          nota_status: 'cancelado',
+          nota_emitida: false,
+          boleto_enviado: false
+        })
+        .eq('id', registro.id);
+    }
+    
+    return { 
+      success: true, 
+      message: `NFS-e ${numeroNFSe} cancelada com sucesso!`,
+      jaCancelada: false
+    };
+    
+  } catch (err) {
+    console.error('❌ Erro ao cancelar:', err);
+    return { 
+      success: false, 
+      message: `Erro ao cancelar: ${err.message}`,
+      jaCancelada: false
+    };
+  }
+}
+
 // Listar OS prontas para faturar (Etapa 50)
 async function listarOSProntasParaFaturar() {
   console.log('🔍 Buscando OS prontas para faturar (Etapa 50)...');
@@ -402,7 +495,7 @@ async function listarOSProntasParaFaturar() {
   }
 }
 
-// ========================= FATURAR EM LOTE CORRIGIDO =========================
+// ========================= FATURAR EM LOTE =========================
 async function faturarLoteOSCorrigido(etapa = '50') {
   console.log(`💰 Faturando todas as OS com etapa: ${etapa} → Etapa 60`);
   
@@ -458,36 +551,7 @@ async function statusLoteOS(nIdLoteFat) {
   }
 }
 
-// Faturar OS individualmente
-async function faturarOSIndividual(codigoOS) {
-  console.log(`💰 Faturando OS ${codigoOS} individualmente...`);
-  
-  const payload = {
-    endpoint: 'servicos/os',
-    call: 'FaturarOS',
-    param: [{
-      nCodOS: parseInt(codigoOS)
-    }]
-  };
-  
-  try {
-    const response = await fetchOmieProxy(payload);
-    const data = await response.json();
-    console.log('📥 Resposta:', data);
-    
-    if (data.fault) {
-      throw new Error(`Erro OMIE: ${data.fault.faultstring}`);
-    }
-    
-    console.log(`✅ OS ${codigoOS} faturada com sucesso!`);
-    return data;
-  } catch (err) {
-    console.error(`❌ Erro ao faturar OS ${codigoOS}:`, err.message);
-    throw err;
-  }
-}
-
-// ========================= PROCESSAR UPLOAD =========================
+// ========================= PROCESSAR UPLOAD CORRIGIDO =========================
 async function processarUpload(file) {
   const data = await file.arrayBuffer();
   const workbook = XLSX.read(data, { type: 'array' });
@@ -663,7 +727,28 @@ async function processarUpload(file) {
     }
   }
 
-  const registros = [];
+  // Buscar registros existentes para preservar dados
+  const { data: registrosExistentes, error: buscaExistenteError } = await supabaseClient
+    .from('faturamento')
+    .select('*')
+    .eq('mes', mesFaturamento)
+    .eq('ano', anoFaturamento);
+
+  if (buscaExistenteError) {
+    console.warn('Erro ao buscar registros existentes:', buscaExistenteError);
+  }
+
+  const mapaExistentes = {};
+  if (registrosExistentes) {
+    registrosExistentes.forEach(r => {
+      mapaExistentes[r.unidade] = r;
+    });
+  }
+
+  const registrosParaInserir = [];
+  const registrosParaAtualizar = [];
+  const unidadesAtualizadas = [];
+  const unidadesNovas = [];
 
   for (let chavePlanilha in unidadesEncontradas) {
     const unidade = unidadesEncontradas[chavePlanilha];
@@ -722,64 +807,110 @@ async function processarUpload(file) {
     const dataVencimento = new Date(anoFaturamento, mesFaturamento - 1, diaFinal);
     const dataVencimentoStr = dataVencimento.toISOString().split('T')[0];
 
-    console.log(`📅 ${nomeUnidade}: vencimento em ${dataVencimentoStr}`);
-
-    registros.push({
-      unidade: nomeUnidade,
-      mes: mesFaturamento,
-      ano: anoFaturamento,
-      valor_total: total,
-      detalhes: detalhes,
-      data_vencimento: dataVencimentoStr,
-      nota_emitida: false,
-      boleto_enviado: false,
-      pago: false
-    });
+    let registroExistente = mapaExistentes[nomeUnidade];
+    
+    if (registroExistente) {
+      console.log(`🔄 Atualizando unidade existente: ${nomeUnidade}`);
+      
+      const dadosPreservados = {
+        omie_os_id: registroExistente.omie_os_id || null,
+        omie_status: registroExistente.omie_status || null,
+        nota_emitida: registroExistente.nota_emitida || false,
+        boleto_enviado: registroExistente.boleto_enviado || false,
+        pago: registroExistente.pago || false,
+        nota_numero: registroExistente.nota_numero || null,
+        nota_status: registroExistente.nota_status || null,
+        nota_data_emissao: registroExistente.nota_data_emissao || null,
+        nota_valor: registroExistente.nota_valor || null
+      };
+      
+      registrosParaAtualizar.push({
+        id: registroExistente.id,
+        unidade: nomeUnidade,
+        mes: mesFaturamento,
+        ano: anoFaturamento,
+        valor_total: total,
+        detalhes: detalhes,
+        data_vencimento: dataVencimentoStr,
+        ...dadosPreservados
+      });
+      
+      unidadesAtualizadas.push(nomeUnidade);
+      
+    } else {
+      console.log(`✅ Nova unidade: ${nomeUnidade}`);
+      registrosParaInserir.push({
+        unidade: nomeUnidade,
+        mes: mesFaturamento,
+        ano: anoFaturamento,
+        valor_total: total,
+        detalhes: detalhes,
+        data_vencimento: dataVencimentoStr,
+        nota_emitida: false,
+        boleto_enviado: false,
+        pago: false
+      });
+      unidadesNovas.push(nomeUnidade);
+    }
   }
 
-  if (registros.length === 0) throw new Error('Nenhuma unidade com itens para faturar.');
-
-  const { error: deleteError } = await supabaseClient
-    .from('faturamento')
-    .delete()
-    .eq('mes', mesFaturamento)
-    .eq('ano', anoFaturamento);
-
-  if (deleteError) {
-    console.warn('Erro ao deletar registros antigos:', deleteError);
+  if (registrosParaInserir.length === 0 && registrosParaAtualizar.length === 0) {
+    throw new Error('Nenhuma unidade com itens para faturar.');
   }
 
-  const { data: insertedData, error: insertError } = await supabaseClient
-    .from('faturamento')
-    .insert(registros)
-    .select();
+  // ===== INSERIR NOVOS REGISTROS =====
+  if (registrosParaInserir.length > 0) {
+    console.log(`📥 Inserindo ${registrosParaInserir.length} novos registros...`);
+    const { error: insertError } = await supabaseClient
+      .from('faturamento')
+      .insert(registrosParaInserir);
+    
+    if (insertError) throw insertError;
+  }
 
-  if (insertError) throw insertError;
+  // ===== ATUALIZAR REGISTROS EXISTENTES =====
+  if (registrosParaAtualizar.length > 0) {
+    console.log(`📤 Atualizando ${registrosParaAtualizar.length} registros existentes...`);
+    
+    for (const registro of registrosParaAtualizar) {
+      const { id, ...dados } = registro;
+      const { error: updateError } = await supabaseClient
+        .from('faturamento')
+        .update(dados)
+        .eq('id', id);
+      
+      if (updateError) throw updateError;
+    }
+  }
 
-  const totalGeral = registros.reduce((acc, r) => acc + r.valor_total, 0);
+  const totalGeral = [...registrosParaInserir, ...registrosParaAtualizar].reduce((acc, r) => acc + r.valor_total, 0);
 
   console.log('📊 RESUMO DO PROCESSAMENTO:');
   console.log(`   Mês de faturamento: ${mesFaturamento}/${anoFaturamento}`);
-  console.log(`   Total de registros: ${registros.length}`);
+  console.log(`   Total de registros: ${registrosParaInserir.length + registrosParaAtualizar.length}`);
+  console.log(`   Unidades atualizadas: ${registrosParaAtualizar.length}`);
+  console.log(`   Unidades novas: ${registrosParaInserir.length}`);
   console.log(`   Valor total: R$ ${totalGeral.toFixed(2)}`);
   console.log(`   Unidades na planilha: ${unidadesNaPlanilha.size}`);
-  console.log(`   Unidades com mensalidade/vidas: ${unidadesParaProcessar.size - unidadesNaPlanilha.size}`);
   console.log(`   Unidades não encontradas: ${unidadesNaoEncontradas.length}`);
 
   return {
-    totalRegistros: registros.length,
+    totalRegistros: registrosParaInserir.length + registrosParaAtualizar.length,
     totalGeral,
     unidadesNaoEncontradas,
     mesProcessado: mesFaturamento,
     anoProcessado: anoFaturamento,
+    unidadesAtualizadas: registrosParaAtualizar.length,
+    unidadesNovas: registrosParaInserir.length,
     unidadesEncontradas: Object.keys(unidadesEncontradas).length,
-    unidadesComMensalidadeVidas: unidadesParaProcessar.size - unidadesNaPlanilha.size
+    detalhesUnidades: {
+      atualizadas: unidadesAtualizadas,
+      novas: unidadesNovas
+    }
   };
 }
 
-// ========================= FUNÇÕES DE BUSCA DE CLIENTES =========================
-
-// ========================= BUSCAR CLIENTE POR CNPJ OTIMIZADO =========================
+// ========================= FUNÇÕES DE BUSCA DE CLIENTES OTIMIZADAS =========================
 async function buscarClientePorCnpjOmie(cnpj) {
   const cnpjLimpo = normalizarCnpj(cnpj);
   if (!cnpjLimpo || cnpjLimpo.length !== 14) {
@@ -789,321 +920,7 @@ async function buscarClientePorCnpjOmie(cnpj) {
   
   console.log(`🔍 Buscando cliente com CNPJ: ${cnpjLimpo}`);
   
-  // TENTATIVA 1: Usar a API de ConsultarCliente com CNPJ
-  try {
-    const payload = {
-      endpoint: 'geral/clientes',
-      call: 'ConsultarCliente',
-      param: [{
-        cnpj_cpf: cnpjLimpo
-      }]
-    };
-    
-    console.log('📤 Tentando consulta direta por CNPJ...');
-    const response = await fetchOmieProxy(payload);
-    const data = await response.json();
-    
-    if (data && !data.fault) {
-      const codigo = data.codigo_cliente_omie || data.codigo_cliente;
-      if (codigo) {
-        console.log(`✅ Cliente encontrado via consulta direta!`);
-        console.log(`   Nome: ${data.razao_social}`);
-        console.log(`   Código: ${codigo}`);
-        return {
-          ...data,
-          codigo_cliente: codigo
-        };
-      }
-    }
-  } catch (err) {
-    console.log('⚠️ Consulta direta falhou, tentando método alternativo...');
-  }
-  
-  // TENTATIVA 2: Usar ListarClientes com filtro por CNPJ (página 1 apenas)
-  try {
-    const payload = {
-      endpoint: 'geral/clientes',
-      call: 'ListarClientes',
-      param: [{
-        pagina: 1,
-        registros_por_pagina: 100,
-        filtrar_por_cnpj: cnpjLimpo
-      }]
-    };
-    
-    console.log('📤 Tentando listar com filtro por CNPJ...');
-    const response = await fetchOmieProxy(payload);
-    const data = await response.json();
-    
-    if (data && !data.fault) {
-      const clientes = data.clientes_cadastro || data.clientes || [];
-      
-      if (clientes.length > 0) {
-        for (const cliente of clientes) {
-          const cnpjCliente = normalizarCnpj(cliente.cnpj_cpf || cliente.cnpj || '');
-          if (cnpjCliente === cnpjLimpo) {
-            const codigo = cliente.codigo_cliente_omie || cliente.codigo_cliente;
-            console.log(`✅ Cliente encontrado via listagem com filtro!`);
-            console.log(`   Nome: ${cliente.razao_social}`);
-            console.log(`   Código: ${codigo}`);
-            return {
-              ...cliente,
-              codigo_cliente: codigo
-            };
-          }
-        }
-      }
-    }
-  } catch (err) {
-    console.log('⚠️ Listagem com filtro falhou, tentando método alternativo...');
-  }
-  
-  // TENTATIVA 3: Busca paginada com timeout e cache
-  try {
-    console.log('📤 Buscando em páginas com timeout...');
-    const cliente = await buscarClientePaginadoComTimeout(cnpjLimpo);
-    if (cliente) {
-      return cliente;
-    }
-  } catch (err) {
-    console.log('⚠️ Busca paginada com timeout falhou:', err.message);
-  }
-  
-  console.log(`❌ Cliente com CNPJ ${cnpj} não encontrado.`);
-  return null;
-}
-
-/**
- * Busca cliente paginado com timeout e cache
- */
-async function buscarClientePaginadoComTimeout(cnpjLimpo) {
-  // Verificar cache primeiro
-  const cacheKey = `cliente_${cnpjLimpo}`;
-  const cacheData = sessionStorage.getItem(cacheKey);
-  if (cacheData) {
-    try {
-      const parsed = JSON.parse(cacheData);
-      const tempoCache = Date.now() - parsed.timestamp;
-      // Cache válido por 30 minutos
-      if (tempoCache < 30 * 60 * 1000) {
-        console.log(`📦 Cliente encontrado no cache!`);
-        return parsed.data;
-      }
-    } catch (e) {
-      // Ignorar erro de parse
-    }
-  }
-  
-  let pagina = 1;
-  const MAX_PAGINAS = 50;
-  const TIMEOUT_PAGINA = 5000; // 5 segundos por página
-  
-  let inicioBusca = Date.now();
-  const TEMPO_MAXIMO_BUSCA = 30000; // 30 segundos no total
-  
-  while (pagina <= MAX_PAGINAS) {
-    // Verificar timeout total
-    if (Date.now() - inicioBusca > TEMPO_MAXIMO_BUSCA) {
-      console.log(`⏰ Tempo máximo de busca excedido (${TEMPO_MAXIMO_BUSCA/1000}s)`);
-      break;
-    }
-    
-    try {
-      console.log(`📄 Buscando página ${pagina}...`);
-      
-      const payload = {
-        endpoint: 'geral/clientes',
-        call: 'ListarClientes',
-        param: [{
-          pagina: pagina,
-          registros_por_pagina: 100
-        }]
-      };
-      
-      // Promise com timeout para cada página
-      const responsePromise = fetchOmieProxy(payload);
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Timeout na página')), TIMEOUT_PAGINA);
-      });
-      
-      const response = await Promise.race([responsePromise, timeoutPromise]);
-      
-      if (!response.ok) {
-        console.warn(`HTTP ${response.status} na página ${pagina}`);
-        pagina++;
-        continue;
-      }
-      
-      const data = await response.json();
-      
-      if (data.fault) {
-        if (data.faultstring && data.faultstring.includes('REDUNDANT')) {
-          const waitTime = parseInt(data.faultstring.match(/\d+/)?.[0] || 5);
-          console.log(`⏳ Aguardando ${waitTime} segundos...`);
-          await new Promise(resolve => setTimeout(resolve, (waitTime + 2) * 1000));
-          continue;
-        }
-        console.error('Erro OMIE:', data.faultstring);
-        pagina++;
-        continue;
-      }
-      
-      const clientes = data.clientes_cadastro || data.clientes || [];
-      
-      for (const cliente of clientes) {
-        const cnpjCliente = normalizarCnpj(cliente.cnpj_cpf || cliente.cnpj || '');
-        if (cnpjCliente === cnpjLimpo) {
-          const codigo = cliente.codigo_cliente_omie || cliente.codigo_cliente;
-          const resultado = {
-            ...cliente,
-            codigo_cliente: codigo
-          };
-          
-          // Salvar no cache
-          sessionStorage.setItem(cacheKey, JSON.stringify({
-            data: resultado,
-            timestamp: Date.now()
-          }));
-          
-          console.log(`✅ Cliente encontrado na página ${pagina}!`);
-          console.log(`   Nome: ${cliente.razao_social}`);
-          console.log(`   Código: ${codigo}`);
-          return resultado;
-        }
-      }
-      
-      // Verificar se chegamos ao fim
-      const totalPaginas = data.total_paginas || data.nTotPaginas || MAX_PAGINAS;
-      if (pagina >= totalPaginas) {
-        console.log(`📄 Última página ${pagina} atingida.`);
-        break;
-      }
-      
-      pagina++;
-      
-      // Pequeno delay entre páginas
-      await new Promise(resolve => setTimeout(resolve, 200));
-      
-    } catch (err) {
-      console.error(`Erro na página ${pagina}:`, err.message);
-      pagina++;
-      
-      // Se for erro de timeout, esperar um pouco antes de continuar
-      if (err.message === 'Timeout na página') {
-        await new Promise(resolve => setTimeout(resolve, 2000));
-      }
-    }
-  }
-  
-  return null;
-}
-
-// ========================= BUSCA OTIMIZADA DE CÓDIGO DO CLIENTE =========================
-async function buscarCodigoClienteParaOS(unidade) {
-  console.log(`🔍 Buscando código do cliente para: ${unidade}`);
-  
-  // ===== PASSO 1: Verificar cache em memória =====
-  const cacheKey = `cliente_unidade_${unidade}`;
-  const cacheData = sessionStorage.getItem(cacheKey);
-  if (cacheData) {
-    try {
-      const parsed = JSON.parse(cacheData);
-      const tempoCache = Date.now() - parsed.timestamp;
-      // Cache válido por 24 horas para códigos de cliente
-      if (tempoCache < 24 * 60 * 60 * 1000) {
-        console.log(`📦 Código encontrado no cache: ${parsed.codigo}`);
-        return parsed.codigo;
-      }
-    } catch (e) {
-      // Ignorar erro de parse
-    }
-  }
-  
-  // ===== PASSO 2: Buscar no banco de dados =====
-  const { data: unidadeData, error } = await supabaseClient
-    .from('precos')
-    .select('id, unidade, cnpj, codigo_cliente_omie')
-    .eq('unidade', unidade)
-    .single();
-  
-  if (error || !unidadeData) {
-    console.error('❌ Unidade não encontrada:', error);
-    return null;
-  }
-  
-  // Se já tem código salvo no banco, retornar e salvar no cache
-  if (unidadeData.codigo_cliente_omie) {
-    console.log(`✅ Código já existe no banco: ${unidadeData.codigo_cliente_omie}`);
-    sessionStorage.setItem(cacheKey, JSON.stringify({
-      codigo: unidadeData.codigo_cliente_omie,
-      timestamp: Date.now()
-    }));
-    return unidadeData.codigo_cliente_omie;
-  }
-  
-  if (!unidadeData.cnpj) {
-    console.error('❌ Unidade sem CNPJ cadastrado');
-    return null;
-  }
-  
-  console.log(`🔍 Buscando cliente na OMIE com CNPJ: ${unidadeData.cnpj}`);
-  
-  // ===== PASSO 3: Buscar na OMIE com 3 tentativas =====
-  const tentativas = [
-    { metodo: 'consulta_direta', label: 'Consulta direta' },
-    { metodo: 'listagem_filtrada', label: 'Listagem com filtro' },
-    { metodo: 'paginado', label: 'Busca paginada' }
-  ];
-  
-  for (let i = 0; i < tentativas.length; i++) {
-    const tentativa = tentativas[i];
-    console.log(`📤 Tentativa ${i + 1}/${tentativas.length}: ${tentativa.label}...`);
-    
-    try {
-      let cliente = null;
-      
-      if (tentativa.metodo === 'consulta_direta') {
-        cliente = await buscarClienteConsultaDireta(unidadeData.cnpj);
-      } else if (tentativa.metodo === 'listagem_filtrada') {
-        cliente = await buscarClienteListagemFiltrada(unidadeData.cnpj);
-      } else if (tentativa.metodo === 'paginado') {
-        cliente = await buscarClientePaginadoRapido(unidadeData.cnpj);
-      }
-      
-      if (cliente) {
-        const codigo = cliente.codigo_cliente_omie || cliente.codigo_cliente;
-        console.log(`✅ Cliente encontrado via ${tentativa.label}: ${cliente.razao_social} (código: ${codigo})`);
-        
-        // Salvar no banco
-        await supabaseClient
-          .from('precos')
-          .update({ codigo_cliente_omie: codigo })
-          .eq('id', unidadeData.id);
-        
-        // Salvar no cache
-        sessionStorage.setItem(cacheKey, JSON.stringify({
-          codigo: codigo,
-          timestamp: Date.now()
-        }));
-        
-        return codigo;
-      }
-    } catch (err) {
-      console.log(`⚠️ Tentativa ${tentativa.label} falhou:`, err.message);
-    }
-  }
-  
-  console.error(`❌ Cliente não encontrado na OMIE para CNPJ: ${unidadeData.cnpj}`);
-  return null;
-}
-
-/**
- * TENTATIVA 1: Consulta direta por CNPJ (mais rápida)
- */
-async function buscarClienteConsultaDireta(cnpj) {
-  const cnpjLimpo = normalizarCnpj(cnpj);
-  if (!cnpjLimpo || cnpjLimpo.length !== 14) return null;
-  
+  // TENTATIVA 1: Consulta direta
   try {
     const payload = {
       endpoint: 'geral/clientes',
@@ -1111,7 +928,7 @@ async function buscarClienteConsultaDireta(cnpj) {
       param: [{ cnpj_cpf: cnpjLimpo }]
     };
     
-    // Timeout de 5 segundos
+    console.log('📤 Tentando consulta direta por CNPJ...');
     const response = await Promise.race([
       fetchOmieProxy(payload),
       new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
@@ -1122,23 +939,15 @@ async function buscarClienteConsultaDireta(cnpj) {
     if (data && !data.fault) {
       const codigo = data.codigo_cliente_omie || data.codigo_cliente;
       if (codigo) {
-        return data;
+        console.log(`✅ Cliente encontrado via consulta direta!`);
+        return { ...data, codigo_cliente: codigo };
       }
     }
-    return null;
   } catch (err) {
-    console.log('Consulta direta falhou:', err.message);
-    return null;
+    console.log('⚠️ Consulta direta falhou:', err.message);
   }
-}
-
-/**
- * TENTATIVA 2: Listagem com filtro por CNPJ (página 1 apenas)
- */
-async function buscarClienteListagemFiltrada(cnpj) {
-  const cnpjLimpo = normalizarCnpj(cnpj);
-  if (!cnpjLimpo || cnpjLimpo.length !== 14) return null;
   
+  // TENTATIVA 2: Listagem com filtro
   try {
     const payload = {
       endpoint: 'geral/clientes',
@@ -1150,6 +959,7 @@ async function buscarClienteListagemFiltrada(cnpj) {
       }]
     };
     
+    console.log('📤 Tentando listagem com filtro...');
     const response = await Promise.race([
       fetchOmieProxy(payload),
       new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
@@ -1162,32 +972,36 @@ async function buscarClienteListagemFiltrada(cnpj) {
       for (const cliente of clientes) {
         const cnpjCliente = normalizarCnpj(cliente.cnpj_cpf || cliente.cnpj || '');
         if (cnpjCliente === cnpjLimpo) {
-          return cliente;
+          const codigo = cliente.codigo_cliente_omie || cliente.codigo_cliente;
+          console.log(`✅ Cliente encontrado via listagem com filtro!`);
+          return { ...cliente, codigo_cliente: codigo };
         }
       }
     }
-    return null;
   } catch (err) {
-    console.log('Listagem filtrada falhou:', err.message);
-    return null;
+    console.log('⚠️ Listagem com filtro falhou:', err.message);
   }
+  
+  // TENTATIVA 3: Busca paginada rápida
+  try {
+    console.log('📤 Buscando em páginas...');
+    const cliente = await buscarClientePaginadoRapido(cnpjLimpo);
+    if (cliente) return cliente;
+  } catch (err) {
+    console.log('⚠️ Busca paginada falhou:', err.message);
+  }
+  
+  console.log(`❌ Cliente com CNPJ ${cnpj} não encontrado.`);
+  return null;
 }
 
-/**
- * TENTATIVA 3: Busca paginada rápida (máximo 10 páginas)
- */
-async function buscarClientePaginadoRapido(cnpj) {
-  const cnpjLimpo = normalizarCnpj(cnpj);
-  if (!cnpjLimpo || cnpjLimpo.length !== 14) return null;
-  
-  // Verificar cache de busca paginada
+async function buscarClientePaginadoRapido(cnpjLimpo) {
   const cacheKey = `busca_paginada_${cnpjLimpo}`;
   const cacheData = sessionStorage.getItem(cacheKey);
   if (cacheData) {
     try {
       const parsed = JSON.parse(cacheData);
-      const tempoCache = Date.now() - parsed.timestamp;
-      if (tempoCache < 5 * 60 * 1000) { // 5 minutos
+      if (Date.now() - parsed.timestamp < 5 * 60 * 1000) {
         console.log('📦 Cliente encontrado no cache de busca paginada');
         return parsed.data;
       }
@@ -1195,7 +1009,7 @@ async function buscarClientePaginadoRapido(cnpj) {
   }
   
   let pagina = 1;
-  const MAX_PAGINAS = 10; // Máximo 10 páginas para não demorar muito
+  const MAX_PAGINAS = 10;
   
   for (let i = 0; i < MAX_PAGINAS; i++) {
     try {
@@ -1230,19 +1044,20 @@ async function buscarClientePaginadoRapido(cnpj) {
       for (const cliente of clientes) {
         const cnpjCliente = normalizarCnpj(cliente.cnpj_cpf || cliente.cnpj || '');
         if (cnpjCliente === cnpjLimpo) {
-          // Salvar no cache
+          const codigo = cliente.codigo_cliente_omie || cliente.codigo_cliente;
+          const resultado = { ...cliente, codigo_cliente: codigo };
+          
           sessionStorage.setItem(cacheKey, JSON.stringify({
-            data: cliente,
+            data: resultado,
             timestamp: Date.now()
           }));
-          return cliente;
+          
+          return resultado;
         }
       }
       
       const totalPaginas = data.total_paginas || data.nTotPaginas || MAX_PAGINAS;
-      if (pagina >= totalPaginas) {
-        break;
-      }
+      if (pagina >= totalPaginas) break;
       
       pagina++;
       await new Promise(resolve => setTimeout(resolve, 200));
@@ -1256,6 +1071,71 @@ async function buscarClientePaginadoRapido(cnpj) {
   return null;
 }
 
+async function buscarCodigoClienteParaOS(unidade) {
+  console.log(`🔍 Buscando código do cliente para: ${unidade}`);
+  
+  const cacheKey = `cliente_unidade_${unidade}`;
+  const cacheData = sessionStorage.getItem(cacheKey);
+  if (cacheData) {
+    try {
+      const parsed = JSON.parse(cacheData);
+      if (Date.now() - parsed.timestamp < 24 * 60 * 60 * 1000) {
+        console.log(`📦 Código encontrado no cache: ${parsed.codigo}`);
+        return parsed.codigo;
+      }
+    } catch (e) {}
+  }
+  
+  const { data: unidadeData, error } = await supabaseClient
+    .from('precos')
+    .select('id, unidade, cnpj, codigo_cliente_omie')
+    .eq('unidade', unidade)
+    .single();
+  
+  if (error || !unidadeData) {
+    console.error('❌ Unidade não encontrada:', error);
+    return null;
+  }
+  
+  if (unidadeData.codigo_cliente_omie) {
+    console.log(`✅ Código já existe no banco: ${unidadeData.codigo_cliente_omie}`);
+    sessionStorage.setItem(cacheKey, JSON.stringify({
+      codigo: unidadeData.codigo_cliente_omie,
+      timestamp: Date.now()
+    }));
+    return unidadeData.codigo_cliente_omie;
+  }
+  
+  if (!unidadeData.cnpj) {
+    console.error('❌ Unidade sem CNPJ cadastrado');
+    return null;
+  }
+  
+  console.log(`🔍 Buscando cliente na OMIE com CNPJ: ${unidadeData.cnpj}`);
+  
+  const cliente = await buscarClientePorCnpjOmie(unidadeData.cnpj);
+  
+  if (!cliente) {
+    console.error(`❌ Cliente não encontrado na OMIE para CNPJ: ${unidadeData.cnpj}`);
+    return null;
+  }
+  
+  const codigo = cliente.codigo_cliente_omie || cliente.codigo_cliente;
+  console.log(`✅ Cliente encontrado: ${cliente.razao_social} (código: ${codigo})`);
+  
+  await supabaseClient
+    .from('precos')
+    .update({ codigo_cliente_omie: codigo })
+    .eq('id', unidadeData.id);
+  
+  sessionStorage.setItem(cacheKey, JSON.stringify({
+    codigo: codigo,
+    timestamp: Date.now()
+  }));
+  
+  return codigo;
+}
+
 async function buscarDadosClienteOmie(unidade) {
   try {
     const { data: unidadeData, error } = await supabaseClient
@@ -1264,65 +1144,22 @@ async function buscarDadosClienteOmie(unidade) {
       .eq('unidade', unidade)
       .single();
     
-    if (error || !unidadeData) {
-      console.warn('Unidade não encontrada no cadastro:', unidade);
-      return null;
-    }
+    if (error || !unidadeData) return null;
+    if (!unidadeData.cnpj) return null;
     
-    if (!unidadeData.cnpj) {
-      console.warn('Unidade sem CNPJ:', unidade);
-      return null;
-    }
+    const cliente = await buscarClientePorCnpjOmie(unidadeData.cnpj);
+    if (!cliente) return null;
     
-    const cnpjLimpo = normalizarCnpj(unidadeData.cnpj);
-    const cliente = await buscarClientePorCnpjOmie(cnpjLimpo);
-    
-    if (cliente) {
-      const codigo = cliente.codigo_cliente_omie || cliente.codigo_cliente;
-      return {
-        cnpj: cliente.cnpj_cpf || cliente.cnpj || '',
-        codigo_cliente: codigo,
-        razao_social: cliente.razao_social
-      };
-    }
-    
-    return null;
+    const codigo = cliente.codigo_cliente_omie || cliente.codigo_cliente;
+    return {
+      cnpj: cliente.cnpj_cpf || cliente.cnpj || '',
+      codigo_cliente: codigo,
+      razao_social: cliente.razao_social
+    };
   } catch (err) {
     console.error('Erro ao buscar dados do cliente na OMIE:', err);
     return null;
   }
-}
-
-async function buscarCodigoClienteOmie(nomeUnidade) {
-  const { data: unidade, error } = await supabaseClient
-    .from('precos')
-    .select('id, unidade, cnpj, codigo_cliente_omie')
-    .eq('unidade', nomeUnidade)
-    .single();
-
-  if (error || !unidade) {
-    throw new Error(`Unidade não encontrada no cadastro: ${nomeUnidade}`);
-  }
-
-  if (unidade.codigo_cliente_omie) {
-    console.log(`✅ Código do cliente encontrado no Supabase: ${unidade.codigo_cliente_omie}`);
-    return unidade.codigo_cliente_omie;
-  }
-
-  if (unidade.cnpj) {
-    console.log(`🔍 Cliente sem código, tentando sincronizar pelo CNPJ: ${unidade.cnpj}`);
-    try {
-      const resultado = await buscarCodigoClienteParaOS(nomeUnidade);
-      if (resultado) {
-        console.log(`✅ Cliente sincronizado! Código: ${resultado}`);
-        return resultado;
-      }
-    } catch (err) {
-      console.error('❌ Erro ao sincronizar cliente:', err.message);
-    }
-  }
-
-  throw new Error(`Código OMIE não encontrado para: ${nomeUnidade}. Execute a sincronização de clientes.`);
 }
 
 // ========================= GRÁFICOS =========================
@@ -1470,208 +1307,11 @@ async function exportarPrecos() {
   }
 }
 
-// ========================= BOLETOS =========================
-let boletosCache = null;
-let ultimaBuscaBoletos = 0;
-const BOLETOS_CACHE_TTL = 60000;
-
-async function buscarBoletosOmie(filtros = {}) {
-    console.log('🔍 Buscando boletos a receber na OMIE...');
-    
-    const {
-        pagina = 1,
-        registros_por_pagina = 200,
-        status = 'todos',
-        dataInicio = null,
-        dataFim = null,
-        codigoCliente = null
-    } = filtros;
-    
-    try {
-        const params = {
-            pagina: pagina,
-            registros_por_pagina: registros_por_pagina
-        };
-        
-        if (codigoCliente) {
-            params.filtrar_por_codigo_cliente = parseInt(codigoCliente);
-        }
-        
-        if (dataInicio) {
-            params.data_vencimento_de = dataInicio;
-        }
-        
-        if (dataFim) {
-            params.data_vencimento_ate = dataFim;
-        }
-        
-        params.apenas_importado_api = 'N';
-        
-        const payload = {
-            endpoint: 'financas/contareceber',
-            call: 'ListarContasReceber',
-            param: [params]
-        };
-        
-        console.log('📤 Payload:', JSON.stringify(payload, null, 2));
-        
-        const response = await fetchOmieProxy(payload);
-        
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error('❌ Erro na resposta:', errorText);
-            throw new Error(`HTTP ${response.status}: ${errorText}`);
-        }
-        
-        const data = await response.json();
-        
-        if (data.fault) {
-            throw new Error(`Erro OMIE: ${data.fault.faultstring}`);
-        }
-        
-        const contas = data.contas_receber || [];
-        console.log(`📋 ${contas.length} contas a receber encontradas`);
-        
-        const boletos = await Promise.all(contas.map(async (conta) => {
-            const codigoLancamento = conta.codigo_lancamento_omie || conta.codigo_lancamento;
-            
-            const temBoleto = conta.titulo_gerado === 'S' || 
-                             (conta.boletos && conta.boletos.length > 0) ||
-                             (conta.codigo_boleto);
-            
-            let boletoInfo = null;
-            if (temBoleto && codigoLancamento) {
-                try {
-                    const boletoPayload = {
-                        endpoint: 'financas/contareceberboleto',
-                        call: 'ObterBoleto',
-                        param: [{
-                            nCodTitulo: parseInt(codigoLancamento)
-                        }]
-                    };
-                    
-                    const boletoResponse = await fetchOmieProxy(boletoPayload);
-                    const boletoData = await boletoResponse.json();
-                    
-                    if (!boletoData.fault) {
-                        boletoInfo = boletoData;
-                    }
-                } catch (err) {
-                    console.log(`⚠️ Não foi possível obter boleto para ${codigoLancamento}:`, err.message);
-                }
-            }
-            
-            const hoje = new Date();
-            hoje.setHours(0, 0, 0, 0);
-            
-            let dataVencimento = null;
-            if (conta.data_vencimento) {
-                const partes = conta.data_vencimento.split('/');
-                if (partes.length === 3) {
-                    dataVencimento = new Date(parseInt(partes[2]), parseInt(partes[1]) - 1, parseInt(partes[0]));
-                }
-            }
-            
-            const isPago = conta.status === 'Pago' || 
-                          (conta.saldo !== undefined && parseFloat(conta.saldo) === 0) ||
-                          (conta.valor_pago && parseFloat(conta.valor_pago) > 0);
-            
-            let statusBoleto = 'naogerado';
-            let statusLabel = 'Não Gerado';
-            let statusClass = 'secondary';
-            let statusIcon = 'fa-file';
-            
-            if (temBoleto && codigoLancamento) {
-                if (isPago) {
-                    statusBoleto = 'pago';
-                    statusLabel = 'Pago ✅';
-                    statusClass = 'success';
-                    statusIcon = 'fa-check-circle';
-                } else if (dataVencimento) {
-                    const diffDays = Math.ceil((dataVencimento - hoje) / (1000 * 60 * 60 * 24));
-                    if (diffDays < 0) {
-                        statusBoleto = 'vencido';
-                        statusLabel = 'Vencido ❌';
-                        statusClass = 'danger';
-                        statusIcon = 'fa-exclamation-circle';
-                    } else if (diffDays <= 3) {
-                        statusBoleto = 'avencer';
-                        statusLabel = 'Vence em breve ⚠️';
-                        statusClass = 'warning';
-                        statusIcon = 'fa-clock';
-                    } else {
-                        statusBoleto = 'avencer';
-                        statusLabel = 'A Vencer';
-                        statusClass = 'info';
-                        statusIcon = 'fa-hourglass-half';
-                    }
-                } else {
-                    statusBoleto = 'naogerado';
-                    statusLabel = 'Sem data';
-                    statusClass = 'secondary';
-                    statusIcon = 'fa-file';
-                }
-            }
-            
-            let nomeCliente = conta.razao_social || conta.nome_cliente || 'Cliente não identificado';
-            
-            return {
-                codigo_lancamento: codigoLancamento,
-                codigo_cliente: conta.codigo_cliente_fornecedor || conta.codigo_cliente,
-                nome_cliente: nomeCliente,
-                documento: conta.numero_documento || conta.numero_documento_fatura || '',
-                tem_boleto: temBoleto,
-                codigo_boleto: conta.codigo_boleto || null,
-                valor_documento: parseFloat(conta.valor_documento) || 0,
-                valor_pago: parseFloat(conta.valor_pago) || 0,
-                saldo: parseFloat(conta.saldo) || 0,
-                data_vencimento: dataVencimento,
-                data_vencimento_str: conta.data_vencimento || '',
-                data_emissao: conta.data_emissao || '',
-                data_pagamento: conta.data_pagamento || '',
-                status: conta.status || 'Aberto',
-                isPago: isPago,
-                status_boleto: statusBoleto,
-                status_label: statusLabel,
-                status_class: statusClass,
-                status_icon: statusIcon,
-                observacao: conta.observacao || '',
-                boleto_info: boletoInfo,
-                raw: conta
-            };
-        }));
-        
-        let boletosFiltrados = boletos;
-        if (status !== 'todos') {
-            boletosFiltrados = boletos.filter(b => b.status_boleto === status);
-        }
-        
-        const ordemStatus = { 'vencido': 0, 'avencer': 1, 'pago': 2, 'naogerado': 3 };
-        boletosFiltrados.sort((a, b) => {
-            return (ordemStatus[a.status_boleto] || 99) - (ordemStatus[b.status_boleto] || 99);
-        });
-        
-        console.log(`📊 ${boletosFiltrados.length} boletos após filtros`);
-        
-        boletosCache = boletosFiltrados;
-        ultimaBuscaBoletos = Date.now();
-        
-        return boletosFiltrados;
-        
-    } catch (err) {
-        console.error('❌ Erro ao buscar boletos:', err.message);
-        throw err;
-    }
-}
-
 // ========================= CRIAR OS EM LOTE =========================
 let loteRegistros = [];
 let loteStatus = {};
 let loteProgresso = 0;
 
-/**
- * Abre o modal de criar OS em lote
- */
 async function abrirModalCriarOSLote() {
   console.log('🚀 Abrindo modal de criar OS em lote...');
   
@@ -1737,9 +1377,6 @@ async function abrirModalCriarOSLote() {
   await renderizarJanelasLote();
 }
 
-/**
- * Renderiza as janelas de cada unidade no modal
- */
 async function renderizarJanelasLote() {
   const container = document.getElementById('loteJanelasContainer');
   const statusGeral = document.getElementById('loteStatusGeral');
@@ -1755,10 +1392,6 @@ async function renderizarJanelasLote() {
   btnCriar.disabled = true;
   btnCriar.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verificando...';
   
-  let html = '';
-  let totalVerificados = 0;
-  let totalEncontrados = 0;
-  
   for (let i = 0; i < loteRegistros.length; i++) {
     const registro = loteRegistros[i];
     const unidade = registro.unidade;
@@ -1769,7 +1402,6 @@ async function renderizarJanelasLote() {
         mensagem: 'OS já criada',
         codigoCliente: null
       };
-      totalVerificados++;
       continue;
     }
     
@@ -1782,7 +1414,6 @@ async function renderizarJanelasLote() {
           mensagem: 'Cliente encontrado',
           codigoCliente: codigoCliente
         };
-        totalEncontrados++;
       } else {
         loteStatus[unidade] = {
           status: 'nao_encontrado',
@@ -1798,9 +1429,7 @@ async function renderizarJanelasLote() {
       };
     }
     
-    totalVerificados++;
-    
-    const percentual = Math.round((totalVerificados / loteRegistros.length) * 100);
+    const percentual = Math.round(((i + 1) / loteRegistros.length) * 100);
     atualizarProgressoLote(percentual);
     
     let allHtml = '';
@@ -1836,10 +1465,7 @@ async function renderizarJanelasLote() {
     btnCriar.innerHTML = `<i class="fas fa-file-invoice"></i> Criar ${encontrados} OS`;
   } else {
     statusGeral.className = 'alert alert-danger';
-    statusGeral.innerHTML = `
-      <i class="fas fa-exclamation-triangle"></i> 
-      Nenhum cliente encontrado para criar OS.
-    `;
+    statusGeral.innerHTML = `Nenhum cliente encontrado para criar OS.`;
     btnCriar.disabled = true;
     btnCriar.innerHTML = '<i class="fas fa-times"></i> Sem clientes';
   }
@@ -1950,9 +1576,6 @@ function criarJanelaUnidade(registro, status) {
   `;
 }
 
-/**
- * Função para tentar buscar o cliente novamente
- */
 async function tentarNovamenteBuscarCliente(registroId) {
   console.log(`🔄 Tentando buscar cliente novamente para o registro ${registroId}`);
   
@@ -1964,14 +1587,12 @@ async function tentarNovamenteBuscarCliente(registroId) {
   
   const unidade = registro.unidade;
   
-  // Mostrar loading
   loteStatus[unidade] = {
     status: 'verificando',
     mensagem: '⏳ Buscando novamente...',
     codigoCliente: null
   };
   
-  // Atualizar a janela
   const container = document.getElementById('loteJanelasContainer');
   let allHtml = '';
   for (const reg of loteRegistros) {
@@ -1980,11 +1601,9 @@ async function tentarNovamenteBuscarCliente(registroId) {
   }
   container.innerHTML = allHtml;
   
-  // Forçar limpeza do cache para esta unidade
   const cacheKey = `cliente_unidade_${unidade}`;
   sessionStorage.removeItem(cacheKey);
   
-  // Tentar buscar novamente
   try {
     const codigoCliente = await buscarCodigoClienteParaOS(unidade);
     
@@ -2012,7 +1631,6 @@ async function tentarNovamenteBuscarCliente(registroId) {
     mostrarAlerta(`Erro ao buscar cliente: ${err.message}`, 'danger');
   }
   
-  // Re-renderizar todas as janelas
   let allHtmlFinal = '';
   for (const reg of loteRegistros) {
     const st = loteStatus[reg.unidade] || { status: 'verificando', mensagem: '⏳ Verificando...', codigoCliente: null };
@@ -2020,7 +1638,6 @@ async function tentarNovamenteBuscarCliente(registroId) {
   }
   container.innerHTML = allHtmlFinal;
   
-  // Atualizar status geral e botão
   const total = loteRegistros.length;
   const encontrados = Object.values(loteStatus).filter(s => s.status === 'encontrado').length;
   const naoEncontrados = Object.values(loteStatus).filter(s => s.status === 'nao_encontrado' || s.status === 'erro').length;
@@ -2041,18 +1658,12 @@ async function tentarNovamenteBuscarCliente(registroId) {
     btnCriar.innerHTML = `<i class="fas fa-file-invoice"></i> Criar ${encontrados} OS`;
   } else {
     statusGeral.className = 'alert alert-danger';
-    statusGeral.innerHTML = `
-      <i class="fas fa-exclamation-triangle"></i> 
-      Nenhum cliente encontrado para criar OS.
-    `;
+    statusGeral.innerHTML = `Nenhum cliente encontrado para criar OS.`;
     btnCriar.disabled = true;
     btnCriar.innerHTML = '<i class="fas fa-times"></i> Sem clientes';
   }
 }
 
-/**
- * Gera resumo dos itens para exibir na janela
- */
 function gerarResumoItens(detalhes) {
   if (!detalhes || Object.keys(detalhes).length === 0) {
     return '⚠️ Nenhum item';
@@ -2109,9 +1720,6 @@ function gerarResumoItens(detalhes) {
   return itens.length > 0 ? itens.join(' | ') : '⚠️ Nenhum item';
 }
 
-/**
- * Gera a descrição completa da OS
- */
 function gerarDescricaoOS(registro) {
   const detalhes = registro.detalhes || {};
   const mes = registro.mes;
@@ -2127,8 +1735,7 @@ function gerarDescricaoOS(registro) {
   if (detalhes.mensalidade) {
     const mens = detalhes.mensalidade;
     const valor = mens.precoUnitario || 0;
-    descricao += `📌 MENSALIDADE:\n`;
-    descricao += `   Valor: R$ ${valor.toFixed(2)}\n\n`;
+    descricao += `📌 MENSALIDADE:\n   Valor: R$ ${valor.toFixed(2)}\n\n`;
   }
   
   if (detalhes['vidas (NR-1)']) {
@@ -2136,10 +1743,7 @@ function gerarDescricaoOS(registro) {
     const qtd = vidas.quantidade || 0;
     const valor = vidas.precoUnitario || 0;
     const subtotal = qtd * valor;
-    descricao += `👥 VIDAS NR-1:\n`;
-    descricao += `   Quantidade: ${qtd}\n`;
-    descricao += `   Valor unitário: R$ ${valor.toFixed(2)}\n`;
-    descricao += `   Subtotal: R$ ${subtotal.toFixed(2)}\n\n`;
+    descricao += `👥 VIDAS NR-1:\n   Quantidade: ${qtd}\n   Valor unitário: R$ ${valor.toFixed(2)}\n   Subtotal: R$ ${subtotal.toFixed(2)}\n\n`;
   }
   
   const exames = ['exame_clinico', 'audiometria', 'acuidade_visual', 'eletrocardiograma', 
@@ -2182,10 +1786,7 @@ function gerarDescricaoOS(registro) {
       
       if (qtd > 0 || valor > 0) {
         temExames = true;
-        descricao += `🔬 ${nomesExames[exame] || exame}:\n`;
-        descricao += `   Quantidade: ${qtd}\n`;
-        descricao += `   Valor unitário: R$ ${valor.toFixed(2)}\n`;
-        descricao += `   Subtotal: R$ ${subtotal.toFixed(2)}\n`;
+        descricao += `🔬 ${nomesExames[exame] || exame}:\n   Quantidade: ${qtd}\n   Valor unitário: R$ ${valor.toFixed(2)}\n   Subtotal: R$ ${subtotal.toFixed(2)}\n`;
         
         if (funcionarios.length > 0) {
           descricao += `   Funcionários:\n`;
@@ -2202,15 +1803,11 @@ function gerarDescricaoOS(registro) {
     descricao += `⚠️ Nenhum item encontrado para faturamento.\n`;
   }
   
-  descricao += `━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-  descricao += `📅 Vencimento: ${registro.data_vencimento || 'N/A'}\n`;
+  descricao += `━━━━━━━━━━━━━━━━━━━━━━━━━━\n📅 Vencimento: ${registro.data_vencimento || 'N/A'}\n`;
   
   return descricao;
 }
 
-/**
- * Abre o modal com a descrição completa da OS
- */
 function abrirDescricaoOS(registroId) {
   const registro = loteRegistros.find(r => r.id === registroId);
   if (!registro) {
@@ -2230,9 +1827,6 @@ function abrirDescricaoOS(registroId) {
   modal.show();
 }
 
-/**
- * Copia a descrição para a área de transferência
- */
 function copiarDescricao() {
   const texto = document.getElementById('descricaoModalBody').textContent;
   navigator.clipboard.writeText(texto).then(() => {
@@ -2248,9 +1842,6 @@ function copiarDescricao() {
   });
 }
 
-/**
- * Atualiza a barra de progresso
- */
 function atualizarProgressoLote(percentual) {
   const progressBar = document.querySelector('#loteProgressBar .progress-bar');
   if (progressBar) {
@@ -2259,9 +1850,6 @@ function atualizarProgressoLote(percentual) {
   }
 }
 
-/**
- * Cria todas as OS em lote
- */
 async function criarTodasOSLote() {
   const btnCriar = document.getElementById('btnCriarTodasOSLote');
   const statusGeral = document.getElementById('loteStatusGeral');
@@ -2350,10 +1938,7 @@ async function criarTodasOSLote() {
   
   if (erros === 0) {
     statusGeral.className = 'alert alert-success';
-    statusGeral.innerHTML = `
-      <i class="fas fa-check-circle"></i> 
-      <strong>${criados} OS criadas com sucesso!</strong>
-    `;
+    statusGeral.innerHTML = `<i class="fas fa-check-circle"></i> <strong>${criados} OS criadas com sucesso!</strong>`;
     mostrarAlerta(`${criados} OS criadas com sucesso!`, 'success');
   } else {
     statusGeral.className = 'alert alert-warning';
@@ -2399,11 +1984,7 @@ async function carregarRelatorio(mes = 0, ano = 0, filtroUnidade = '', status = 
       queryPrecos = queryPrecos.ilike('unidade', `%${filtroUnidade}%`);
     }
     
-    const { data: unidadesFiltradas, error: filtroError } = await queryPrecos;
-    
-    if (filtroError) {
-      console.error('Erro ao buscar unidades por filtro:', filtroError);
-    }
+    const { data: unidadesFiltradas } = await queryPrecos;
     
     if (unidadesFiltradas && unidadesFiltradas.length > 0) {
       const listaUnidades = unidadesFiltradas.map(u => u.unidade);
@@ -2440,12 +2021,12 @@ async function carregarRelatorio(mes = 0, ano = 0, filtroUnidade = '', status = 
   let mapaUnidades = {};
   if (data && data.length > 0) {
     const unidades = [...new Set(data.map(item => item.unidade))];
-    const { data: precosData, error: precosError } = await supabaseClient
+    const { data: precosData } = await supabaseClient
       .from('precos')
       .select('unidade, holding, grupo')
       .in('unidade', unidades);
     
-    if (!precosError && precosData) {
+    if (precosData) {
       precosData.forEach(item => {
         mapaUnidades[item.unidade] = {
           holding: item.holding || 'N/A',
@@ -2475,10 +2056,10 @@ async function carregarRelatorio(mes = 0, ano = 0, filtroUnidade = '', status = 
     let statusOSClass = 'secondary';
     let statusOSText = 'Pendente';
     let statusOSIcon = 'fa-clock';
-    
+
     if (row.omie_status === 'criado') {
       statusOSClass = 'primary';
-      statusOSText = 'Criado OS';
+      statusOSText = 'OS Criada';
       statusOSIcon = 'fa-file-invoice';
     } else if (row.omie_status === 'faturado' || row.omie_status === 'aprovado') {
       statusOSClass = 'success';
@@ -2489,7 +2070,7 @@ async function carregarRelatorio(mes = 0, ano = 0, filtroUnidade = '', status = 
       statusOSText = 'Rejeitado ❌';
       statusOSIcon = 'fa-times-circle';
     } else if (row.omie_status === 'cancelado') {
-      statusOSClass = 'danger';
+      statusOSClass = 'secondary';
       statusOSText = 'Cancelado ⛔';
       statusOSIcon = 'fa-ban';
     } else if (row.omie_status === 'erro') {
@@ -2524,7 +2105,7 @@ async function carregarRelatorio(mes = 0, ano = 0, filtroUnidade = '', status = 
     
     const temOs = row.omie_os_id && row.omie_status === 'criado';
     const osFaturada = row.omie_status === 'faturado' || row.omie_status === 'aprovado';
-    const osErro = row.omie_status === 'erro' || row.omie_status === 'rejeitado';
+    const osErro = row.omie_status === 'erro' || row.omie_status === 'rejeitado' || row.omie_status === 'cancelado';
 
     const coresHolding = {
       'Métodos': 'primary',
@@ -2560,7 +2141,7 @@ async function carregarRelatorio(mes = 0, ano = 0, filtroUnidade = '', status = 
                 data-mes="${row.mes}"
                 data-ano="${row.ano}"
                 data-detalhes='${JSON.stringify(row.detalhes)}'
-                title="Ver detalhes">
+                title="Ver detalhes (ID: ${row.id})">
           <i class="fas fa-eye"></i>
         </button>
         ${!temOs && !osFaturada ? `
@@ -2584,6 +2165,14 @@ async function carregarRelatorio(mes = 0, ano = 0, filtroUnidade = '', status = 
             ${osFaturada ? 'Faturado' : 'OS OK'}
           </button>
         `}
+        ${(row.omie_status === 'faturado' || row.omie_status === 'aprovado') ? `
+          <button class="btn btn-sm btn-outline-danger btn-cancelar-nfse" 
+                  data-id="${row.id}" 
+                  data-os-id="${row.omie_os_id}"
+                  title="Cancelar NFS-e">
+            <i class="fas fa-ban"></i> Cancelar
+          </button>
+        ` : ''}
         <button class="btn btn-sm btn-outline-info btn-atualizar-status-individual" 
                 data-id="${row.id}" 
                 title="Atualizar status desta OS">
@@ -2596,11 +2185,12 @@ async function carregarRelatorio(mes = 0, ano = 0, filtroUnidade = '', status = 
 
   document.querySelectorAll('.btn-detalhes').forEach(btn => {
     btn.addEventListener('click', function() {
+      const id = parseInt(this.dataset.id);
       const unidade = this.dataset.unidade;
       const mes = parseInt(this.dataset.mes);
       const ano = parseInt(this.dataset.ano);
       const detalhes = JSON.parse(this.dataset.detalhes);
-      mostrarDetalhes(unidade, mes, ano, detalhes);
+      mostrarDetalhes(id, unidade, mes, ano, detalhes);
     });
   });
 
@@ -2648,57 +2238,89 @@ async function carregarRelatorio(mes = 0, ano = 0, filtroUnidade = '', status = 
       }
     });
   });
-}
 
-// ========================= CARREGAR GRUPOS PARA FILTRO =========================
-async function carregarGruposParaFiltro() {
-    try {
-        const { data, error } = await supabaseClient
-            .from('precos')
-            .select('grupo')
-            .order('grupo');
-
-        if (error) throw error;
-
-        const grupos = [...new Set(data.map(item => item.grupo).filter(Boolean))];
-        const datalist = document.getElementById('grupoList');
+  // Evento para cancelar NFS-e
+  document.querySelectorAll('.btn-cancelar-nfse').forEach(btn => {
+    btn.addEventListener('click', async function() {
+      const id = this.dataset.id;
+      const osId = this.dataset.osId;
+      
+      if (!id || !osId) {
+        mostrarAlerta('Dados insuficientes para cancelar.', 'danger');
+        return;
+      }
+      
+      try {
+        const result = await cancelarNFSe(osId, '');
         
-        if (datalist) {
-            datalist.innerHTML = grupos.map(g => `<option value="${g}">`).join('');
+        if (result.success) {
+          mostrarAlerta(result.message, 'success');
+        } else if (result.jaCancelada) {
+          mostrarAlerta(result.message, 'warning');
+        } else {
+          mostrarAlerta(result.message, 'danger');
         }
         
-        return grupos;
-    } catch (err) {
-        console.error('Erro ao carregar grupos:', err);
-        return [];
-    }
+        const mes = parseInt(document.getElementById('filterMonth').value);
+        const ano = parseInt(document.getElementById('filterYear').value);
+        const unidade = document.getElementById('filterUnit').value.trim();
+        await carregarRelatorio(mes, ano, unidade, statusFiltroAtual);
+        
+      } catch (err) {
+        mostrarAlerta('Erro ao cancelar: ' + err.message, 'danger');
+      }
+    });
+  });
 }
 
-// ========================= CARREGAR HOLDINGS PARA FILTRO =========================
+// ========================= CARREGAR HOLDINGS E GRUPOS PARA FILTRO =========================
 async function carregarHoldingsParaFiltro() {
-    try {
-        const { data, error } = await supabaseClient
-            .from('precos')
-            .select('holding')
-            .order('holding');
+  try {
+    const { data, error } = await supabaseClient
+      .from('precos')
+      .select('holding')
+      .order('holding');
 
-        if (error) throw error;
+    if (error) throw error;
 
-        const holdings = [...new Set(data.map(item => item.holding).filter(Boolean))];
-        const datalist = document.getElementById('holdingList');
-        
-        if (datalist) {
-            datalist.innerHTML = holdings.map(h => `<option value="${h}">`).join('');
-        }
-        
-        return holdings;
-    } catch (err) {
-        console.error('Erro ao carregar holdings:', err);
-        return [];
+    const holdings = [...new Set(data.map(item => item.holding).filter(Boolean))];
+    const datalist = document.getElementById('holdingList');
+    
+    if (datalist) {
+      datalist.innerHTML = holdings.map(h => `<option value="${h}">`).join('');
     }
+    
+    return holdings;
+  } catch (err) {
+    console.error('Erro ao carregar holdings:', err);
+    return [];
+  }
 }
 
-function mostrarDetalhes(unidade, mes, ano, detalhes) {
+async function carregarGruposParaFiltro() {
+  try {
+    const { data, error } = await supabaseClient
+      .from('precos')
+      .select('grupo')
+      .order('grupo');
+
+    if (error) throw error;
+
+    const grupos = [...new Set(data.map(item => item.grupo).filter(Boolean))];
+    const datalist = document.getElementById('grupoList');
+    
+    if (datalist) {
+      datalist.innerHTML = grupos.map(g => `<option value="${g}">`).join('');
+    }
+    
+    return grupos;
+  } catch (err) {
+    console.error('Erro ao carregar grupos:', err);
+    return [];
+  }
+}
+
+function mostrarDetalhes(id, unidade, mes, ano, detalhes) {
   const meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
     'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
   const mesNome = meses[mes - 1];
@@ -2709,7 +2331,14 @@ function mostrarDetalhes(unidade, mes, ano, detalhes) {
   if (!detalhes || Object.keys(detalhes).length === 0) {
     body.innerHTML = '<p class="text-muted">Nenhum detalhe disponível.</p>';
   } else {
-    let listHtml = '<ul class="list-group">';
+    let listHtml = `
+      <div class="alert alert-info">
+        <strong>ID:</strong> ${id}
+        <span class="ms-3"><strong>Unidade:</strong> ${unidade}</span>
+        <span class="ms-3"><strong>Mês/Ano:</strong> ${mesNome}/${ano}</span>
+      </div>
+      <ul class="list-group">
+    `;
     let totalGeral = 0;
     for (let [exame, info] of Object.entries(detalhes)) {
       let qtd, preco, funcionarios;
@@ -2732,10 +2361,35 @@ function mostrarDetalhes(unidade, mes, ano, detalhes) {
           '</ul>';
       }
 
+      const nomeExame = {
+        'mensalidade': '📌 Mensalidade',
+        'vidas (NR-1)': '👥 Vidas (NR-1)',
+        'exame_clinico': '🔬 Exame Clínico',
+        'audiometria': '🔬 Audiometria Ocupacional',
+        'acuidade_visual': '🔬 Acuidade Visual',
+        'eletrocardiograma': '🔬 Eletrocardiograma',
+        'eletroencefalograma': '🔬 Eletroencefalograma',
+        'espirometria': '🔬 Espirometria',
+        'raio_x_torax': '🔬 Raio X Tórax',
+        'hemograma': '🔬 Hemograma Completo',
+        'anti_hbs': '🔬 Anti Hbs',
+        'anti_hcv': '🔬 Anti Hcv',
+        'anti_hbs_ag': '🔬 Anti Hbs AG',
+        'vdrl': '🔬 VDRL',
+        'coprocultura': '🔬 Coprocultura',
+        'parasitologico': '🔬 Parasitológico',
+        'gama_gt': '🔬 Gama GT',
+        'glicose': '🔬 Glicose',
+        'pesquisa_fungos': '🔬 Pesquisa de Fungos',
+        'dinamometria': '🔬 Dinamometria',
+        'visita_tec': '🔬 Visita Técnica',
+        'transporte': '🔬 Transporte'
+      }[exame] || `🔬 ${exame}`;
+
       listHtml += `<li class="list-group-item">
         <div class="d-flex justify-content-between align-items-start">
           <div>
-            <strong>${exame}</strong>
+            <strong>${nomeExame}</strong>
             <span class="text-muted ms-2">(${qtd} unid. x R$ ${preco.toFixed(2)})</span>
             ${funcionariosHtml}
           </div>
@@ -2744,7 +2398,7 @@ function mostrarDetalhes(unidade, mes, ano, detalhes) {
       </li>`;
     }
     if (totalGeral > 0) {
-      listHtml += `<li class="list-group-item d-flex justify-content-between align-items-center fw-bold">
+      listHtml += `<li class="list-group-item d-flex justify-content-between align-items-center fw-bold" style="background: #f8f9fa;">
         Total
         <span>R$ ${totalGeral.toFixed(2)}</span>
       </li>`;
@@ -3117,6 +2771,348 @@ async function editarPreco(id) {
   modal.show();
 }
 
+// ========================= FUNÇÕES AUXILIARES DE STATUS =========================
+async function verificarStatusOS(idFaturamento) {
+  const { data, error } = await supabaseClient
+    .from('faturamento')
+    .select('omie_os_id, omie_status')
+    .eq('id', idFaturamento)
+    .single();
+  
+  if (error) return null;
+  return data;
+}
+
+async function atualizarStatusOSFaturadas() {
+  try {
+    const { data, error } = await supabaseClient
+      .from('faturamento')
+      .select('*')
+      .eq('omie_status', 'criado');
+    
+    if (error) throw error;
+    
+    let atualizados = 0;
+    
+    for (const row of data) {
+      if (!row.omie_os_id) continue;
+      
+      try {
+        const payload = {
+          endpoint: 'servicos/os',
+          call: 'ConsultarOS',
+          param: [{ nCodOS: parseInt(row.omie_os_id) }]
+        };
+        
+        const response = await fetchOmieProxy(payload);
+        const osData = await response.json();
+        
+        if (osData.fault) continue;
+        
+        const etapa = osData.Cabecalho?.cEtapa || osData.cabecalho?.cEtapa || '';
+        const isFaturada = etapa === '60' || osData.Cabecalho?.cFaturada === 'S';
+        
+        if (isFaturada) {
+          await supabaseClient
+            .from('faturamento')
+            .update({ 
+              omie_status: 'faturado',
+              nota_emitida: true,
+              boleto_enviado: true
+            })
+            .eq('id', row.id);
+          atualizados++;
+        }
+      } catch (err) {
+        console.error(`Erro ao verificar OS ${row.omie_os_id}:`, err.message);
+      }
+    }
+    
+    console.log(`✅ ${atualizados} OS atualizadas para status "faturado"`);
+    return atualizados;
+    
+  } catch (err) {
+    console.error('❌ Erro:', err);
+    return 0;
+  }
+}
+
+async function consultarStatusFaturamentoOS() {
+  console.log('🔍 Consultando status de faturamento das OS criadas pelo sistema...');
+  
+  try {
+    const { data: registros, error } = await supabaseClient
+      .from('faturamento')
+      .select('*')
+      .eq('omie_status', 'criado')
+      .not('omie_os_id', 'is', null);
+    
+    if (error) throw error;
+    
+    if (registros.length === 0) {
+      console.log('📋 Nenhuma OS aguardando faturamento.');
+      mostrarAlerta('Nenhuma OS criada aguardando faturamento.', 'info');
+      return { atualizados: 0, erros: 0 };
+    }
+    
+    console.log(`📋 ${registros.length} OS para verificar status`);
+    
+    const payload = {
+      endpoint: 'produtos/etapafat',
+      call: 'ListarEtapasFaturamento',
+      param: [{
+        pagina: 1,
+        registros_por_pagina: 100
+      }]
+    };
+    
+    console.log('📤 Buscando NFS-e na OMIE...');
+    const response = await fetchOmieProxy(payload);
+    const data = await response.json();
+    
+    if (data.fault) {
+      throw new Error(`Erro ao consultar NFS-e: ${data.fault.faultstring}`);
+    }
+    
+    const nfses = data.nfseEncontradas || [];
+    console.log(`📋 ${nfses.length} NFS-e encontradas na OMIE`);
+    
+    let atualizados = 0;
+    let erros = 0;
+    let detalhesAtualizacao = [];
+    
+    for (const registro of registros) {
+      try {
+        const osId = registro.omie_os_id;
+        console.log(`🔍 Verificando OS ${osId} - ${registro.unidade}`);
+        
+        const nfseVinculada = nfses.find(n => {
+          const nCodOS = n.OrdemServico?.nCodigoOS || n.OrdemServico?.nCodOS;
+          return nCodOS && parseInt(nCodOS) === parseInt(osId);
+        });
+        
+        if (nfseVinculada) {
+          const statusNFSe = nfseVinculada.Cabecalho?.cStatusNFSe || '';
+          const numeroNFSe = nfseVinculada.Cabecalho?.nNumeroNFSe || '';
+          const valorNFSe = nfseVinculada.Cabecalho?.nValorNFSe || 0;
+          
+          let statusMap = {
+            'F': 'faturado',
+            'A': 'aprovado',
+            'R': 'rejeitado',
+            'C': 'cancelado'
+          };
+          
+          const novoStatus = statusMap[statusNFSe] || statusNFSe;
+          
+          await supabaseClient
+            .from('faturamento')
+            .update({
+              omie_status: novoStatus,
+              nota_emitida: true,
+              boleto_enviado: true,
+              nota_numero: numeroNFSe,
+              nota_valor: valorNFSe,
+              nota_status: novoStatus,
+              nota_data_emissao: nfseVinculada.Emissao?.cDataEmissao || null
+            })
+            .eq('id', registro.id);
+          
+          console.log(`✅ OS ${osId} - NFS-e ${numeroNFSe} - Status: ${novoStatus}`);
+          detalhesAtualizacao.push(`${registro.unidade}: NFS-e ${numeroNFSe} - ${novoStatus}`);
+          atualizados++;
+          
+        } else {
+          console.log(`⏳ OS ${osId} sem NFS-e encontrada, verificando etapa...`);
+          
+          const payloadOS = {
+            endpoint: 'servicos/os',
+            call: 'ConsultarOS',
+            param: [{ nCodOS: parseInt(osId) }]
+          };
+          
+          const responseOS = await fetchOmieProxy(payloadOS);
+          const osData = await responseOS.json();
+          
+          if (osData.fault) {
+            console.error(`❌ Erro ao consultar OS ${osId}:`, osData.fault.faultstring);
+            erros++;
+            continue;
+          }
+          
+          const etapa = osData.Cabecalho?.cEtapa || osData.cabecalho?.cEtapa || '';
+          const isFaturada = etapa === '60' || etapa === '70' || etapa === '80';
+          
+          if (isFaturada) {
+            await supabaseClient
+              .from('faturamento')
+              .update({
+                omie_status: 'faturado',
+                nota_emitida: true,
+                boleto_enviado: true
+              })
+              .eq('id', registro.id);
+            
+            console.log(`✅ OS ${osId} - Faturada (Etapa ${etapa})`);
+            detalhesAtualizacao.push(`${registro.unidade}: Faturada (Etapa ${etapa})`);
+            atualizados++;
+          } else {
+            console.log(`⏳ OS ${osId} - Etapa ${etapa} (aguardando faturamento)`);
+          }
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+      } catch (err) {
+        console.error(`❌ Erro ao processar OS ${registro.omie_os_id}:`, err.message);
+        erros++;
+      }
+    }
+    
+    let mensagem = `${atualizados} OS atualizadas!`;
+    if (detalhesAtualizacao.length > 0) {
+      mensagem += '\n\n' + detalhesAtualizacao.join('\n');
+    }
+    if (erros > 0) {
+      mensagem += `\n\n${erros} erros encontrados.`;
+    }
+    
+    mostrarAlerta(mensagem, atualizados > 0 ? 'success' : 'info');
+    console.log(`📊 ${atualizados} OS atualizadas, ${erros} erros`);
+    return { atualizados, erros, detalhes: detalhesAtualizacao };
+    
+  } catch (err) {
+    console.error('❌ Erro ao consultar status:', err);
+    mostrarAlerta('Erro ao atualizar status: ' + err.message, 'danger');
+    return { atualizados: 0, erros: 1 };
+  }
+}
+
+async function atualizarStatusOSIndividual(idFaturamento) {
+  console.log(`🔄 Atualizando status da OS ID: ${idFaturamento}`);
+  
+  try {
+    const { data: registro, error } = await supabaseClient
+      .from('faturamento')
+      .select('*')
+      .eq('id', idFaturamento)
+      .single();
+    
+    if (error) throw error;
+    
+    if (!registro.omie_os_id) {
+      throw new Error('Esta OS não possui ID na OMIE.');
+    }
+    
+    const osId = registro.omie_os_id;
+    
+    const payload = {
+      endpoint: 'produtos/etapafat',
+      call: 'ListarEtapasFaturamento',
+      param: [{
+        pagina: 1,
+        registros_por_pagina: 100
+      }]
+    };
+    
+    const response = await fetchOmieProxy(payload);
+    const data = await response.json();
+    
+    if (data.fault) {
+      throw new Error(`Erro ao consultar NFS-e: ${data.fault.faultstring}`);
+    }
+    
+    const nfses = data.nfseEncontradas || [];
+    const nfseVinculada = nfses.find(n => {
+      const nCodOS = n.OrdemServico?.nCodigoOS || n.OrdemServico?.nCodOS;
+      return nCodOS && parseInt(nCodOS) === parseInt(osId);
+    });
+    
+    let updateData = {};
+    
+    if (nfseVinculada) {
+      const statusNFSe = nfseVinculada.Cabecalho?.cStatusNFSe || '';
+      const numeroNFSe = nfseVinculada.Cabecalho?.nNumeroNFSe || '';
+      const valorNFSe = nfseVinculada.Cabecalho?.nValorNFSe || 0;
+      
+      let statusMap = {
+        'F': 'faturado',
+        'A': 'aprovado',
+        'R': 'rejeitado',
+        'C': 'cancelado'
+      };
+      
+      const novoStatus = statusMap[statusNFSe] || statusNFSe;
+      
+      updateData = {
+        omie_status: novoStatus,
+        nota_emitida: true,
+        boleto_enviado: true,
+        nota_numero: numeroNFSe,
+        nota_valor: valorNFSe,
+        nota_status: novoStatus,
+        nota_data_emissao: nfseVinculada.Emissao?.cDataEmissao || null
+      };
+      
+      console.log(`✅ NFS-e ${numeroNFSe} encontrada - Status: ${novoStatus}`);
+      
+    } else {
+      const payloadOS = {
+        endpoint: 'servicos/os',
+        call: 'ConsultarOS',
+        param: [{ nCodOS: parseInt(osId) }]
+      };
+      
+      const responseOS = await fetchOmieProxy(payloadOS);
+      const osData = await responseOS.json();
+      
+      if (osData.fault) {
+        throw new Error(`Erro ao consultar OS: ${osData.fault.faultstring}`);
+      }
+      
+      const etapa = osData.Cabecalho?.cEtapa || osData.cabecalho?.cEtapa || '';
+      const isFaturada = etapa === '60' || etapa === '70' || etapa === '80';
+      
+      if (isFaturada) {
+        updateData = {
+          omie_status: 'faturado',
+          nota_emitida: true,
+          boleto_enviado: true
+        };
+        console.log(`✅ OS faturada (Etapa ${etapa})`);
+      } else {
+        updateData = {
+          omie_status: 'criado',
+          nota_emitida: false,
+          boleto_enviado: false
+        };
+        console.log(`⏳ OS ainda na Etapa ${etapa}`);
+      }
+    }
+    
+    await supabaseClient
+      .from('faturamento')
+      .update(updateData)
+      .eq('id', idFaturamento);
+    
+    console.log('📊 Status atualizado:', updateData);
+    return updateData;
+    
+  } catch (err) {
+    console.error('❌ Erro:', err);
+    throw err;
+  }
+}
+
+// ========================= RECARREGAR TABELA =========================
+function recarregarTabela() {
+  console.log('🔄 Recarregando tabela...');
+  const mes = parseInt(document.getElementById('filterMonth')?.value) || 0;
+  const ano = parseInt(document.getElementById('filterYear')?.value) || new Date().getFullYear();
+  const unidade = document.getElementById('filterUnit')?.value?.trim() || '';
+  carregarRelatorio(mes, ano, unidade, statusFiltroAtual);
+}
+
 // ========================= EVENTOS DO DOMContentLoaded =========================
 document.addEventListener('DOMContentLoaded', function () {
   const loginPage = document.getElementById('loginPage');
@@ -3183,338 +3179,6 @@ document.addEventListener('DOMContentLoaded', function () {
     if (btnTodos) btnTodos.classList.add('active');
   }
 
-  async function verificarStatusOS(idFaturamento) {
-    const { data, error } = await supabaseClient
-      .from('faturamento')
-      .select('omie_os_id, omie_status')
-      .eq('id', idFaturamento)
-      .single();
-    
-    if (error) return null;
-    return data;
-  }
-
-  async function atualizarStatusOSFaturadas() {
-    try {
-      const { data, error } = await supabaseClient
-        .from('faturamento')
-        .select('*')
-        .eq('omie_status', 'criado');
-      
-      if (error) throw error;
-      
-      let atualizados = 0;
-      
-      for (const row of data) {
-        if (!row.omie_os_id) continue;
-        
-        try {
-          const payload = {
-            endpoint: 'servicos/os',
-            call: 'ConsultarOS',
-            param: [{ nCodOS: parseInt(row.omie_os_id) }]
-          };
-          
-          const response = await fetchOmieProxy(payload);
-          const osData = await response.json();
-          
-          if (osData.fault) continue;
-          
-          const etapa = osData.Cabecalho?.cEtapa || osData.cabecalho?.cEtapa || '';
-          const isFaturada = etapa === '60' || osData.Cabecalho?.cFaturada === 'S';
-          
-          if (isFaturada) {
-            await supabaseClient
-              .from('faturamento')
-              .update({ 
-                omie_status: 'faturado',
-                nota_emitida: true,
-                boleto_enviado: true
-              })
-              .eq('id', row.id);
-            atualizados++;
-          }
-        } catch (err) {
-          console.error(`Erro ao verificar OS ${row.omie_os_id}:`, err.message);
-        }
-      }
-      
-      console.log(`✅ ${atualizados} OS atualizadas para status "faturado"`);
-      return atualizados;
-      
-    } catch (err) {
-      console.error('❌ Erro:', err);
-      return 0;
-    }
-  }
-
-  async function consultarStatusFaturamentoOS() {
-    console.log('🔍 Consultando status de faturamento das OS criadas pelo sistema...');
-    
-    try {
-      const { data: registros, error } = await supabaseClient
-        .from('faturamento')
-        .select('*')
-        .eq('omie_status', 'criado')
-        .not('omie_os_id', 'is', null);
-      
-      if (error) throw error;
-      
-      if (registros.length === 0) {
-        console.log('📋 Nenhuma OS aguardando faturamento.');
-        mostrarAlerta('Nenhuma OS criada aguardando faturamento.', 'info');
-        return { atualizados: 0, erros: 0 };
-      }
-      
-      console.log(`📋 ${registros.length} OS para verificar status`);
-      
-      const payload = {
-        endpoint: 'produtos/etapafat',
-        call: 'ListarEtapasFaturamento',
-        param: [{
-          pagina: 1,
-          registros_por_pagina: 100
-        }]
-      };
-      
-      console.log('📤 Buscando NFS-e na OMIE...');
-      const response = await fetchOmieProxy(payload);
-      const data = await response.json();
-      
-      if (data.fault) {
-        throw new Error(`Erro ao consultar NFS-e: ${data.fault.faultstring}`);
-      }
-      
-      const nfses = data.nfseEncontradas || [];
-      console.log(`📋 ${nfses.length} NFS-e encontradas na OMIE`);
-      
-      let atualizados = 0;
-      let erros = 0;
-      let detalhesAtualizacao = [];
-      
-      for (const registro of registros) {
-        try {
-          const osId = registro.omie_os_id;
-          console.log(`🔍 Verificando OS ${osId} - ${registro.unidade}`);
-          
-          const nfseVinculada = nfses.find(n => {
-            const nCodOS = n.OrdemServico?.nCodigoOS || n.OrdemServico?.nCodOS;
-            return nCodOS && parseInt(nCodOS) === parseInt(osId);
-          });
-          
-          if (nfseVinculada) {
-            const statusNFSe = nfseVinculada.Cabecalho?.cStatusNFSe || '';
-            const numeroNFSe = nfseVinculada.Cabecalho?.nNumeroNFSe || '';
-            const valorNFSe = nfseVinculada.Cabecalho?.nValorNFSe || 0;
-            
-            let statusMap = {
-              'F': 'faturado',
-              'A': 'aprovado',
-              'R': 'rejeitado',
-              'C': 'cancelado'
-            };
-            
-            const novoStatus = statusMap[statusNFSe] || statusNFSe;
-            
-            await supabaseClient
-              .from('faturamento')
-              .update({
-                omie_status: novoStatus,
-                nota_emitida: true,
-                boleto_enviado: true,
-                nota_numero: numeroNFSe,
-                nota_valor: valorNFSe,
-                nota_status: novoStatus,
-                nota_data_emissao: nfseVinculada.Emissao?.cDataEmissao || null
-              })
-              .eq('id', registro.id);
-            
-            console.log(`✅ OS ${osId} - NFS-e ${numeroNFSe} - Status: ${novoStatus}`);
-            detalhesAtualizacao.push(`${registro.unidade}: NFS-e ${numeroNFSe} - ${novoStatus}`);
-            atualizados++;
-            
-          } else {
-            console.log(`⏳ OS ${osId} sem NFS-e encontrada, verificando etapa...`);
-            
-            const payloadOS = {
-              endpoint: 'servicos/os',
-              call: 'ConsultarOS',
-              param: [{ nCodOS: parseInt(osId) }]
-            };
-            
-            const responseOS = await fetchOmieProxy(payloadOS);
-            const osData = await responseOS.json();
-            
-            if (osData.fault) {
-              console.error(`❌ Erro ao consultar OS ${osId}:`, osData.fault.faultstring);
-              erros++;
-              continue;
-            }
-            
-            const etapa = osData.Cabecalho?.cEtapa || osData.cabecalho?.cEtapa || '';
-            const isFaturada = etapa === '60' || etapa === '70' || etapa === '80';
-            
-            if (isFaturada) {
-              await supabaseClient
-                .from('faturamento')
-                .update({
-                  omie_status: 'faturado',
-                  nota_emitida: true,
-                  boleto_enviado: true
-                })
-                .eq('id', registro.id);
-              
-              console.log(`✅ OS ${osId} - Faturada (Etapa ${etapa})`);
-              detalhesAtualizacao.push(`${registro.unidade}: Faturada (Etapa ${etapa})`);
-              atualizados++;
-            } else {
-              console.log(`⏳ OS ${osId} - Etapa ${etapa} (aguardando faturamento)`);
-            }
-          }
-          
-          await new Promise(resolve => setTimeout(resolve, 100));
-          
-        } catch (err) {
-          console.error(`❌ Erro ao processar OS ${registro.omie_os_id}:`, err.message);
-          erros++;
-        }
-      }
-      
-      let mensagem = `${atualizados} OS atualizadas!`;
-      if (detalhesAtualizacao.length > 0) {
-        mensagem += '\n\n' + detalhesAtualizacao.join('\n');
-      }
-      if (erros > 0) {
-        mensagem += `\n\n${erros} erros encontrados.`;
-      }
-      
-      mostrarAlerta(mensagem, atualizados > 0 ? 'success' : 'info');
-      console.log(`📊 ${atualizados} OS atualizadas, ${erros} erros`);
-      return { atualizados, erros, detalhes: detalhesAtualizacao };
-      
-    } catch (err) {
-      console.error('❌ Erro ao consultar status:', err);
-      mostrarAlerta('Erro ao atualizar status: ' + err.message, 'danger');
-      return { atualizados: 0, erros: 1 };
-    }
-  }
-
-  async function atualizarStatusOSIndividual(idFaturamento) {
-    console.log(`🔄 Atualizando status da OS ID: ${idFaturamento}`);
-    
-    try {
-      const { data: registro, error } = await supabaseClient
-        .from('faturamento')
-        .select('*')
-        .eq('id', idFaturamento)
-        .single();
-      
-      if (error) throw error;
-      
-      if (!registro.omie_os_id) {
-        throw new Error('Esta OS não possui ID na OMIE.');
-      }
-      
-      const osId = registro.omie_os_id;
-      
-      const payload = {
-        endpoint: 'produtos/etapafat',
-        call: 'ListarEtapasFaturamento',
-        param: [{
-          pagina: 1,
-          registros_por_pagina: 100
-        }]
-      };
-      
-      const response = await fetchOmieProxy(payload);
-      const data = await response.json();
-      
-      if (data.fault) {
-        throw new Error(`Erro ao consultar NFS-e: ${data.fault.faultstring}`);
-      }
-      
-      const nfses = data.nfseEncontradas || [];
-      const nfseVinculada = nfses.find(n => {
-        const nCodOS = n.OrdemServico?.nCodigoOS || n.OrdemServico?.nCodOS;
-        return nCodOS && parseInt(nCodOS) === parseInt(osId);
-      });
-      
-      let updateData = {};
-      
-      if (nfseVinculada) {
-        const statusNFSe = nfseVinculada.Cabecalho?.cStatusNFSe || '';
-        const numeroNFSe = nfseVinculada.Cabecalho?.nNumeroNFSe || '';
-        const valorNFSe = nfseVinculada.Cabecalho?.nValorNFSe || 0;
-        
-        let statusMap = {
-          'F': 'faturado',
-          'A': 'aprovado',
-          'R': 'rejeitado',
-          'C': 'cancelado'
-        };
-        
-        const novoStatus = statusMap[statusNFSe] || statusNFSe;
-        
-        updateData = {
-          omie_status: novoStatus,
-          nota_emitida: true,
-          boleto_enviado: true,
-          nota_numero: numeroNFSe,
-          nota_valor: valorNFSe,
-          nota_status: novoStatus,
-          nota_data_emissao: nfseVinculada.Emissao?.cDataEmissao || null
-        };
-        
-        console.log(`✅ NFS-e ${numeroNFSe} encontrada - Status: ${novoStatus}`);
-        
-      } else {
-        const payloadOS = {
-          endpoint: 'servicos/os',
-          call: 'ConsultarOS',
-          param: [{ nCodOS: parseInt(osId) }]
-        };
-        
-        const responseOS = await fetchOmieProxy(payloadOS);
-        const osData = await responseOS.json();
-        
-        if (osData.fault) {
-          throw new Error(`Erro ao consultar OS: ${osData.fault.faultstring}`);
-        }
-        
-        const etapa = osData.Cabecalho?.cEtapa || osData.cabecalho?.cEtapa || '';
-        const isFaturada = etapa === '60' || etapa === '70' || etapa === '80';
-        
-        if (isFaturada) {
-          updateData = {
-            omie_status: 'faturado',
-            nota_emitida: true,
-            boleto_enviado: true
-          };
-          console.log(`✅ OS faturada (Etapa ${etapa})`);
-        } else {
-          updateData = {
-            omie_status: 'criado',
-            nota_emitida: false,
-            boleto_enviado: false
-          };
-          console.log(`⏳ OS ainda na Etapa ${etapa}`);
-        }
-      }
-      
-      await supabaseClient
-        .from('faturamento')
-        .update(updateData)
-        .eq('id', idFaturamento);
-      
-      console.log('📊 Status atualizado:', updateData);
-      return updateData;
-      
-    } catch (err) {
-      console.error('❌ Erro:', err);
-      throw err;
-    }
-  }
-
   function mostrarDashboard(user) {
     loginPage.classList.add('hidden');
     menuPage.classList.add('hidden');
@@ -3529,14 +3193,6 @@ document.addEventListener('DOMContentLoaded', function () {
     
     carregarHoldingsParaFiltro();
     carregarGruposParaFiltro();
-    
-    setTimeout(() => {
-      const mes = parseInt(document.getElementById('boletoFiltroMes')?.value || 0);
-      const ano = parseInt(document.getElementById('boletoFiltroAno')?.value || 0);
-      const unidade = document.getElementById('boletoFiltroUnidade')?.value?.trim() || '';
-      const status = document.getElementById('boletoFiltroStatus')?.value || 'todos';
-      carregarBoletos(mes, ano, unidade, status);
-    }, 500);
   }
 
   // ========================= EVENTOS DO MENU =========================
@@ -3671,6 +3327,25 @@ document.addEventListener('DOMContentLoaded', function () {
         `;
       } else {
         feedback.innerHTML = '';
+      }
+
+      if (result.unidadesAtualizadas > 0) {
+        feedback.innerHTML += `
+          <div class="alert alert-info alert-dismissible fade show mt-2" role="alert">
+            <strong><i class="fas fa-sync"></i> Unidades atualizadas:</strong> ${result.unidadesAtualizadas} unidades
+            <br><small>Dados de OS e status foram preservados.</small>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+          </div>
+        `;
+      }
+
+      if (result.unidadesNovas > 0) {
+        feedback.innerHTML += `
+          <div class="alert alert-success alert-dismissible fade show mt-2" role="alert">
+            <strong><i class="fas fa-plus"></i> Novas unidades:</strong> ${result.unidadesNovas} unidades
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+          </div>
+        `;
       }
 
       const mesF = parseInt(document.getElementById('filterMonth').value);
@@ -4197,43 +3872,6 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
-  // ========================= BOLETOS =========================
-  function popularAnosBoletos() {
-    const select = document.getElementById('boletoFiltroAno');
-    if (!select) return;
-    const anoAtual = new Date().getFullYear();
-    for (let y = anoAtual; y >= anoAtual - 5; y--) {
-      const option = document.createElement('option');
-      option.value = y;
-      option.textContent = y;
-      select.appendChild(option);
-    }
-    select.value = anoAtual;
-  }
-  popularAnosBoletos();
-
-  const tabBoletos = document.getElementById('tab-boletos');
-  if (tabBoletos) {
-    tabBoletos.addEventListener('shown.bs.tab', function () {
-      const mes = parseInt(document.getElementById('boletoFiltroMes').value);
-      const ano = parseInt(document.getElementById('boletoFiltroAno').value);
-      const unidade = document.getElementById('boletoFiltroUnidade').value.trim();
-      const status = document.getElementById('boletoFiltroStatus').value;
-      carregarBoletos(mes, ano, unidade, status);
-    });
-  }
-
-  document.getElementById('btnAplicarFiltroBoletos').addEventListener('click', function() {
-    const mes = parseInt(document.getElementById('boletoFiltroMes').value);
-    const ano = parseInt(document.getElementById('boletoFiltroAno').value);
-    const unidade = document.getElementById('boletoFiltroUnidade').value.trim();
-    const status = document.getElementById('boletoFiltroStatus').value;
-    carregarBoletos(mes, ano, unidade, status);
-  });
-
-  document.getElementById('btnAtualizarStatusBoletos').addEventListener('click', atualizarStatusTodosBoletos);
-  document.getElementById('btnExportarBoletos').addEventListener('click', exportarBoletosCSV);
-
   // ========================= ATUALIZAR STATUS NFS-e =========================
   document.getElementById('btnAtualizarStatusNFSe').addEventListener('click', async function() {
     const btn = this;
@@ -4270,6 +3908,78 @@ document.addEventListener('DOMContentLoaded', function () {
     if (modal) modal.hide();
   });
 
+  // ========================= BOTÃO ATUALIZAR NOME DA UNIDADE =========================
+  const btnAtualizarNome = document.getElementById('btnAtualizarNomeUnidade');
+  if (btnAtualizarNome) {
+    btnAtualizarNome.addEventListener('click', async function() {
+      const oldName = document.getElementById('oldUnitName')?.value?.trim() || '';
+      const newName = document.getElementById('newUnitName')?.value?.trim() || '';
+      const statusEl = document.getElementById('atualizarNomeStatus');
+      
+      if (!statusEl) return;
+      
+      if (!oldName || !newName) {
+        statusEl.innerHTML = `<div class="alert alert-warning">Preencha o nome antigo e o novo nome.</div>`;
+        return;
+      }
+      
+      if (oldName === newName) {
+        statusEl.innerHTML = `<div class="alert alert-info">Os nomes são iguais. Nenhuma alteração necessária.</div>`;
+        return;
+      }
+      
+      if (!confirm(`Deseja realmente alterar todas as ocorrências de "${oldName}" para "${newName}" no processamento?`)) {
+        return;
+      }
+      
+      this.disabled = true;
+      this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Atualizando...';
+      statusEl.innerHTML = `<div class="alert alert-info">⏳ Atualizando registros...</div>`;
+      
+      try {
+        const resultado = await atualizarNomeUnidadeProcessamento(oldName, newName);
+        
+        if (resultado.success) {
+          statusEl.innerHTML = `
+            <div class="alert alert-success">
+              <i class="fas fa-check-circle"></i> 
+              ${resultado.message}
+              <br><small>Recarregue a tabela para ver as alterações.</small>
+            </div>
+          `;
+          const oldInput = document.getElementById('oldUnitName');
+          const newInput = document.getElementById('newUnitName');
+          if (oldInput) oldInput.value = '';
+          if (newInput) newInput.value = '';
+          
+          const mes = parseInt(document.getElementById('filterMonth')?.value || 0);
+          const ano = parseInt(document.getElementById('filterYear')?.value || new Date().getFullYear());
+          const unidade = document.getElementById('filterUnit')?.value?.trim() || '';
+          await carregarRelatorio(mes, ano, unidade, statusFiltroAtual);
+          
+        } else {
+          statusEl.innerHTML = `
+            <div class="alert alert-danger">
+              <i class="fas fa-exclamation-triangle"></i> 
+              ${resultado.message}
+            </div>
+          `;
+        }
+        
+      } catch (err) {
+        statusEl.innerHTML = `
+          <div class="alert alert-danger">
+            <i class="fas fa-exclamation-triangle"></i> 
+            Erro ao atualizar: ${err.message}
+          </div>
+        `;
+      } finally {
+        this.disabled = false;
+        this.innerHTML = '<i class="fas fa-sync me-1"></i> Atualizar Nome';
+      }
+    });
+  }
+
   // ========================= OUTROS =========================
   function popularAnos() {
     const select = document.getElementById('filterYear');
@@ -4290,19 +4000,23 @@ document.addEventListener('DOMContentLoaded', function () {
     exportCsvBtn.addEventListener('click', () => {
       const table = document.getElementById('resultsTable');
       if (!table) return;
-      let csv = 'Unidade,Mês/Ano,Valor Total (R$),Detalhes\n';
+      let csv = 'Unidade,Holding,Grupo,Mês/Ano,Valor Total (R$),Status OS,Status Pagamento,Vencimento\n';
       const rows = table.querySelectorAll('tbody tr');
       rows.forEach(row => {
         const cols = row.querySelectorAll('td');
-        if (cols.length >= 4) {
+        if (cols.length >= 8) {
           const unidade = cols[0]?.textContent?.trim() || '';
-          const mesAno = cols[1]?.textContent?.trim() || '';
-          const valor = cols[2]?.textContent?.trim()?.replace('R$ ', '') || '';
-          const detalhes = cols[3]?.textContent?.trim() || '';
-          csv += `"${unidade}","${mesAno}",${valor},"${detalhes}"\n`;
+          const holding = cols[1]?.textContent?.trim() || '';
+          const grupo = cols[2]?.textContent?.trim() || '';
+          const mesAno = cols[3]?.textContent?.trim() || '';
+          const valor = cols[4]?.textContent?.trim()?.replace('R$ ', '') || '';
+          const statusOS = cols[5]?.textContent?.trim() || '';
+          const statusPagamento = cols[6]?.textContent?.trim() || '';
+          const vencimento = cols[7]?.textContent?.trim() || '';
+          csv += `"${unidade}","${holding}","${grupo}","${mesAno}",${valor},"${statusOS}","${statusPagamento}","${vencimento}"\n`;
         }
       });
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
       link.download = 'faturamento.csv';
@@ -4334,312 +4048,3 @@ document.addEventListener('DOMContentLoaded', function () {
   carregarGruposParaFiltro();
 
 });
-
-// ========================= FUNÇÕES DE BOLETOS (CACHE E RENDER) =========================
-async function carregarBoletos(mes = 0, ano = 0, unidadeFiltro = '', statusFiltro = 'todos') {
-  console.log('📊 Carregando boletos da OMIE...');
-  
-  const tbody = document.getElementById('boletosBody');
-  if (tbody) {
-    tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4"><i class="fas fa-spinner fa-spin me-2"></i> Carregando boletos...</td></tr>';
-  }
-  
-  try {
-    const boletos = await buscarBoletosOmie({
-      status: statusFiltro,
-      registros_por_pagina: 200
-    });
-    
-    let boletosFiltrados = boletos;
-    if (mes > 0 && ano > 0) {
-      boletosFiltrados = boletosFiltrados.filter(b => {
-        if (!b.data_vencimento) return false;
-        return b.data_vencimento.getMonth() + 1 === mes && 
-               b.data_vencimento.getFullYear() === ano;
-      });
-    }
-    
-    if (unidadeFiltro) {
-      const filtroLower = unidadeFiltro.toLowerCase().trim();
-      boletosFiltrados = boletosFiltrados.filter(b => 
-        b.nome_cliente.toLowerCase().includes(filtroLower)
-      );
-    }
-    
-    atualizarCardsBoletos(boletosFiltrados);
-    renderizarTabelaBoletosOmie(boletosFiltrados);
-    
-    console.log(`📊 ${boletosFiltrados.length} boletos exibidos`);
-    
-  } catch (err) {
-    console.error('❌ Erro ao carregar boletos:', err);
-    if (tbody) {
-      tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger py-4">
-        <i class="fas fa-exclamation-triangle me-2"></i> Erro ao carregar boletos: ${err.message}
-      </td></tr>`;
-    }
-    mostrarAlerta('Erro ao carregar boletos: ' + err.message, 'danger');
-  }
-}
-
-function atualizarCardsBoletos(boletos) {
-  let pagos = 0;
-  let vencidos = 0;
-  let aVencer = 0;
-  let naoGerados = 0;
-  let valorTotal = 0;
-  let valorPago = 0;
-  let valorPendente = 0;
-
-  boletos.forEach(b => {
-    valorTotal += b.valor_documento;
-    if (b.isPago) {
-      pagos++;
-      valorPago += b.valor_documento;
-    } else {
-      valorPendente += b.saldo || b.valor_documento;
-    }
-    
-    if (b.status_boleto === 'vencido') vencidos++;
-    else if (b.status_boleto === 'avencer') aVencer++;
-    else if (b.status_boleto === 'naogerado') naoGerados++;
-  });
-
-  const elementos = {
-    'totalBoletosPagos': pagos,
-    'totalBoletosVencidos': vencidos,
-    'totalBoletosAVencer': aVencer,
-    'totalBoletosNaoGerados': naoGerados
-  };
-  
-  Object.entries(elementos).forEach(([id, valor]) => {
-    const el = document.getElementById(id);
-    if (el) el.textContent = valor;
-  });
-  
-  const valorTotalEl = document.getElementById('boletosValorTotal');
-  if (valorTotalEl) valorTotalEl.textContent = 'R$ ' + formatarMoeda(valorTotal);
-  
-  const valorPagoEl = document.getElementById('boletosValorPago');
-  if (valorPagoEl) valorPagoEl.textContent = 'R$ ' + formatarMoeda(valorPago);
-  
-  const valorPendenteEl = document.getElementById('boletosValorPendente');
-  if (valorPendenteEl) valorPendenteEl.textContent = 'R$ ' + formatarMoeda(valorPendente);
-}
-
-function renderizarTabelaBoletosOmie(boletos) {
-  const tbody = document.getElementById('boletosBody');
-  
-  if (!tbody) return;
-  
-  if (!boletos || boletos.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted py-4">
-      <i class="fas fa-info-circle me-2"></i> Nenhum boleto encontrado
-    </td></tr>`;
-    return;
-  }
-
-  let html = '';
-  boletos.forEach(b => {
-    const dataVenc = b.data_vencimento ? 
-      b.data_vencimento.toLocaleDateString('pt-BR') : 
-      (b.data_vencimento_str || '—');
-    
-    const valorFormatado = 'R$ ' + b.valor_documento.toFixed(2);
-    const saldoFormatado = b.saldo > 0 ? 'R$ ' + b.saldo.toFixed(2) : '—';
-    
-    let linkBoleto = '';
-    if (b.codigo_boleto || b.boleto_info?.url) {
-      const url = b.boleto_info?.url || '#';
-      linkBoleto = `<a href="${url}" target="_blank" class="btn btn-sm btn-outline-primary" title="Visualizar boleto">
-        <i class="fas fa-file-pdf"></i>
-      </a>`;
-    }
-
-    html += `<tr>
-      <td>
-        <strong>${b.nome_cliente}</strong>
-        ${b.documento ? `<br><small class="text-muted">Doc: ${b.documento}</small>` : ''}
-      </td>
-      <td>${dataVenc}</td>
-      <td class="text-end">${valorFormatado}</td>
-      <td class="text-end">${saldoFormatado}</td>
-      <td class="text-center">
-        <span class="badge bg-${b.status_class}">
-          <i class="fas ${b.status_icon}"></i> ${b.status_label}
-        </span>
-      </td>
-      <td class="text-center">
-        <span class="badge bg-${b.isPago ? 'success' : 'secondary'}">
-          ${b.isPago ? 'Pago' : 'Pendente'}
-        </span>
-      </td>
-      <td class="text-center">
-        <div class="btn-group btn-group-sm" role="group">
-          ${linkBoleto}
-          <button class="btn btn-outline-info btn-consultar-status" 
-                  data-codigo="${b.codigo_lancamento}" 
-                  title="Consultar status atualizado">
-            <i class="fas fa-sync"></i>
-          </button>
-        </div>
-      </td>
-    </tr>`;
-  });
-
-  tbody.innerHTML = html;
-
-  document.querySelectorAll('.btn-consultar-status').forEach(btn => {
-    btn.addEventListener('click', async function() {
-      const codigo = this.dataset.codigo;
-      if (!codigo) return;
-      
-      try {
-        this.disabled = true;
-        this.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-        
-        const result = await consultarStatusBoletoIndividual(codigo);
-        
-        if (result) {
-          mostrarAlerta(`Status do boleto ${codigo}: ${result.status}`, 
-            result.isPago ? 'success' : 'info');
-          
-          const mes = parseInt(document.getElementById('boletoFiltroMes')?.value || 0);
-          const ano = parseInt(document.getElementById('boletoFiltroAno')?.value || 0);
-          const unidade = document.getElementById('boletoFiltroUnidade')?.value?.trim() || '';
-          const status = document.getElementById('boletoFiltroStatus')?.value || 'todos';
-          await carregarBoletos(mes, ano, unidade, status);
-        }
-      } catch (err) {
-        mostrarAlerta('Erro ao consultar status: ' + err.message, 'danger');
-      } finally {
-        this.disabled = false;
-        this.innerHTML = '<i class="fas fa-sync"></i>';
-      }
-    });
-  });
-}
-
-async function consultarStatusBoletoIndividual(codigoLancamento) {
-  console.log(`🔍 Consultando status do boleto: ${codigoLancamento}`);
-  
-  try {
-    const payload = {
-      endpoint: 'financas/contareceber',
-      call: 'ConsultarContaReceber',
-      param: [{
-        codigo_lancamento_omie: parseInt(codigoLancamento)
-      }]
-    };
-    
-    const response = await fetchOmieProxy(payload);
-    const data = await response.json();
-    
-    if (data.fault) {
-      throw new Error(`Erro OMIE: ${data.fault.faultstring}`);
-    }
-    
-    const isPago = data.status === 'Pago' || 
-                  (data.saldo !== undefined && parseFloat(data.saldo) === 0) ||
-                  (data.valor_pago && parseFloat(data.valor_pago) > 0);
-    
-    return {
-      status: data.status || 'Desconhecido',
-      isPago: isPago,
-      valorTotal: data.valor_documento || 0,
-      valorPago: data.valor_pago || 0,
-      saldo: data.saldo || 0,
-      dataVencimento: data.data_vencimento || '',
-      dataPagamento: data.data_pagamento || '',
-      dados: data
-    };
-    
-  } catch (err) {
-    console.error('❌ Erro:', err);
-    throw err;
-  }
-}
-
-async function atualizarStatusTodosBoletos() {
-  console.log('🔄 Atualizando status de todos os boletos...');
-  
-  const btn = document.getElementById('btnAtualizarStatusBoletos');
-  if (btn) {
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Atualizando...';
-  }
-  
-  try {
-    const boletos = await buscarBoletosOmie({
-      registros_por_pagina: 200
-    });
-    
-    let atualizados = 0;
-    let erros = 0;
-    
-    for (const b of boletos) {
-      if (!b.codigo_lancamento) continue;
-      
-      try {
-        await consultarStatusBoletoIndividual(b.codigo_lancamento);
-        atualizados++;
-      } catch (err) {
-        console.error(`Erro ao atualizar boleto ${b.codigo_lancamento}:`, err.message);
-        erros++;
-      }
-    }
-    
-    console.log(`📊 ${atualizados} boletos atualizados, ${erros} erros`);
-    mostrarAlerta(`Status atualizado para ${atualizados} boletos!`, 'success');
-    
-    const mes = parseInt(document.getElementById('boletoFiltroMes')?.value || 0);
-    const ano = parseInt(document.getElementById('boletoFiltroAno')?.value || 0);
-    const unidade = document.getElementById('boletoFiltroUnidade')?.value?.trim() || '';
-    const status = document.getElementById('boletoFiltroStatus')?.value || 'todos';
-    await carregarBoletos(mes, ano, unidade, status);
-    
-  } catch (err) {
-    console.error('❌ Erro:', err);
-    mostrarAlerta('Erro ao atualizar status: ' + err.message, 'danger');
-  } finally {
-    if (btn) {
-      btn.disabled = false;
-      btn.innerHTML = '<i class="fas fa-sync me-1"></i> Atualizar Status dos Boletos';
-    }
-  }
-}
-
-function exportarBoletosCSV() {
-  const tbody = document.getElementById('boletosBody');
-  if (!tbody) return;
-  
-  const rows = tbody.querySelectorAll('tr');
-  if (rows.length === 0 || rows[0].textContent.includes('Nenhum boleto encontrado')) {
-    mostrarAlerta('Não há dados para exportar.', 'warning');
-    return;
-  }
-  
-  let csv = 'Cliente,Data Vencimento,Valor (R$),Saldo (R$),Status Boleto,Status Pagamento\n';
-  
-  rows.forEach(row => {
-    const cols = row.querySelectorAll('td');
-    if (cols.length >= 6) {
-      const cliente = cols[0]?.textContent?.trim()?.replace(/\n/g, ' ') || '';
-      const dataVenc = cols[1]?.textContent?.trim() || '';
-      const valor = cols[2]?.textContent?.trim()?.replace('R$ ', '')?.replace('.', '')?.replace(',', '.') || '';
-      const saldo = cols[3]?.textContent?.trim()?.replace('R$ ', '')?.replace('.', '')?.replace(',', '.') || '0';
-      const statusBoleto = cols[4]?.textContent?.trim() || '';
-      const statusPagamento = cols[5]?.textContent?.trim() || '';
-      
-      csv += `"${cliente}","${dataVenc}",${valor},${saldo},"${statusBoleto}","${statusPagamento}"\n`;
-    }
-  });
-  
-  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
-  const link = document.createElement('a');
-  link.href = URL.createObjectURL(blob);
-  link.download = `boletos_${new Date().toISOString().slice(0,10)}.csv`;
-  link.click();
-  
-  mostrarAlerta('Arquivo CSV exportado com sucesso!', 'success');
-}
