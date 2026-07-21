@@ -54,11 +54,14 @@ let chartExames = null;
 let chartMensalidade = null;
 let statusFiltroAtual = 'todos';
 
-// ========================= FUNÇÕES AUXILIARES =========================
+// ========================= FUNÇÃO NORMALIZAR UNIDADE MELHORADA =========================
 function normalizarUnidade(nome) {
   if (!nome) return '';
+  // Remove acentos e caracteres especiais
   let normalizado = nome.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   normalizado = normalizado.replace(/[()\-.,/]/g, ' ');
+  
+  // Remove sufixos comuns
   const sufixos = [
     ' LTDA', ' LTDA.', ' S/A', ' S.A.', ' ME', ' EIRELI', ' SS', ' S/S',
     ' ADMINISTRADORA', ' ADMINISTRADORA DE CARTOES',
@@ -69,6 +72,15 @@ function normalizarUnidade(nome) {
     const regex = new RegExp(`\\s*${suf.trim()}$`, 'i');
     normalizado = normalizado.replace(regex, '');
   });
+  
+  // Remove acentos manualmente (garantia extra)
+  normalizado = normalizado.replace(/[áàâãä]/gi, 'a');
+  normalizado = normalizado.replace(/[éèêë]/gi, 'e');
+  normalizado = normalizado.replace(/[íìîï]/gi, 'i');
+  normalizado = normalizado.replace(/[óòôõö]/gi, 'o');
+  normalizado = normalizado.replace(/[úùûü]/gi, 'u');
+  normalizado = normalizado.replace(/[ç]/gi, 'c');
+  
   normalizado = normalizado.replace(/\s+/g, ' ').trim().toUpperCase();
   return normalizado;
 }
@@ -573,6 +585,7 @@ async function processarUpload(file) {
 
   const dataRows = rows.slice(headerRowIndex + 1);
 
+  // ===== DETECTAR MÊS DOS EXAMES =====
   const mapMesAno = {};
   let maxCount = 0;
   let mesEscolhido = 0, anoEscolhido = 0;
@@ -616,6 +629,7 @@ async function processarUpload(file) {
     anoEscolhido = now.getFullYear();
   }
 
+  // ===== CALCULAR MÊS DE FATURAMENTO =====
   let mesFaturamento = mesEscolhido + 1;
   let anoFaturamento = anoEscolhido;
   if (mesFaturamento > 12) {
@@ -626,6 +640,7 @@ async function processarUpload(file) {
   console.log(`📅 Mês dos exames: ${mesEscolhido}/${anoEscolhido}`);
   console.log(`📅 Mês de faturamento: ${mesFaturamento}/${anoFaturamento}`);
 
+  // ===== EXTRAIR EXAMES POR UNIDADE (TUDO NORMALIZADO) =====
   const examesPorUnidade = {};
   const unidadesNaPlanilha = new Set();
 
@@ -642,6 +657,7 @@ async function processarUpload(file) {
     const exameNormalizado = normalizarNomeExame(exameUpload);
     if (!exameNormalizado) continue;
 
+    // TUDO NORMALIZADO
     const chaveUnidade = normalizarUnidade(unidadePlanilha);
     unidadesNaPlanilha.add(chaveUnidade);
 
@@ -652,9 +668,13 @@ async function processarUpload(file) {
       exame: exameNormalizado,
       nomeOriginal: exameUpload,
       funcionario: funcionario || 'N/A',
-      dataExame: dataExameStr || '—'
+      dataExame: dataExameStr || '—',
+      unidadeOriginal: unidadePlanilha
     });
   }
+
+  console.log('📋 UNIDADES NA PLANILHA (normalizado):', Array.from(unidadesNaPlanilha));
+  console.log('📋 EXAMES POR UNIDADE:', Object.keys(examesPorUnidade));
 
   const { data: todasUnidades, error: unidadesError } = await supabaseClient
     .from('precos')
@@ -662,72 +682,91 @@ async function processarUpload(file) {
 
   if (unidadesError) throw unidadesError;
 
-  const mapaUnidades = {};
-  const mapaUnidadesPorRazaoSocial = {};
-
-  todasUnidades.forEach(u => {
-    const chave = normalizarUnidade(u.unidade);
-    mapaUnidades[chave] = u;
-    if (u.razao_social) {
-      const chaveRazao = normalizarUnidade(u.razao_social);
-      mapaUnidadesPorRazaoSocial[chaveRazao] = u;
-    }
-  });
-
-  const unidadesParaProcessar = new Set();
-
-  for (let chave of unidadesNaPlanilha) {
-    unidadesParaProcessar.add(chave);
-  }
-
-  for (let [chave, unidade] of Object.entries(mapaUnidades)) {
-    const temMensalidade = unidade.mensalidade && unidade.mensalidade > 0;
-    const temVidas = unidade.vidas && unidade.vidas > 0 && unidade.qtd_vidas && unidade.qtd_vidas > 0;
-    
-    if (temMensalidade || temVidas) {
-      unidadesParaProcessar.add(chave);
-      console.log(`✅ Unidade incluída (mensalidade/vidas): ${unidade.unidade}`);
-    }
-  }
-
-  console.log(`📊 Total de unidades a processar: ${unidadesParaProcessar.size}`);
-
+  // ===== MAPEAR UNIDADES ENCONTRADAS (TUDO NORMALIZADO) =====
   const unidadesEncontradas = {};
   const unidadesNaoEncontradas = [];
 
-  for (let chave of unidadesParaProcessar) {
+  for (let chaveNorm of unidadesNaPlanilha) {
     let unidadeEncontrada = null;
     
-    if (mapaUnidades[chave]) {
-      unidadeEncontrada = mapaUnidades[chave];
-    } else if (mapaUnidadesPorRazaoSocial[chave]) {
-      unidadeEncontrada = mapaUnidadesPorRazaoSocial[chave];
-    } else {
-      for (let [nomeCadastrado, unidade] of Object.entries(mapaUnidades)) {
-        if (nomeCadastrado.includes(chave) || chave.includes(nomeCadastrado)) {
-          unidadeEncontrada = unidade;
+    console.log(`🔍 Buscando unidade: "${chaveNorm}"`);
+    
+    // 1. Busca pela razão social (normalizada)
+    for (let u of todasUnidades) {
+      if (u.razao_social) {
+        const razaoNorm = normalizarUnidade(u.razao_social);
+        if (razaoNorm === chaveNorm) {
+          unidadeEncontrada = u;
+          console.log(`   ✅ Encontrado por RAZÃO SOCIAL: "${u.unidade}"`);
           break;
         }
       }
-      if (!unidadeEncontrada) {
-        for (let [razaoCadastrada, unidade] of Object.entries(mapaUnidadesPorRazaoSocial)) {
-          if (razaoCadastrada.includes(chave) || chave.includes(razaoCadastrada)) {
-            unidadeEncontrada = unidade;
+    }
+    
+    // 2. Busca pelo nome da unidade (normalizado)
+    if (!unidadeEncontrada) {
+      for (let u of todasUnidades) {
+        const unidadeNorm = normalizarUnidade(u.unidade);
+        if (unidadeNorm === chaveNorm) {
+          unidadeEncontrada = u;
+          console.log(`   ✅ Encontrado por NOME: "${u.unidade}"`);
+          break;
+        }
+      }
+    }
+    
+    // 3. Busca por contém na razão social
+    if (!unidadeEncontrada) {
+      for (let u of todasUnidades) {
+        if (u.razao_social) {
+          const razaoNorm = normalizarUnidade(u.razao_social);
+          if (razaoNorm.includes(chaveNorm) || chaveNorm.includes(razaoNorm)) {
+            unidadeEncontrada = u;
+            console.log(`   ✅ Encontrado por RAZÃO SOCIAL (contém): "${u.unidade}"`);
             break;
           }
         }
       }
     }
-
+    
+    // 4. Busca por contém no nome
+    if (!unidadeEncontrada) {
+      for (let u of todasUnidades) {
+        const unidadeNorm = normalizarUnidade(u.unidade);
+        if (unidadeNorm.includes(chaveNorm) || chaveNorm.includes(unidadeNorm)) {
+          unidadeEncontrada = u;
+          console.log(`   ✅ Encontrado por NOME (contém): "${u.unidade}"`);
+          break;
+        }
+      }
+    }
+    
     if (unidadeEncontrada) {
-      unidadesEncontradas[chave] = unidadeEncontrada;
+      unidadesEncontradas[chaveNorm] = unidadeEncontrada;
+      console.log(`✅ Unidade mapeada: "${chaveNorm}" → "${unidadeEncontrada.unidade}"`);
     } else {
-      unidadesNaoEncontradas.push(chave);
-      console.warn(`❌ Unidade NÃO encontrada no cadastro: "${chave}"`);
+      unidadesNaoEncontradas.push(chaveNorm);
+      console.warn(`❌ Unidade NÃO encontrada: "${chaveNorm}"`);
     }
   }
 
-  // Buscar registros existentes para preservar dados
+  // Incluir unidades com mensalidade/vidas
+  for (let unidade of todasUnidades) {
+    const temMensalidade = unidade.mensalidade && unidade.mensalidade > 0;
+    const temVidas = unidade.vidas && unidade.vidas > 0 && unidade.qtd_vidas && unidade.qtd_vidas > 0;
+    
+    if (temMensalidade || temVidas) {
+      const chave = normalizarUnidade(unidade.unidade);
+      if (!unidadesEncontradas[chave]) {
+        unidadesEncontradas[chave] = unidade;
+        console.log(`✅ Unidade incluída (mensalidade/vidas): ${unidade.unidade}`);
+      }
+    }
+  }
+
+  console.log(`📊 Total de unidades a processar: ${Object.keys(unidadesEncontradas).length}`);
+
+  // ===== BUSCAR REGISTROS EXISTENTES =====
   const { data: registrosExistentes, error: buscaExistenteError } = await supabaseClient
     .from('faturamento')
     .select('*')
@@ -745,6 +784,10 @@ async function processarUpload(file) {
     });
   }
 
+  console.log(`📋 Registros existentes para ${mesFaturamento}/${anoFaturamento}:`, Object.keys(mapaExistentes));
+
+  // ===== PROCESSAR CADA UNIDADE =====
+  const unidadesProcessadas = new Set();
   const registrosParaInserir = [];
   const registrosParaAtualizar = [];
   const unidadesAtualizadas = [];
@@ -753,10 +796,21 @@ async function processarUpload(file) {
   for (let chavePlanilha in unidadesEncontradas) {
     const unidade = unidadesEncontradas[chavePlanilha];
     const nomeUnidade = unidade.unidade;
+    
+    if (unidadesProcessadas.has(nomeUnidade)) {
+      console.log(`⏭️ Unidade já processada: ${nomeUnidade}`);
+      continue;
+    }
+    unidadesProcessadas.add(nomeUnidade);
+
+    console.log(`🔄 Processando: ${nomeUnidade}`);
+    console.log(`   Chave planilha: "${chavePlanilha}"`);
+    console.log(`   Razão Social: "${unidade.razao_social || 'N/A'}"`);
 
     const detalhes = {};
     let total = 0;
 
+    // Mensalidade
     if (unidade.mensalidade && unidade.mensalidade > 0) {
       total += unidade.mensalidade;
       detalhes['mensalidade'] = { 
@@ -766,6 +820,7 @@ async function processarUpload(file) {
       };
     }
 
+    // Vidas NR-1
     if (unidade.vidas && unidade.vidas > 0 && unidade.qtd_vidas && unidade.qtd_vidas > 0) {
       const valorVidas = unidade.vidas * unidade.qtd_vidas;
       total += valorVidas;
@@ -776,24 +831,69 @@ async function processarUpload(file) {
       };
     }
 
-    if (examesPorUnidade[chavePlanilha]) {
-      for (let ex of examesPorUnidade[chavePlanilha]) {
-        const preco = unidade[ex.exame] || 0;
-        if (preco === 0) continue;
-        total += preco;
-        if (!detalhes[ex.exame]) {
-          detalhes[ex.exame] = {
-            quantidade: 0,
-            precoUnitario: preco,
-            funcionarios: []
-          };
-        }
-        detalhes[ex.exame].quantidade += 1;
-        detalhes[ex.exame].funcionarios.push({
-          nome: ex.funcionario,
-          data: ex.dataExame
-        });
+    // ===== BUSCAR EXAMES (USANDO A CHAVE NORMALIZADA DA PLANILHA) =====
+    let examesDaUnidade = examesPorUnidade[chavePlanilha] || [];
+    
+    console.log(`   📋 Exames encontrados pela chave "${chavePlanilha}": ${examesDaUnidade.length}`);
+    
+    // Se não encontrou, tenta pela razão social normalizada
+    if (examesDaUnidade.length === 0 && unidade.razao_social) {
+      const razaoNorm = normalizarUnidade(unidade.razao_social);
+      console.log(`   🔍 Tentando pela razão social: "${razaoNorm}"`);
+      examesDaUnidade = examesPorUnidade[razaoNorm] || [];
+      if (examesDaUnidade.length > 0) {
+        console.log(`   ✅ Encontrado pela razão social!`);
       }
+    }
+    
+    // Se não encontrou, tenta pelo nome da unidade normalizado
+    if (examesDaUnidade.length === 0) {
+      const unidadeNorm = normalizarUnidade(unidade.unidade);
+      console.log(`   🔍 Tentando pelo nome da unidade: "${unidadeNorm}"`);
+      examesDaUnidade = examesPorUnidade[unidadeNorm] || [];
+      if (examesDaUnidade.length > 0) {
+        console.log(`   ✅ Encontrado pelo nome da unidade!`);
+      }
+    }
+    
+    // Se ainda não encontrou, faz uma busca forçada
+    if (examesDaUnidade.length === 0) {
+      console.log(`   🔍 Busca forçada em todas as chaves...`);
+      const razaoNorm = unidade.razao_social ? normalizarUnidade(unidade.razao_social) : '';
+      const unidadeNorm = normalizarUnidade(unidade.unidade);
+      
+      for (let [chave, exames] of Object.entries(examesPorUnidade)) {
+        // Verifica se a chave contém a razão social OU o nome da unidade
+        if ((razaoNorm && (chave.includes(razaoNorm) || razaoNorm.includes(chave))) ||
+            (unidadeNorm && (chave.includes(unidadeNorm) || unidadeNorm.includes(chave)))) {
+          examesDaUnidade = exames;
+          console.log(`   ✅ Encontrado na chave: "${chave}"`);
+          break;
+        }
+      }
+    }
+
+    console.log(`   📋 Total de exames encontrados: ${examesDaUnidade.length}`);
+
+    for (let ex of examesDaUnidade) {
+      const preco = unidade[ex.exame] || 0;
+      if (preco === 0) {
+        console.log(`   ⚠️ Exame "${ex.exame}" sem preço cadastrado para ${nomeUnidade}`);
+        continue;
+      }
+      total += preco;
+      if (!detalhes[ex.exame]) {
+        detalhes[ex.exame] = {
+          quantidade: 0,
+          precoUnitario: preco,
+          funcionarios: []
+        };
+      }
+      detalhes[ex.exame].quantidade += 1;
+      detalhes[ex.exame].funcionarios.push({
+        nome: ex.funcionario,
+        data: ex.dataExame
+      });
     }
 
     if (Object.keys(detalhes).length === 0) {
@@ -801,16 +901,21 @@ async function processarUpload(file) {
       continue;
     }
 
+    console.log(`   📋 Itens encontrados:`, Object.keys(detalhes));
+    console.log(`   💰 Total: R$ ${total.toFixed(2)}`);
+
+    // Data de vencimento
     const diaVencimento = unidade.dia_vencimento || 10;
     const ultimoDia = new Date(anoFaturamento, mesFaturamento, 0).getDate();
     const diaFinal = Math.min(diaVencimento, ultimoDia);
     const dataVencimento = new Date(anoFaturamento, mesFaturamento - 1, diaFinal);
     const dataVencimentoStr = dataVencimento.toISOString().split('T')[0];
 
+    // ===== VERIFICA SE EXISTE REGISTRO =====
     let registroExistente = mapaExistentes[nomeUnidade];
     
     if (registroExistente) {
-      console.log(`🔄 Atualizando unidade existente: ${nomeUnidade}`);
+      console.log(`🔄 Atualizando existente: ${nomeUnidade} (${mesFaturamento}/${anoFaturamento})`);
       
       const dadosPreservados = {
         omie_os_id: registroExistente.omie_os_id || null,
@@ -838,19 +943,47 @@ async function processarUpload(file) {
       unidadesAtualizadas.push(nomeUnidade);
       
     } else {
-      console.log(`✅ Nova unidade: ${nomeUnidade}`);
-      registrosParaInserir.push({
-        unidade: nomeUnidade,
-        mes: mesFaturamento,
-        ano: anoFaturamento,
-        valor_total: total,
-        detalhes: detalhes,
-        data_vencimento: dataVencimentoStr,
-        nota_emitida: false,
-        boleto_enviado: false,
-        pago: false
-      });
-      unidadesNovas.push(nomeUnidade);
+      console.log(`🆕 Nova unidade para ${mesFaturamento}/${anoFaturamento}: ${nomeUnidade}`);
+      
+      const { data: verificaExistente } = await supabaseClient
+        .from('faturamento')
+        .select('id')
+        .eq('unidade', nomeUnidade)
+        .eq('mes', mesFaturamento)
+        .eq('ano', anoFaturamento)
+        .maybeSingle();
+      
+      if (verificaExistente) {
+        console.log(`🔄 Registro encontrado via verificação extra: ${nomeUnidade}`);
+        registrosParaAtualizar.push({
+          id: verificaExistente.id,
+          unidade: nomeUnidade,
+          mes: mesFaturamento,
+          ano: anoFaturamento,
+          valor_total: total,
+          detalhes: detalhes,
+          data_vencimento: dataVencimentoStr,
+          omie_os_id: null,
+          omie_status: null,
+          nota_emitida: false,
+          boleto_enviado: false,
+          pago: false
+        });
+        unidadesAtualizadas.push(nomeUnidade);
+      } else {
+        registrosParaInserir.push({
+          unidade: nomeUnidade,
+          mes: mesFaturamento,
+          ano: anoFaturamento,
+          valor_total: total,
+          detalhes: detalhes,
+          data_vencimento: dataVencimentoStr,
+          nota_emitida: false,
+          boleto_enviado: false,
+          pago: false
+        });
+        unidadesNovas.push(nomeUnidade);
+      }
     }
   }
 
@@ -858,17 +991,50 @@ async function processarUpload(file) {
     throw new Error('Nenhuma unidade com itens para faturar.');
   }
 
-  // ===== INSERIR NOVOS REGISTROS =====
+  // ===== INSERIR =====
   if (registrosParaInserir.length > 0) {
     console.log(`📥 Inserindo ${registrosParaInserir.length} novos registros...`);
+    console.log('📋 NOVAS UNIDADES:', registrosParaInserir.map(r => r.unidade));
+    
     const { error: insertError } = await supabaseClient
       .from('faturamento')
       .insert(registrosParaInserir);
     
-    if (insertError) throw insertError;
+    if (insertError) {
+      if (insertError.code === '23505') {
+        console.warn('⚠️ Violação de unique constraint, tentando atualizar individualmente...');
+        for (const registro of registrosParaInserir) {
+          try {
+            const { data: existing } = await supabaseClient
+              .from('faturamento')
+              .select('id')
+              .eq('unidade', registro.unidade)
+              .eq('mes', registro.mes)
+              .eq('ano', registro.ano)
+              .maybeSingle();
+            
+            if (existing) {
+              await supabaseClient
+                .from('faturamento')
+                .update({
+                  valor_total: registro.valor_total,
+                  detalhes: registro.detalhes,
+                  data_vencimento: registro.data_vencimento
+                })
+                .eq('id', existing.id);
+              console.log(`✅ Registro atualizado: ${registro.unidade}`);
+            }
+          } catch (err) {
+            console.error(`❌ Erro ao atualizar registro ${registro.unidade}:`, err);
+          }
+        }
+      } else {
+        throw insertError;
+      }
+    }
   }
 
-  // ===== ATUALIZAR REGISTROS EXISTENTES =====
+  // ===== ATUALIZAR =====
   if (registrosParaAtualizar.length > 0) {
     console.log(`📤 Atualizando ${registrosParaAtualizar.length} registros existentes...`);
     
@@ -879,7 +1045,9 @@ async function processarUpload(file) {
         .update(dados)
         .eq('id', id);
       
-      if (updateError) throw updateError;
+      if (updateError) {
+        console.error(`❌ Erro ao atualizar ${registro.unidade}:`, updateError);
+      }
     }
   }
 
@@ -887,12 +1055,10 @@ async function processarUpload(file) {
 
   console.log('📊 RESUMO DO PROCESSAMENTO:');
   console.log(`   Mês de faturamento: ${mesFaturamento}/${anoFaturamento}`);
-  console.log(`   Total de registros: ${registrosParaInserir.length + registrosParaAtualizar.length}`);
-  console.log(`   Unidades atualizadas: ${registrosParaAtualizar.length}`);
-  console.log(`   Unidades novas: ${registrosParaInserir.length}`);
+  console.log(`   Unidades novas: ${registrosParaInserir.length} - ${unidadesNovas.join(', ')}`);
+  console.log(`   Unidades atualizadas: ${registrosParaAtualizar.length} - ${unidadesAtualizadas.join(', ')}`);
+  console.log(`   Unidades não encontradas: ${unidadesNaoEncontradas.length} - ${unidadesNaoEncontradas.join(', ')}`);
   console.log(`   Valor total: R$ ${totalGeral.toFixed(2)}`);
-  console.log(`   Unidades na planilha: ${unidadesNaPlanilha.size}`);
-  console.log(`   Unidades não encontradas: ${unidadesNaoEncontradas.length}`);
 
   return {
     totalRegistros: registrosParaInserir.length + registrosParaAtualizar.length,
@@ -910,7 +1076,34 @@ async function processarUpload(file) {
   };
 }
 
+// ========================= FORÇAR LIMPEZA DE CACHE DA UNIDADE =========================
+async function limparCacheUnidade(unidade) {
+  console.log(`🧹 Limpando cache da unidade: ${unidade}`);
+  
+  // Limpa cache do cliente
+  const cacheKey = `cliente_unidade_${unidade}`;
+  sessionStorage.removeItem(cacheKey);
+  
+  // Limpa cache de busca paginada
+  const keysToRemove = [];
+  for (let i = 0; i < sessionStorage.length; i++) {
+    const key = sessionStorage.key(i);
+    if (key && key.startsWith('busca_paginada_')) {
+      keysToRemove.push(key);
+    }
+  }
+  keysToRemove.forEach(key => sessionStorage.removeItem(key));
+  
+  // Reseta cache global
+  clientesCache = null;
+  ultimaBuscaClientes = 0;
+  
+  console.log('✅ Cache limpo com sucesso!');
+}
+
 // ========================= FUNÇÕES DE BUSCA DE CLIENTES OTIMIZADAS =========================
+// Estas funções estão no escopo GLOBAL
+
 async function buscarClientePorCnpjOmie(cnpj) {
   const cnpjLimpo = normalizarCnpj(cnpj);
   if (!cnpjLimpo || cnpjLimpo.length !== 14) {
@@ -1071,6 +1264,7 @@ async function buscarClientePaginadoRapido(cnpjLimpo) {
   return null;
 }
 
+// ========================= FUNÇÃO BUSCAR CODIGO CLIENTE PARA OS =========================
 async function buscarCodigoClienteParaOS(unidade) {
   console.log(`🔍 Buscando código do cliente para: ${unidade}`);
   
@@ -1136,6 +1330,7 @@ async function buscarCodigoClienteParaOS(unidade) {
   return codigo;
 }
 
+// ========================= FUNÇÃO BUSCAR DADOS CLIENTE OMIE =========================
 async function buscarDadosClienteOmie(unidade) {
   try {
     const { data: unidadeData, error } = await supabaseClient
@@ -1305,6 +1500,65 @@ async function exportarPrecos() {
   } catch (err) {
     mostrarAlerta('Erro ao exportar: ' + err.message, 'danger');
   }
+}
+
+// ========================= EXCLUIR UNIDADE ESPECÍFICA =========================
+async function excluirUnidadeProcessamento(id, unidade, mes, ano) {
+    const { data: registro, error: buscaError } = await supabaseClient
+        .from('faturamento')
+        .select('*')
+        .eq('id', id)
+        .single();
+    
+    if (buscaError || !registro) {
+        mostrarAlerta(`Registro não encontrado (ID: ${id}). Pode ter sido excluído anteriormente.`, 'warning');
+        const mesFiltro = parseInt(document.getElementById('filterMonth').value) || 0;
+        const anoFiltro = parseInt(document.getElementById('filterYear').value) || new Date().getFullYear();
+        const unidadeFiltro = document.getElementById('filterUnit').value.trim() || '';
+        await carregarRelatorio(mesFiltro, anoFiltro, unidadeFiltro, statusFiltroAtual);
+        return;
+    }
+    
+    console.log('📋 Registro a ser excluído:', registro);
+    
+    if (!confirm(`Deseja realmente excluir o registro de "${unidade}" (${mes}/${ano})? ID: ${id}`)) {
+        return;
+    }
+
+    try {
+        const { error } = await supabaseClient
+            .from('faturamento')
+            .delete()
+            .eq('id', id);
+
+        if (error) throw error;
+
+        const { data: verifica } = await supabaseClient
+            .from('faturamento')
+            .select('id')
+            .eq('id', id)
+            .maybeSingle();
+        
+        if (verifica) {
+            mostrarAlerta(`Erro: O registro de "${unidade}" não foi excluído.`, 'danger');
+            return;
+        }
+
+        mostrarAlerta(`✅ Registro de "${unidade}" (${mes}/${ano}) excluído com sucesso!`, 'success');
+        console.log(`✅ Registro ${id} excluído com sucesso.`);
+        
+        const mesFiltro = parseInt(document.getElementById('filterMonth').value) || 0;
+        const anoFiltro = parseInt(document.getElementById('filterYear').value) || new Date().getFullYear();
+        const unidadeFiltro = document.getElementById('filterUnit').value.trim() || '';
+        await carregarRelatorio(mesFiltro, anoFiltro, unidadeFiltro, statusFiltroAtual);
+        
+        await carregarCards(mesFiltro, anoFiltro);
+        await carregarGraficos(anoFiltro);
+        
+    } catch (err) {
+        console.error('❌ Erro ao excluir:', err);
+        mostrarAlerta(`Erro ao excluir: ${err.message}`, 'danger');
+    }
 }
 
 // ========================= CRIAR OS EM LOTE =========================
@@ -2135,53 +2389,65 @@ async function carregarRelatorio(mes = 0, ano = 0, filtroUnidade = '', status = 
       </td>
       <td class="text-center">${dataVenc}</td>
       <td class="text-center">
-        <button class="btn btn-sm btn-outline-primary btn-detalhes" 
-                data-id="${row.id}" 
-                data-unidade="${row.unidade}"
-                data-mes="${row.mes}"
-                data-ano="${row.ano}"
-                data-detalhes='${JSON.stringify(row.detalhes)}'
-                title="Ver detalhes (ID: ${row.id})">
-          <i class="fas fa-eye"></i>
-        </button>
-        ${!temOs && !osFaturada ? `
-          <button class="btn btn-sm ${osErro ? 'btn-danger' : 'btn-outline-primary'} btn-criar-os" 
+        <div class="btn-group btn-group-sm" role="group">
+          <button class="btn btn-sm btn-outline-primary btn-detalhes" 
                   data-id="${row.id}" 
                   data-unidade="${row.unidade}"
-                  data-valor="${row.valor_total}"
                   data-mes="${row.mes}"
                   data-ano="${row.ano}"
                   data-detalhes='${JSON.stringify(row.detalhes)}'
-                  data-os-id="${row.omie_os_id || ''}"
-                  data-os-status="${row.omie_status || ''}"
-                  data-os-erro="${row.omie_erro || ''}"
-                  title="${osErro ? 'Erro ao criar OS' : 'Criar OS na Etapa 50'}">
-            <i class="fas ${osErro ? 'fa-exclamation-triangle' : 'fa-file-invoice'}"></i>
-            ${osErro ? 'Erro' : 'Criar OS'}
+                  title="Ver detalhes (ID: ${row.id})">
+            <i class="fas fa-eye"></i>
           </button>
-        ` : `
-          <button class="btn btn-sm ${osFaturada ? 'btn-success' : 'btn-primary'}" disabled>
-            <i class="fas ${osFaturada ? 'fa-check-circle' : 'fa-file-invoice'}"></i>
-            ${osFaturada ? 'Faturado' : 'OS OK'}
-          </button>
-        `}
-        ${(row.omie_status === 'faturado' || row.omie_status === 'aprovado') ? `
-          <button class="btn btn-sm btn-outline-danger btn-cancelar-nfse" 
+          ${!temOs && !osFaturada ? `
+            <button class="btn btn-sm ${osErro ? 'btn-danger' : 'btn-outline-primary'} btn-criar-os" 
+                    data-id="${row.id}" 
+                    data-unidade="${row.unidade}"
+                    data-valor="${row.valor_total}"
+                    data-mes="${row.mes}"
+                    data-ano="${row.ano}"
+                    data-detalhes='${JSON.stringify(row.detalhes)}'
+                    data-os-id="${row.omie_os_id || ''}"
+                    data-os-status="${row.omie_status || ''}"
+                    data-os-erro="${row.omie_erro || ''}"
+                    title="${osErro ? 'Erro ao criar OS' : 'Criar OS na Etapa 50'}">
+              <i class="fas ${osErro ? 'fa-exclamation-triangle' : 'fa-file-invoice'}"></i>
+              ${osErro ? 'Erro' : 'Criar OS'}
+            </button>
+          ` : `
+            <button class="btn btn-sm ${osFaturada ? 'btn-success' : 'btn-primary'}" disabled>
+              <i class="fas ${osFaturada ? 'fa-check-circle' : 'fa-file-invoice'}"></i>
+              ${osFaturada ? 'Faturado' : 'OS OK'}
+            </button>
+          `}
+          ${(row.omie_status === 'faturado' || row.omie_status === 'aprovado') ? `
+            <button class="btn btn-sm btn-outline-danger btn-cancelar-nfse" 
+                    data-id="${row.id}" 
+                    data-os-id="${row.omie_os_id}"
+                    title="Cancelar NFS-e">
+              <i class="fas fa-ban"></i>
+            </button>
+          ` : ''}
+          <button class="btn btn-sm btn-outline-info btn-atualizar-status-individual" 
                   data-id="${row.id}" 
-                  data-os-id="${row.omie_os_id}"
-                  title="Cancelar NFS-e">
-            <i class="fas fa-ban"></i> Cancelar
+                  title="Atualizar status desta OS">
+            <i class="fas fa-sync"></i>
           </button>
-        ` : ''}
-        <button class="btn btn-sm btn-outline-info btn-atualizar-status-individual" 
-                data-id="${row.id}" 
-                title="Atualizar status desta OS">
-          <i class="fas fa-sync"></i>
-        </button>
+          <button class="btn btn-sm btn-outline-danger btn-excluir-unidade" 
+                  data-id="${row.id}" 
+                  data-unidade="${row.unidade}"
+                  data-mes="${row.mes}"
+                  data-ano="${row.ano}"
+                  title="Excluir esta unidade específica">
+            <i class="fas fa-trash"></i>
+          </button>
+        </div>
       </td>
     </tr>`;
   });
   tbody.innerHTML = html;
+
+  // ========================= EVENTOS DOS BOTÕES =========================
 
   document.querySelectorAll('.btn-detalhes').forEach(btn => {
     btn.addEventListener('click', function() {
@@ -2239,7 +2505,6 @@ async function carregarRelatorio(mes = 0, ano = 0, filtroUnidade = '', status = 
     });
   });
 
-  // Evento para cancelar NFS-e
   document.querySelectorAll('.btn-cancelar-nfse').forEach(btn => {
     btn.addEventListener('click', async function() {
       const id = this.dataset.id;
@@ -2268,6 +2533,70 @@ async function carregarRelatorio(mes = 0, ano = 0, filtroUnidade = '', status = 
         
       } catch (err) {
         mostrarAlerta('Erro ao cancelar: ' + err.message, 'danger');
+      }
+    });
+  });
+
+  // ========================= BOTÃO EXCLUIR UNIDADE ESPECÍFICA =========================
+  document.querySelectorAll('.btn-excluir-unidade').forEach(btn => {
+    btn.addEventListener('click', async function() {
+      const id = parseInt(this.dataset.id);
+      const unidade = this.dataset.unidade;
+      const mes = parseInt(this.dataset.mes);
+      const ano = parseInt(this.dataset.ano);
+      
+      try {
+        const { data: registro, error: buscaError } = await supabaseClient
+          .from('faturamento')
+          .select('id, unidade, mes, ano')
+          .eq('id', id)
+          .maybeSingle();
+        
+        if (buscaError || !registro) {
+          mostrarAlerta(`Registro não encontrado (ID: ${id}). Pode ter sido excluído anteriormente.`, 'warning');
+          const mesFiltro = parseInt(document.getElementById('filterMonth').value) || 0;
+          const anoFiltro = parseInt(document.getElementById('filterYear').value) || new Date().getFullYear();
+          const unidadeFiltro = document.getElementById('filterUnit').value.trim() || '';
+          await carregarRelatorio(mesFiltro, anoFiltro, unidadeFiltro, statusFiltroAtual);
+          return;
+        }
+        
+        if (!confirm(`Deseja realmente excluir o registro de "${unidade}" (${mes}/${ano})? ID: ${id}`)) {
+          return;
+        }
+        
+        const { error } = await supabaseClient
+          .from('faturamento')
+          .delete()
+          .eq('id', id);
+        
+        if (error) throw error;
+        
+        const { data: verifica } = await supabaseClient
+          .from('faturamento')
+          .select('id')
+          .eq('id', id)
+          .maybeSingle();
+        
+        if (verifica) {
+          mostrarAlerta(`Erro: O registro de "${unidade}" não foi excluído.`, 'danger');
+          return;
+        }
+        
+        mostrarAlerta(`✅ Registro de "${unidade}" (${mes}/${ano}) excluído com sucesso!`, 'success');
+        console.log(`✅ Registro ${id} excluído com sucesso.`);
+        
+        const mesFiltro = parseInt(document.getElementById('filterMonth').value) || 0;
+        const anoFiltro = parseInt(document.getElementById('filterYear').value) || new Date().getFullYear();
+        const unidadeFiltro = document.getElementById('filterUnit').value.trim() || '';
+        await carregarRelatorio(mesFiltro, anoFiltro, unidadeFiltro, statusFiltroAtual);
+        
+        await carregarCards(mesFiltro, anoFiltro);
+        await carregarGraficos(anoFiltro);
+        
+      } catch (err) {
+        console.error('❌ Erro ao excluir:', err);
+        mostrarAlerta(`Erro ao excluir: ${err.message}`, 'danger');
       }
     });
   });
@@ -2411,6 +2740,7 @@ function mostrarDetalhes(id, unidade, mes, ano, detalhes) {
   modal.show();
 }
 
+// ========================= FUNÇÃO ABRIR MODAL CRIAR OS =========================
 function abrirModalCriarOs(id, unidade, valor, mes, ano, detalhes) {
   document.getElementById('osFaturamentoId').value = id;
   document.getElementById('osCliente').value = unidade;
@@ -2446,6 +2776,7 @@ function abrirModalCriarOs(id, unidade, valor, mes, ano, detalhes) {
   confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Buscando cliente...';
   statusMessage.innerHTML = '<div class="alert alert-info"><i class="fas fa-spinner fa-spin"></i> Buscando código do cliente na OMIE...</div>';
   
+  // Usando a função global buscarCodigoClienteParaOS
   buscarCodigoClienteParaOS(unidade).then(async (codigoCliente) => {
     if (codigoCliente) {
       statusMessage.innerHTML = `<div class="alert alert-success">
@@ -2651,11 +2982,18 @@ async function salvarPreco(dados) {
   const id = dados.id;
   const payload = { ...dados };
   delete payload.id;
+  
+  // Remove apenas campos que são null, undefined ou string vazia
+  // MAS MANTÉM 0 (zero)
   Object.keys(payload).forEach(key => {
     if (payload[key] === null || payload[key] === undefined || payload[key] === '') {
       delete payload[key];
     }
+    // Não remove 0!
   });
+  
+  console.log('📤 PAYLOAD:', payload);
+  
   let result;
   if (id) {
     result = await supabaseClient
@@ -2667,9 +3005,11 @@ async function salvarPreco(dados) {
       .from('precos')
       .insert([payload]);
   }
+  
   if (result.error) {
     throw new Error(result.error.message + (result.error.details ? ' - ' + result.error.details : ''));
   }
+  
   return result;
 }
 
@@ -2693,34 +3033,51 @@ function preencherFormulario(dados) {
   document.getElementById('precoUnidade').value = dados.unidade || '';
   document.getElementById('precoRazaoSocial').value = dados.razao_social || '';
   document.getElementById('precoCnpj').value = dados.cnpj || '';
-  document.getElementById('precoExameClinico').value = dados.exame_clinico || '';
-  document.getElementById('precoMensalidade').value = dados.mensalidade || '';
-  document.getElementById('precoVidas').value = dados.vidas || '';
-  document.getElementById('precoQtdVidas').value = dados.qtd_vidas || '';
-  document.getElementById('precoAudiometria').value = dados.audiometria || '';
-  document.getElementById('precoAcuidade').value = dados.acuidade_visual || '';
-  document.getElementById('precoEcg').value = dados.eletrocardiograma || '';
-  document.getElementById('precoEeg').value = dados.eletroencefalograma || '';
-  document.getElementById('precoEspirometria').value = dados.espirometria || '';
-  document.getElementById('precoRaioX').value = dados.raio_x_torax || '';
-  document.getElementById('precoHemograma').value = dados.hemograma || '';
-  document.getElementById('precoAntiHbs').value = dados.anti_hbs || '';
-  document.getElementById('precoAntiHcv').value = dados.anti_hcv || '';
-  document.getElementById('precoAntiHbsAg').value = dados.anti_hbs_ag || '';
-  document.getElementById('precoVdrl').value = dados.vdrl || '';
-  document.getElementById('precoCoprocultura').value = dados.coprocultura || '';
-  document.getElementById('precoParasitologico').value = dados.parasitologico || '';
-  document.getElementById('precoGamaGt').value = dados.gama_gt || '';
-  document.getElementById('precoGlicose').value = dados.glicose || '';
-  document.getElementById('precoPesquisaFungos').value = dados.pesquisa_fungos || '';
-  document.getElementById('precoDinamometria').value = dados.dinamometria || '';
-  document.getElementById('precoVisitaTec').value = dados.visita_tec || '';
-  document.getElementById('precoTransporte').value = dados.transporte || '';
+  
+  // Preenche os campos, mostrando 0 se for 0
+  document.getElementById('precoExameClinico').value = dados.exame_clinico !== null && dados.exame_clinico !== undefined ? dados.exame_clinico : '';
+  document.getElementById('precoMensalidade').value = dados.mensalidade !== null && dados.mensalidade !== undefined ? dados.mensalidade : '';
+  document.getElementById('precoVidas').value = dados.vidas !== null && dados.vidas !== undefined ? dados.vidas : '';
+  document.getElementById('precoQtdVidas').value = dados.qtd_vidas || 0;
+  document.getElementById('precoAudiometria').value = dados.audiometria !== null && dados.audiometria !== undefined ? dados.audiometria : '';
+  document.getElementById('precoAcuidade').value = dados.acuidade_visual !== null && dados.acuidade_visual !== undefined ? dados.acuidade_visual : '';
+  document.getElementById('precoEcg').value = dados.eletrocardiograma !== null && dados.eletrocardiograma !== undefined ? dados.eletrocardiograma : '';
+  document.getElementById('precoEeg').value = dados.eletroencefalograma !== null && dados.eletroencefalograma !== undefined ? dados.eletroencefalograma : '';
+  document.getElementById('precoEspirometria').value = dados.espirometria !== null && dados.espirometria !== undefined ? dados.espirometria : '';
+  document.getElementById('precoRaioX').value = dados.raio_x_torax !== null && dados.raio_x_torax !== undefined ? dados.raio_x_torax : '';
+  document.getElementById('precoHemograma').value = dados.hemograma !== null && dados.hemograma !== undefined ? dados.hemograma : '';
+  document.getElementById('precoAntiHbs').value = dados.anti_hbs !== null && dados.anti_hbs !== undefined ? dados.anti_hbs : '';
+  document.getElementById('precoAntiHcv').value = dados.anti_hcv !== null && dados.anti_hcv !== undefined ? dados.anti_hcv : '';
+  document.getElementById('precoAntiHbsAg').value = dados.anti_hbs_ag !== null && dados.anti_hbs_ag !== undefined ? dados.anti_hbs_ag : '';
+  document.getElementById('precoVdrl').value = dados.vdrl !== null && dados.vdrl !== undefined ? dados.vdrl : '';
+  document.getElementById('precoCoprocultura').value = dados.coprocultura !== null && dados.coprocultura !== undefined ? dados.coprocultura : '';
+  document.getElementById('precoParasitologico').value = dados.parasitologico !== null && dados.parasitologico !== undefined ? dados.parasitologico : '';
+  document.getElementById('precoGamaGt').value = dados.gama_gt !== null && dados.gama_gt !== undefined ? dados.gama_gt : '';
+  document.getElementById('precoGlicose').value = dados.glicose !== null && dados.glicose !== undefined ? dados.glicose : '';
+  document.getElementById('precoPesquisaFungos').value = dados.pesquisa_fungos !== null && dados.pesquisa_fungos !== undefined ? dados.pesquisa_fungos : '';
+  document.getElementById('precoDinamometria').value = dados.dinamometria !== null && dados.dinamometria !== undefined ? dados.dinamometria : '';
+  document.getElementById('precoVisitaTec').value = dados.visita_tec !== null && dados.visita_tec !== undefined ? dados.visita_tec : '';
+  document.getElementById('precoTransporte').value = dados.transporte !== null && dados.transporte !== undefined ? dados.transporte : '';
   document.getElementById('precoDiaVencimento').value = dados.dia_vencimento || 10;
 }
 
 function lerFormulario() {
   const id = document.getElementById('precoId').value;
+  
+  // Função auxiliar para parsear valores numéricos
+  function parseNumero(valor) {
+    if (valor === null || valor === undefined || valor === '') return null;
+    const parsed = parseFloat(valor);
+    // Retorna null apenas se for NaN, mas mantém 0
+    return isNaN(parsed) ? null : parsed;
+  }
+  
+  function parseInteiro(valor) {
+    if (valor === null || valor === undefined || valor === '') return null;
+    const parsed = parseInt(valor);
+    return isNaN(parsed) ? null : parsed;
+  }
+  
   return {
     id: id ? parseInt(id) : null,
     grupo: document.getElementById('precoGrupo').value || null,
@@ -2728,30 +3085,30 @@ function lerFormulario() {
     unidade: document.getElementById('precoUnidade').value.trim(),
     razao_social: document.getElementById('precoRazaoSocial').value.trim() || null,
     cnpj: document.getElementById('precoCnpj').value.trim() || null,
-    exame_clinico: parseFloat(document.getElementById('precoExameClinico').value) || null,
-    mensalidade: parseFloat(document.getElementById('precoMensalidade').value) || null,
-    vidas: parseInt(document.getElementById('precoVidas').value) || null,
-    qtd_vidas: parseInt(document.getElementById('precoQtdVidas').value) || 0,
-    audiometria: parseFloat(document.getElementById('precoAudiometria').value) || null,
-    acuidade_visual: parseFloat(document.getElementById('precoAcuidade').value) || null,
-    eletrocardiograma: parseFloat(document.getElementById('precoEcg').value) || null,
-    eletroencefalograma: parseFloat(document.getElementById('precoEeg').value) || null,
-    espirometria: parseFloat(document.getElementById('precoEspirometria').value) || null,
-    raio_x_torax: parseFloat(document.getElementById('precoRaioX').value) || null,
-    hemograma: parseFloat(document.getElementById('precoHemograma').value) || null,
-    anti_hbs: parseFloat(document.getElementById('precoAntiHbs').value) || null,
-    anti_hcv: parseFloat(document.getElementById('precoAntiHcv').value) || null,
-    anti_hbs_ag: parseFloat(document.getElementById('precoAntiHbsAg').value) || null,
-    vdrl: parseFloat(document.getElementById('precoVdrl').value) || null,
-    coprocultura: parseFloat(document.getElementById('precoCoprocultura').value) || null,
-    parasitologico: parseFloat(document.getElementById('precoParasitologico').value) || null,
-    gama_gt: parseFloat(document.getElementById('precoGamaGt').value) || null,
-    glicose: parseFloat(document.getElementById('precoGlicose').value) || null,
-    pesquisa_fungos: parseFloat(document.getElementById('precoPesquisaFungos').value) || null,
-    dinamometria: parseFloat(document.getElementById('precoDinamometria').value) || null,
-    visita_tec: parseFloat(document.getElementById('precoVisitaTec').value) || null,
-    transporte: parseFloat(document.getElementById('precoTransporte').value) || null,
-    dia_vencimento: parseInt(document.getElementById('precoDiaVencimento').value) || 10,
+    exame_clinico: parseNumero(document.getElementById('precoExameClinico').value),
+    mensalidade: parseNumero(document.getElementById('precoMensalidade').value),
+    vidas: parseNumero(document.getElementById('precoVidas').value),
+    qtd_vidas: parseInteiro(document.getElementById('precoQtdVidas').value) || 0,
+    audiometria: parseNumero(document.getElementById('precoAudiometria').value),
+    acuidade_visual: parseNumero(document.getElementById('precoAcuidade').value),
+    eletrocardiograma: parseNumero(document.getElementById('precoEcg').value),
+    eletroencefalograma: parseNumero(document.getElementById('precoEeg').value),
+    espirometria: parseNumero(document.getElementById('precoEspirometria').value),
+    raio_x_torax: parseNumero(document.getElementById('precoRaioX').value),
+    hemograma: parseNumero(document.getElementById('precoHemograma').value),
+    anti_hbs: parseNumero(document.getElementById('precoAntiHbs').value),
+    anti_hcv: parseNumero(document.getElementById('precoAntiHcv').value),
+    anti_hbs_ag: parseNumero(document.getElementById('precoAntiHbsAg').value),
+    vdrl: parseNumero(document.getElementById('precoVdrl').value),
+    coprocultura: parseNumero(document.getElementById('precoCoprocultura').value),
+    parasitologico: parseNumero(document.getElementById('precoParasitologico').value),
+    gama_gt: parseNumero(document.getElementById('precoGamaGt').value),
+    glicose: parseNumero(document.getElementById('precoGlicose').value),
+    pesquisa_fungos: parseNumero(document.getElementById('precoPesquisaFungos').value),
+    dinamometria: parseNumero(document.getElementById('precoDinamometria').value),
+    visita_tec: parseNumero(document.getElementById('precoVisitaTec').value),
+    transporte: parseNumero(document.getElementById('precoTransporte').value),
+    dia_vencimento: parseInteiro(document.getElementById('precoDiaVencimento').value) || 10,
   };
 }
 
