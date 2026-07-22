@@ -1811,6 +1811,509 @@ async function consultarStatusNFSePorOS(codigoOS) {
   }
 }
 
+// ========================= VERIFICAR PAGAMENTO DE UMA OS =========================
+async function verificarPagamentoOS(idFaturamento) {
+  try {
+    const { data: registro, error } = await supabaseClient
+      .from('faturamento')
+      .select('*')
+      .eq('id', idFaturamento)
+      .single();
+    
+    if (error || !registro) {
+      mostrarAlerta('Registro não encontrado.', 'danger');
+      return;
+    }
+    
+    if (!registro.omie_os_id) {
+      mostrarAlerta('Este registro não possui OS.', 'warning');
+      return;
+    }
+    
+    console.log(`🔍 Verificando pagamento da OS ${registro.omie_os_id}`);
+    
+    const movimentos = await buscarMovimentosFinanceiros(registro.omie_os_id);
+    
+    if (!movimentos || movimentos.length === 0) {
+      mostrarAlerta('Nenhum movimento financeiro encontrado.', 'warning');
+      return;
+    }
+    
+    let encontradoPago = false;
+    for (const movimento of movimentos) {
+      const detalhes = movimento.detalhes || {};
+      const resumo = movimento.resumo || {};
+      const estaPago = resumo.cLiquidado === 'S' || detalhes.cStatus === 'PAGO';
+      
+      console.log(`   Título: ${detalhes.cNumTitulo} | Status: ${detalhes.cStatus} | Pago: ${estaPago}`);
+      
+      if (estaPago) {
+        encontradoPago = true;
+        await supabaseClient
+          .from('faturamento')
+          .update({
+            pago: true,
+            status_boleto: 'pago',
+            data_pagamento: detalhes.dDtPagamento || null,
+            valor_pago: resumo.nValPago || 0
+          })
+          .eq('id', idFaturamento);
+        
+        mostrarAlerta(`✅ Boleto PAGO! Valor: R$ ${resumo.nValPago || 0}`, 'success');
+      }
+    }
+    
+    if (!encontradoPago) {
+      mostrarAlerta('⏳ Boleto ainda não foi pago.', 'info');
+    }
+    
+    // Recarregar a tabela
+    const mes = parseInt(document.getElementById('filterMonth').value) || 0;
+    const ano = parseInt(document.getElementById('filterYear').value) || new Date().getFullYear();
+    const unidade = document.getElementById('filterUnit').value.trim() || '';
+    await carregarRelatorio(mes, ano, unidade, statusFiltroAtual);
+    
+  } catch (err) {
+    console.error('❌ Erro:', err);
+    mostrarAlerta('Erro ao verificar pagamento: ' + err.message, 'danger');
+  }
+}
+
+// ===== BUSCAR STATUS DE PAGAMENTO AUTOMATICAMENTE (VERSÃO CORRIGIDA) =====
+async function buscarStatusPagamentoAutomatico() {
+  console.log('🔄 Buscando status de pagamento automaticamente...');
+  
+  if (!confirm('Deseja buscar o status de pagamento de TODAS as OS na OMIE?')) {
+    return;
+  }
+
+  try {
+    // 1. Buscar todos os registros com OS e que não estão pagos
+    const { data: registros, error } = await supabaseClient
+      .from('faturamento')
+      .select('*')
+      .not('omie_os_id', 'is', null)
+      .eq('pago', false);
+    
+    if (error) throw error;
+    
+    if (registros.length === 0) {
+      mostrarAlerta('Nenhum registro pendente para verificar pagamento.', 'info');
+      return;
+    }
+    
+    console.log(`📋 ${registros.length} registros para verificar pagamento`);
+    mostrarAlerta(`⏳ Verificando pagamento de ${registros.length} boletos...`, 'info');
+    
+    let pagos = 0;
+    let erros = 0;
+    let naoEncontrados = 0;
+    let detalhesAtualizacao = [];
+    
+    // 2. Buscar TODOS os movimentos financeiros da OMIE
+    console.log('📤 Buscando todos os movimentos financeiros na OMIE...');
+    
+    let todosMovimentos = [];
+    let pagina = 1;
+    let totalPaginas = 1;
+    
+    while (pagina <= totalPaginas) {
+      try {
+        const payload = {
+          endpoint: 'financas/mf',
+          call: 'ListarMovimentos',
+          param: {
+            nPagina: pagina,
+            nRegPorPagina: 500
+          }
+        };
+        
+        const response = await fetchOmieProxy(payload);
+        const data = await response.json();
+        
+        if (data.fault) {
+          if (data.fault.faultstring && data.fault.faultstring.includes('REDUNDANT')) {
+            const waitTime = parseInt(data.fault.faultstring.match(/\d+/)?.[0] || 30);
+            console.log(`⏳ Aguardando ${waitTime} segundos (redundância)...`);
+            await new Promise(resolve => setTimeout(resolve, (waitTime + 5) * 1000));
+            continue;
+          }
+          console.error('❌ Erro na página', pagina, ':', data.fault.faultstring);
+          break;
+        }
+        
+        const movimentos = data.movimentos || [];
+        todosMovimentos = todosMovimentos.concat(movimentos);
+        
+        totalPaginas = data.nTotPaginas || 1;
+        pagina++;
+        
+        console.log(`📋 Página ${pagina-1}/${totalPaginas}: ${movimentos.length} movimentos`);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+      } catch (err) {
+        console.error(`❌ Erro na página ${pagina}:`, err.message);
+        pagina++;
+      }
+    }
+    
+    console.log(`📋 Total de ${todosMovimentos.length} movimentos encontrados`);
+    
+    // 3. Criar mapa de movimentos por OS
+    const mapaMovimentosPorOS = {};
+    for (const m of todosMovimentos) {
+      const detalhes = m.detalhes || {};
+      const nCodOS = detalhes.nCodOS || detalhes.cNumOS || '';
+      if (nCodOS) {
+        const key = nCodOS.toString();
+        if (!mapaMovimentosPorOS[key]) {
+          mapaMovimentosPorOS[key] = [];
+        }
+        mapaMovimentosPorOS[key].push(m);
+      }
+    }
+    
+    console.log(`📋 ${Object.keys(mapaMovimentosPorOS).length} OS com movimentos encontrados`);
+    
+    // 4. Para cada registro, verificar se há movimento pago
+    for (const registro of registros) {
+      try {
+        const osId = registro.omie_os_id;
+        console.log(`🔍 Verificando OS ${osId} - ${registro.unidade}`);
+        
+        const movimentos = mapaMovimentosPorOS[osId.toString()] || [];
+        
+        if (movimentos.length === 0) {
+          console.log(`   ⏳ Nenhum movimento encontrado para OS ${osId}`);
+          naoEncontrados++;
+          continue;
+        }
+        
+        console.log(`   📋 ${movimentos.length} movimentos encontrados`);
+        
+        // Verificar se algum movimento está pago
+        let encontradoPago = false;
+        for (const m of movimentos) {
+          const detalhes = m.detalhes || {};
+          const resumo = m.resumo || {};
+          
+          // ===== VERIFICAR STATUS DE PAGAMENTO CORRETAMENTE =====
+          const status = (detalhes.cStatus || '').toUpperCase();
+          const liquidado = (resumo.cLiquidado || '').toUpperCase();
+          
+          // Status que indicam pagamento
+          const statusPago = [
+            'RECEBIDO',
+            'LIQUIDADO',
+            'PAGO'
+          ];
+          
+          const estaPago = statusPago.includes(status) || 
+                           liquidado === 'S' ||
+                           parseFloat(resumo.nValAberto || 0) === 0;
+          
+          if (estaPago) {
+            console.log(`   ✅ BOLETO PAGO! Status: ${status} | Valor: R$ ${resumo.nValPago || 0}`);
+            encontradoPago = true;
+            
+            // Atualizar o registro
+            await supabaseClient
+              .from('faturamento')
+              .update({
+                pago: true,
+                status_boleto: 'pago',
+                data_pagamento: detalhes.dDtPagamento || new Date().toISOString().split('T')[0],
+                valor_pago: resumo.nValPago || detalhes.nValorTitulo || 0,
+                codigo_titulo: detalhes.nCodTitulo || null,
+                numero_titulo: detalhes.cNumTitulo || null
+              })
+              .eq('id', registro.id);
+            
+            pagos++;
+            detalhesAtualizacao.push(`${registro.unidade}: PAGO (${status} - R$ ${resumo.nValPago || 0})`);
+            break;
+          } else {
+            console.log(`   ⏳ Status: ${status} - NÃO PAGO`);
+          }
+        }
+        
+        if (!encontradoPago) {
+          console.log(`   ⏳ Nenhum boleto pago encontrado`);
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
+      } catch (err) {
+        console.error(`❌ Erro ao processar OS ${registro.omie_os_id}:`, err.message);
+        erros++;
+      }
+    }
+    
+    // 5. Mostrar resultado
+    let mensagem = `✅ ${pagos} boletos marcados como PAGOS!`;
+    if (naoEncontrados > 0) {
+      mensagem += `\n\n⚠️ ${naoEncontrados} OS sem movimentos encontrados.`;
+    }
+    if (detalhesAtualizacao.length > 0) {
+      mensagem += '\n\n' + detalhesAtualizacao.join('\n');
+    }
+    if (erros > 0) {
+      mensagem += `\n\n❌ ${erros} erros encontrados.`;
+    }
+    
+    mostrarAlerta(mensagem, pagos > 0 ? 'success' : 'info');
+    console.log(`📊 ${pagos} pagos, ${naoEncontrados} sem movimentos, ${erros} erros`);
+    
+    // Recarregar a tabela
+    const mes = parseInt(document.getElementById('filterMonth').value) || 0;
+    const ano = parseInt(document.getElementById('filterYear').value) || new Date().getFullYear();
+    const unidade = document.getElementById('filterUnit').value.trim() || '';
+    await carregarRelatorio(mes, ano, unidade, statusFiltroAtual);
+    
+    return { pagos, naoEncontrados, erros, detalhes: detalhesAtualizacao };
+    
+  } catch (err) {
+    console.error('❌ Erro ao buscar pagamentos:', err);
+    mostrarAlerta('Erro ao buscar pagamentos: ' + err.message, 'danger');
+    return { pagos: 0, erros: 1 };
+  }
+}
+
+// ===== BUSCAR E ATUALIZAR TODOS OS BOLETOS PAGOS POR CNPJ =====
+async function buscarEAtualizarBoletosPagos() {
+  console.log('🔄 Buscando e atualizando todos os boletos pagos por CNPJ...');
+  
+  if (!confirm('Deseja buscar e atualizar todos os boletos pagos?')) {
+    return;
+  }
+
+  try {
+    // 1. Buscar todos os registros com status FATURADO e NÃO PAGOS
+    const { data: registros, error } = await supabaseClient
+      .from('faturamento')
+      .select('*')
+      .eq('omie_status', 'faturado')
+      .eq('pago', false);
+    
+    if (error) throw error;
+    
+    if (registros.length === 0) {
+      mostrarAlerta('Nenhum registro faturado pendente para verificar.', 'info');
+      return;
+    }
+    
+    console.log(`📋 ${registros.length} registros faturados para verificar`);
+    mostrarAlerta(`⏳ Verificando ${registros.length} boletos...`, 'info');
+    
+    let pagos = 0;
+    let erros = 0;
+    let semCNPJ = 0;
+    let naoEncontrados = 0;
+    let detalhesAtualizacao = [];
+    
+    // 2. Para cada registro, buscar CNPJ e verificar pagamento
+    for (let i = 0; i < registros.length; i++) {
+      const registro = registros[i];
+      
+      try {
+        console.log(`🔍 [${i+1}/${registros.length}] ${registro.unidade}`);
+        
+        // Buscar CNPJ da unidade
+        const { data: unidade, error: errUnidade } = await supabaseClient
+          .from('precos')
+          .select('cnpj')
+          .eq('unidade', registro.unidade)
+          .single();
+        
+        if (errUnidade || !unidade || !unidade.cnpj) {
+          console.log(`   ⚠️ Sem CNPJ cadastrado`);
+          semCNPJ++;
+          continue;
+        }
+        
+        const cnpjLimpo = unidade.cnpj.replace(/\D/g, '');
+        console.log(`   CNPJ: ${cnpjLimpo}`);
+        
+        // Buscar movimentos pelo CNPJ (sem filtro de data para pegar todos)
+        const payload = {
+          endpoint: 'financas/mf',
+          call: 'ListarMovimentos',
+          param: {
+            nPagina: 1,
+            nRegPorPagina: 100,
+            cCPFCNPJCliente: cnpjLimpo
+          }
+        };
+        
+        const response = await fetchOmieProxy(payload);
+        const data = await response.json();
+        
+        if (data.fault) {
+          console.error(`   ❌ Erro na OMIE:`, data.fault.faultstring);
+          erros++;
+          continue;
+        }
+        
+        const movimentos = data.movimentos || [];
+        
+        // Filtrar movimentos pagos (RECEBIDO, LIQUIDADO, PAGO)
+        const pagosEncontrados = movimentos.filter(m => {
+          const detalhes = m.detalhes || {};
+          const status = (detalhes.cStatus || '').toUpperCase();
+          return status === 'RECEBIDO' || status === 'LIQUIDADO' || status === 'PAGO';
+        });
+        
+        if (pagosEncontrados.length === 0) {
+          console.log(`   ⏳ Nenhum boleto pago encontrado`);
+          naoEncontrados++;
+          continue;
+        }
+        
+        // Pegar o primeiro boleto pago (geralmente é o mais recente)
+        // Ordenar por data de pagamento (o mais recente primeiro)
+        pagosEncontrados.sort((a, b) => {
+          const dataA = a.detalhes?.dDtPagamento || '';
+          const dataB = b.detalhes?.dDtPagamento || '';
+          return dataB.localeCompare(dataA);
+        });
+        
+        const primeiroPago = pagosEncontrados[0];
+        const detalhes = primeiroPago.detalhes || {};
+        const resumo = primeiroPago.resumo || {};
+        
+        const valorPago = resumo.nValPago || detalhes.nValorTitulo || 0;
+        const dataPagamento = detalhes.dDtPagamento || '';
+        const status = detalhes.cStatus || 'PAGO';
+        const titulo = detalhes.cNumTitulo || '';
+        
+        console.log(`   ✅ BOLETO PAGO! Título: ${titulo} | Status: ${status} | Valor: R$ ${valorPago}`);
+        
+        // Verificar se o valor pago corresponde ao valor do registro
+        // Se não corresponder exatamente, pode ser outro boleto
+        // Vamos verificar se o valor está próximo (diferença de até R$ 10)
+        const diferenca = Math.abs(registro.valor_total - valorPago);
+        if (diferenca > 10) {
+          console.log(`   ⚠️ Valor do boleto (R$ ${valorPago}) difere do registro (R$ ${registro.valor_total})`);
+          console.log(`   🔍 Verificando outros boletos pagos...`);
+          
+          // Tentar encontrar um boleto com valor correspondente
+          let boletoCorrespondente = null;
+          for (const m of pagosEncontrados) {
+            const vPago = m.resumo?.nValPago || m.detalhes?.nValorTitulo || 0;
+            if (Math.abs(registro.valor_total - vPago) < 1) {
+              boletoCorrespondente = m;
+              break;
+            }
+          }
+          
+          if (boletoCorrespondente) {
+            const d = boletoCorrespondente.detalhes || {};
+            const r = boletoCorrespondente.resumo || {};
+            console.log(`   ✅ Encontrado boleto correspondente!`);
+            
+            // Atualizar com os dados do boleto correspondente
+            const updateData = {
+              pago: true,
+              status_boleto: 'pago',
+              valor_pago: r.nValPago || d.nValorTitulo || registro.valor_total,
+              data_pagamento: d.dDtPagamento ? 
+                d.dDtPagamento.split('/').reverse().join('-') : 
+                new Date().toISOString().split('T')[0]
+            };
+            
+            const { error: updateError } = await supabaseClient
+              .from('faturamento')
+              .update(updateData)
+              .eq('id', registro.id);
+            
+            if (updateError) {
+              console.error(`   ❌ Erro ao atualizar:`, updateError);
+              erros++;
+            } else {
+              pagos++;
+              detalhesAtualizacao.push(`${registro.unidade}: PAGO (R$ ${updateData.valor_pago})`);
+              console.log(`   ✅ Registro ${registro.id} atualizado para PAGO!`);
+            }
+          } else {
+            console.log(`   ⚠️ Nenhum boleto com valor correspondente encontrado`);
+            naoEncontrados++;
+          }
+          continue;
+        }
+        
+        // Atualizar o registro
+        const updateData = {
+          pago: true,
+          status_boleto: 'pago'
+        };
+        
+        if (valorPago > 0) {
+          updateData.valor_pago = parseFloat(valorPago);
+        }
+        
+        if (dataPagamento) {
+          const partes = dataPagamento.split('/');
+          if (partes.length === 3) {
+            updateData.data_pagamento = `${partes[2]}-${partes[1].padStart(2, '0')}-${partes[0].padStart(2, '0')}`;
+          }
+        }
+        
+        const { error: updateError } = await supabaseClient
+          .from('faturamento')
+          .update(updateData)
+          .eq('id', registro.id);
+        
+        if (updateError) {
+          console.error(`   ❌ Erro ao atualizar:`, updateError);
+          erros++;
+        } else {
+          pagos++;
+          detalhesAtualizacao.push(`${registro.unidade}: PAGO (R$ ${valorPago})`);
+          console.log(`   ✅ Registro ${registro.id} atualizado para PAGO!`);
+        }
+        
+        // Delay para não sobrecarregar a API
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
+      } catch (err) {
+        console.error(`❌ Erro ao processar ${registro.unidade}:`, err.message);
+        erros++;
+      }
+    }
+    
+    // Mostrar resultado
+    let mensagem = `✅ ${pagos} boletos marcados como PAGOS!`;
+    if (semCNPJ > 0) {
+      mensagem += `\n\n⚠️ ${semCNPJ} unidades sem CNPJ cadastrado.`;
+    }
+    if (naoEncontrados > 0) {
+      mensagem += `\n\n⏳ ${naoEncontrados} unidades sem boleto pago encontrado.`;
+    }
+    if (detalhesAtualizacao.length > 0) {
+      mensagem += '\n\n' + detalhesAtualizacao.join('\n');
+    }
+    if (erros > 0) {
+      mensagem += `\n\n❌ ${erros} erros encontrados.`;
+    }
+    
+    mostrarAlerta(mensagem, pagos > 0 ? 'success' : 'info');
+    console.log(`📊 ${pagos} pagos, ${semCNPJ} sem CNPJ, ${naoEncontrados} não encontrados, ${erros} erros`);
+    
+    // Recarregar a tabela
+    const mes = parseInt(document.getElementById('filterMonth').value) || 0;
+    const ano = parseInt(document.getElementById('filterYear').value) || new Date().getFullYear();
+    const unidade = document.getElementById('filterUnit').value.trim() || '';
+    await carregarRelatorio(mes, ano, unidade, statusFiltroAtual);
+    
+    return { pagos, semCNPJ, naoEncontrados, erros, detalhes: detalhesAtualizacao };
+    
+  } catch (err) {
+    console.error('❌ Erro ao buscar pagamentos:', err);
+    mostrarAlerta('Erro ao buscar pagamentos: ' + err.message, 'danger');
+    return { pagos: 0, erros: 1 };
+  }
+}
+
 // ========================= FORÇAR ATUALIZAÇÃO DO STATUS DA NFS-e =========================
 async function forcarAtualizarStatusNFSe() {
   console.log('🔄 FORÇANDO atualização do status da NFS-e...');
@@ -4569,6 +5072,211 @@ async function excluirOS(idFaturamento) {
   }
 }
 
+// ========================= BUSCAR MOVIMENTOS FINANCEIROS (CORRIGIDO) =========================
+async function buscarMovimentosFinanceiros(osId) {
+  try {
+    // ESTRUTURA CORRETA: usar nPagina e nRegPorPagina, não pagina
+    const payload = {
+      endpoint: 'financas/mf',
+      call: 'ListarMovimentos',
+      param: {
+        nPagina: 1,
+        nRegPorPagina: 100,
+        nCodOS: parseInt(osId)
+      }
+    };
+    
+    console.log(`📤 Buscando movimentos financeiros para OS ${osId}...`);
+    const response = await fetchOmieProxy(payload);
+    const data = await response.json();
+    
+    if (data.fault) {
+      console.error('Erro ao buscar movimentos:', data.fault.faultstring);
+      return null;
+    }
+    
+    const movimentos = data.movimentos || [];
+    console.log(`📋 ${movimentos.length} movimentos encontrados`);
+    
+    return movimentos;
+  } catch (err) {
+    console.error('❌ Erro ao buscar movimentos:', err);
+    return null;
+  }
+}
+
+// ========================= CONSULTAR STATUS DE PAGAMENTO =========================
+async function consultarStatusPagamento(codigoTitulo) {
+  try {
+    const payload = {
+      endpoint: 'financas/mf',
+      call: 'ListarMovimentos',
+      param: [{
+        pagina: 1,
+        registros_por_pagina: 100,
+        nCodTitulo: parseInt(codigoTitulo)
+      }]
+    };
+    
+    const response = await fetchOmieProxy(payload);
+    const data = await response.json();
+    
+    if (data.fault) {
+      console.error('Erro ao consultar pagamento:', data.fault.faultstring);
+      return null;
+    }
+    
+    const movimentos = data.movimentos || [];
+    if (movimentos.length === 0) return null;
+    
+    const movimento = movimentos[0];
+    const detalhes = movimento.detalhes || {};
+    const resumo = movimento.resumo || {};
+    
+    return {
+      codigoTitulo: detalhes.nCodTitulo,
+      numeroTitulo: detalhes.cNumTitulo || '',
+      status: detalhes.cStatus || '',
+      liquidado: resumo.cLiquidado || 'N',
+      valorPago: resumo.nValPago || 0,
+      valorAberto: resumo.nValAberto || 0,
+      dataVencimento: detalhes.dDtVenc || '',
+      dataPagamento: detalhes.dDtPagamento || '',
+      valorTitulo: detalhes.nValorTitulo || 0,
+      pago: resumo.cLiquidado === 'S'
+    };
+  } catch (err) {
+    console.error('❌ Erro ao consultar pagamento:', err);
+    return null;
+  }
+}
+
+// ========================= ATUALIZAR STATUS DE PAGAMENTO (CORRIGIDO) =========================
+async function atualizarStatusPagamento() {
+  console.log('🔄 Atualizando status de pagamento...');
+  
+  if (!confirm('Deseja atualizar o status de pagamento de TODAS as OS?')) {
+    return;
+  }
+
+  try {
+    // Buscar registros com OS e que não estão pagos
+    const { data: registros, error } = await supabaseClient
+      .from('faturamento')
+      .select('*')
+      .not('omie_os_id', 'is', null)
+      .eq('pago', false);
+    
+    if (error) throw error;
+    
+    if (registros.length === 0) {
+      mostrarAlerta('Nenhum registro pendente para verificar pagamento.', 'info');
+      return;
+    }
+    
+    console.log(`📋 ${registros.length} registros para verificar pagamento`);
+    mostrarAlerta(`⏳ Verificando pagamento de ${registros.length} boletos...`, 'info');
+    
+    let pagos = 0;
+    let erros = 0;
+    let detalhesAtualizacao = [];
+    
+    for (const registro of registros) {
+      try {
+        const osId = registro.omie_os_id;
+        console.log(`🔍 Verificando pagamento da OS ${osId} - ${registro.unidade}`);
+        
+        // Buscar movimentos financeiros da OS
+        const movimentos = await buscarMovimentosFinanceiros(osId);
+        
+        if (!movimentos || movimentos.length === 0) {
+          console.log(`   ⏳ Nenhum movimento encontrado para OS ${osId}`);
+          continue;
+        }
+        
+        // Para cada movimento, verificar se está pago
+        for (const movimento of movimentos) {
+          const detalhes = movimento.detalhes || {};
+          const resumo = movimento.resumo || {};
+          const codigoTitulo = detalhes.nCodTitulo;
+          
+          if (!codigoTitulo) continue;
+          
+          const status = (detalhes.cStatus || '').toUpperCase();
+          const liquidado = (resumo.cLiquidado || '').toUpperCase();
+          
+          const estaPago = status === 'RECEBIDO' || 
+                           status === 'LIQUIDADO' || 
+                           status === 'PAGO' ||
+                           liquidado === 'S' ||
+                           parseFloat(resumo.nValAberto || 0) === 0;
+          
+          if (estaPago) {
+            console.log(`   ✅ BOLETO PAGO! Status: ${status} | Valor: R$ ${resumo.nValPago || 0}`);
+            
+            const updateData = {
+              pago: true,
+              status_boleto: 'pago'
+            };
+            
+            if (detalhes.dDtPagamento) {
+              const partes = detalhes.dDtPagamento.split('/');
+              if (partes.length === 3) {
+                updateData.data_pagamento = `${partes[2]}-${partes[1].padStart(2, '0')}-${partes[0].padStart(2, '0')}`;
+              }
+            }
+            
+            if (resumo.nValPago) {
+              updateData.valor_pago = parseFloat(resumo.nValPago);
+            }
+            
+            await supabaseClient
+              .from('faturamento')
+              .update(updateData)
+              .eq('id', registro.id);
+            
+            pagos++;
+            detalhesAtualizacao.push(`${registro.unidade}: PAGO (R$ ${resumo.nValPago || 0})`);
+            break;
+          } else {
+            console.log(`   ⏳ Boleto ainda não pago - Status: ${status}`);
+          }
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
+      } catch (err) {
+        console.error(`❌ Erro ao processar OS ${registro.omie_os_id}:`, err.message);
+        erros++;
+      }
+    }
+    
+    let mensagem = `✅ ${pagos} boletos marcados como PAGOS!`;
+    if (detalhesAtualizacao.length > 0) {
+      mensagem += '\n\n' + detalhesAtualizacao.join('\n');
+    }
+    if (erros > 0) {
+      mensagem += `\n\n❌ ${erros} erros encontrados.`;
+    }
+    
+    mostrarAlerta(mensagem, pagos > 0 ? 'success' : 'info');
+    console.log(`📊 ${pagos} pagos, ${erros} erros`);
+    
+    // Recarregar a tabela
+    const mes = parseInt(document.getElementById('filterMonth').value) || 0;
+    const ano = parseInt(document.getElementById('filterYear').value) || new Date().getFullYear();
+    const unidade = document.getElementById('filterUnit').value.trim() || '';
+    await carregarRelatorio(mes, ano, unidade, statusFiltroAtual);
+    
+    return { pagos, erros, detalhes: detalhesAtualizacao };
+    
+  } catch (err) {
+    console.error('❌ Erro ao atualizar pagamento:', err);
+    mostrarAlerta('Erro ao atualizar pagamento: ' + err.message, 'danger');
+    return { pagos: 0, erros: 1 };
+  }
+}
+
 async function atualizarStatusOSIndividual(idFaturamento) {
   console.log(`🔄 Atualizando status da OS ID: ${idFaturamento}`);
   
@@ -5560,6 +6268,86 @@ document.getElementById('btnResetarOSLote').addEventListener('click', function()
   const ano = parseInt(document.getElementById('filterYear').value) || new Date().getFullYear();
   const unidade = document.getElementById('filterUnit').value.trim() || '';
   resetarOSLote(mes, ano, unidade);
+});
+
+// ========================= ATUALIZAR PAGAMENTO =========================
+document.getElementById('btnAtualizarPagamento')?.addEventListener('click', async function() {
+  const btn = this;
+  const originalText = btn.innerHTML;
+  
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verificando pagamentos...';
+  
+  try {
+    await atualizarStatusPagamento();
+  } catch (err) {
+    mostrarAlerta('Erro ao atualizar: ' + err.message, 'danger');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = originalText;
+  }
+});
+
+document.getElementById('btnBuscarPagamentos')?.addEventListener('click', async function() {
+  const btn = this;
+  const originalText = btn.innerHTML;
+  
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Buscando pagamentos...';
+  
+  try {
+    await buscarEAtualizarBoletosPagos();
+  } catch (err) {
+    mostrarAlerta('Erro ao buscar pagamentos: ' + err.message, 'danger');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = originalText;
+  }
+});
+
+// ===== BOTÃO BUSCAR PAGAMENTOS =====
+document.getElementById('btnBuscarPagamentos')?.addEventListener('click', async function() {
+  const btn = this;
+  const originalText = btn.innerHTML;
+  
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Buscando...';
+  
+  try {
+    await buscarEAtualizarBoletosPagos();
+  } catch (err) {
+    mostrarAlerta('Erro ao buscar pagamentos: ' + err.message, 'danger');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = originalText;
+  }
+});
+
+// ===== BOTÃO EXPORTAR EXCEL =====
+document.getElementById('exportExcelBtn')?.addEventListener('click', function() {
+  const table = document.getElementById('resultsTable');
+  if (!table) return;
+  
+  const ws = XLSX.utils.table_to_sheet(table);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Faturamento');
+  
+  // Ajustar largura das colunas
+  ws['!cols'] = [
+    { wch: 30 }, // Unidade
+    { wch: 15 }, // Holding
+    { wch: 15 }, // Grupo
+    { wch: 15 }, // Mês/Ano
+    { wch: 18 }, // Valor Total
+    { wch: 15 }, // Status OS
+    { wch: 15 }, // Status Pagamento
+    { wch: 15 }, // Vencimento
+    { wch: 10 }  // Ações
+  ];
+  
+  const fileName = `faturamento_${new Date().toISOString().slice(0,10)}.xlsx`;
+  XLSX.writeFile(wb, fileName);
+  mostrarAlerta(`Arquivo "${fileName}" exportado com sucesso!`, 'success');
 });
 
   // ========================= OUTROS =========================

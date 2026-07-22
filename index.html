@@ -664,140 +664,150 @@
 
 
         <!-- ====== ABA RELATÓRIO / PROCESSAMENTO ====== -->
-        <div class="tab-pane fade show active" id="relatorio" role="tabpanel">
-          <!-- Filtros -->
-          <div class="row g-3 align-items-end mb-4">
-            <div class="col-md-2">
-              <label for="filterMonth" class="form-label fw-semibold">Mês</label>
-              <select id="filterMonth" class="form-select">
-                <option value="0">Todos</option>
-                <option value="1">Janeiro</option><option value="2">Fevereiro</option>
-                <option value="3">Março</option><option value="4">Abril</option>
-                <option value="5">Maio</option><option value="6">Junho</option>
-                <option value="7">Julho</option><option value="8">Agosto</option>
-                <option value="9">Setembro</option><option value="10">Outubro</option>
-                <option value="11">Novembro</option><option value="12">Dezembro</option>
-              </select>
-            </div>
-            <div class="col-md-2">
-              <label for="filterYear" class="form-label fw-semibold">Ano</label>
-              <select id="filterYear" class="form-select"></select>
-            </div>
-            <div class="col-md-2">
-              <label for="filterHolding" class="form-label fw-semibold">Holding</label>
-              <input type="text" id="filterHolding" class="form-control" placeholder="Filtrar por holding..." list="holdingList" />
-              <datalist id="holdingList">
-                <!-- Será preenchido dinamicamente -->
-              </datalist>
-            </div>
-            <div class="col-md-2">
-              <label for="filterGrupo" class="form-label fw-semibold">Grupo</label>
-              <input type="text" id="filterGrupo" class="form-control" placeholder="Filtrar por grupo..." list="grupoList" />
-              <datalist id="grupoList">
-                <!-- Será preenchido dinamicamente -->
-              </datalist>
-            </div>
-            <div class="col-md-2">
-              <label for="filterUnit" class="form-label fw-semibold">Unidade</label>
-              <input type="text" id="filterUnit" class="form-control" placeholder="Filtrar por unidade..." />
-            </div>
-            <div class="col-md-2">
-              <div class="d-flex gap-2">
-                <button class="btn btn-primary-custom w-100" id="applyFiltersBtn"><i class="fas fa-filter me-1"></i> Aplicar</button>
-                <button class="btn btn-outline-secondary" id="clearFiltersBtn" title="Limpar filtros">
-                  <i class="fas fa-times"></i>
-                </button>
-              </div>
-            </div>
-          </div>
+<div class="tab-pane fade show active" id="relatorio" role="tabpanel">
+  
+  <!-- ===== FILTROS ===== -->
+  <div class="row g-3 align-items-end mb-4">
+    <div class="col-md-2">
+      <label for="filterMonth" class="form-label fw-semibold">Mês</label>
+      <select id="filterMonth" class="form-select">
+        <option value="0">Todos</option>
+        <option value="1">Janeiro</option><option value="2">Fevereiro</option>
+        <option value="3">Março</option><option value="4">Abril</option>
+        <option value="5">Maio</option><option value="6">Junho</option>
+        <option value="7">Julho</option><option value="8">Agosto</option>
+        <option value="9">Setembro</option><option value="10">Outubro</option>
+        <option value="11">Novembro</option><option value="12">Dezembro</option>
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label for="filterYear" class="form-label fw-semibold">Ano</label>
+      <select id="filterYear" class="form-select"></select>
+    </div>
+    <div class="col-md-2">
+      <label for="filterHolding" class="form-label fw-semibold">Holding</label>
+      <input type="text" id="filterHolding" class="form-control" placeholder="Filtrar por holding..." list="holdingList" />
+      <datalist id="holdingList"></datalist>
+    </div>
+    <div class="col-md-2">
+      <label for="filterGrupo" class="form-label fw-semibold">Grupo</label>
+      <input type="text" id="filterGrupo" class="form-control" placeholder="Filtrar por grupo..." list="grupoList" />
+      <datalist id="grupoList"></datalist>
+    </div>
+    <div class="col-md-2">
+      <label for="filterUnit" class="form-label fw-semibold">Unidade</label>
+      <input type="text" id="filterUnit" class="form-control" placeholder="Filtrar por unidade..." />
+    </div>
+    <div class="col-md-2">
+      <div class="d-flex gap-2">
+        <button class="btn btn-primary-custom w-100" id="applyFiltersBtn"><i class="fas fa-filter me-1"></i> Aplicar</button>
+        <button class="btn btn-outline-secondary" id="clearFiltersBtn" title="Limpar filtros">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+    </div>
+  </div>
 
-          <!-- Botão Faturar em Lote -->
-          <div class="row mb-4">
-            <div class="col-md-12">
-              <button class="btn btn-warning" id="btnFaturarLote">
-                <i class="fas fa-file-invoice-dollar"></i> Faturar em Lote
-              </button>
-              <button class="btn btn-primary" id="btnCriarOSLote">
-                <i class="fas fa-layer-group"></i> Criar OS em Lote
-              </button>
-                <button class="btn btn-outline-warning" id="btnResetarOSLote" title="Resetar OS em lote">
-            <i class="fas fa-undo"></i> Resetar OS em Lote
-              </button>
-              <div id="faturarLoteStatus" class="mt-2"></div>
-            </div>
-          </div>
+  <!-- ===== BOTÕES DE AÇÃO (LINHA 1) ===== -->
+  <div class="row mb-3">
+    <div class="col-md-12">
+      <div class="d-flex flex-wrap gap-2">
+        <button class="btn btn-warning" id="btnFaturarLote" title="Faturar OS em lote">
+          <i class="fas fa-file-invoice-dollar"></i> Faturar em Lote
+        </button>
+        <button class="btn btn-primary" id="btnCriarOSLote" title="Criar OS em lote">
+          <i class="fas fa-layer-group"></i> Criar OS em Lote
+        </button>
+        <button class="btn btn-outline-warning" id="btnResetarOSLote" title="Resetar OS em lote">
+          <i class="fas fa-undo"></i> Resetar OS em Lote
+        </button>
+        <button class="btn btn-outline-danger" id="btnExcluirProcessamento" title="Excluir processamento">
+          <i class="fas fa-trash"></i> Excluir Processamento
+        </button>
+      </div>
+      <div id="faturarLoteStatus" class="mt-2"></div>
+    </div>
+  </div>
 
-          
+  <!-- ===== BOTÕES DE ATUALIZAÇÃO (LINHA 2) ===== -->
+  <div class="row mb-3">
+    <div class="col-md-12">
+      <div class="d-flex flex-wrap gap-2">
+        <button class="btn btn-info" id="btnAtualizarStatusNFSe" title="Atualizar status da NFS-e">
+          <i class="fas fa-sync"></i> Atualizar Status NFS-e
+        </button>
+        <button class="btn btn-success" id="btnBuscarPagamentos" title="Buscar e atualizar boletos pagos por CNPJ">
+          <i class="fas fa-search-dollar"></i> Buscar Pagamentos
+        </button>
+      </div>
+    </div>
+  </div>
 
-          <!-- ===== BOTÕES DE FILTRO POR STATUS ===== -->
-          <div class="row mb-3">
-            <div class="col-md-12">
-              <div class="btn-group" role="group" aria-label="Filtros de status">
-                <button type="button" class="btn btn-outline-secondary active" data-status="todos">Todos</button>
-                <button type="button" class="btn btn-outline-primary" data-status="pendentes">Pendentes</button>
-                <button type="button" class="btn btn-outline-primary" data-status="criado">OS Criada</button>
-                <button type="button" class="btn btn-outline-success" data-status="faturado">Faturado</button>
-                <button type="button" class="btn btn-outline-success" data-status="pago">Pago</button>
-              </div>
-              <button class="btn btn-info ms-2" id="btnAtualizarStatusNFSe">
-              <i class="fas fa-sync me-1"></i> Atualizar Status NFS-e
-            </button>
-            </div>
-          </div>
+  <!-- ===== BOTÕES DE FILTRO POR STATUS (LINHA 3) ===== -->
+  <div class="row mb-3">
+    <div class="col-md-12">
+      <div class="btn-group" role="group" aria-label="Filtros de status">
+        <button type="button" class="btn btn-outline-secondary active" data-status="todos">Todos</button>
+        <button type="button" class="btn btn-outline-primary" data-status="pendentes">Pendentes</button>
+        <button type="button" class="btn btn-outline-primary" data-status="criado">OS Criada</button>
+        <button type="button" class="btn btn-outline-success" data-status="faturado">Faturado</button>
+        <button type="button" class="btn btn-outline-success" data-status="pago">Pago</button>
+        <button type="button" class="btn btn-outline-danger" data-status="rejeitado">Rejeitado</button>
+      </div>
+    </div>
+  </div>
 
-          <!-- Upload -->
-          <div class="row g-3 mb-4">
-            <div class="col-md-6">
-              <div class="card-modern card">
-                <div class="card-body">
-                  <h5 class="card-title"><i class="fas fa-file-upload text-success me-2"></i> Processar Exames</h5>
-                  <p class="text-muted" style="font-size:0.9rem;">Envie a planilha <strong>upload.xlsx</strong> para calcular o faturamento.</p>
-                  <div class="input-group">
-                    <input type="file" id="uploadFileInput" class="form-control" accept=".xlsx" />
-                    <button class="btn btn-soft-success" id="processUploadBtn"><i class="fas fa-calculator me-1"></i> Processar</button>
-                  </div>
-                  <span id="uploadStatus" class="d-block mt-2 fw-semibold" style="font-size:0.9rem;"></span>
-                  <div id="uploadFeedback" class="mt-2"></div>
-                </div>
-              </div>
-            </div>
+  <!-- ===== UPLOAD ===== -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-6">
+      <div class="card-modern card">
+        <div class="card-body">
+          <h5 class="card-title"><i class="fas fa-file-upload text-success me-2"></i> Processar Exames</h5>
+          <p class="text-muted" style="font-size:0.9rem;">Envie a planilha <strong>upload.xlsx</strong> para calcular o faturamento.</p>
+          <div class="input-group">
+            <input type="file" id="uploadFileInput" class="form-control" accept=".xlsx" />
+            <button class="btn btn-soft-success" id="processUploadBtn"><i class="fas fa-calculator me-1"></i> Processar</button>
           </div>
-
-          <!-- Tabela de resultados -->
-          <div class="card-modern card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-              <span><i class="fas fa-chart-line me-2 text-primary"></i> Faturamento por Unidade</span>
-              <div>
-                <button class="btn btn-soft-primary me-2" id="exportCsvBtn"><i class="fas fa-file-csv me-1"></i> CSV</button>
-                <button class="btn btn-outline-danger btn-sm" id="btnExcluirProcessamento">
-                  <i class="fas fa-trash"></i> Excluir Processamento
-                </button>
-              </div>
-            </div>
-            <div class="card-body p-0">
-              <div class="table-responsive">
-                <table class="table table-modern" id="resultsTable">
-                  <thead>
-                    <tr>
-                      <th>Unidade</th>
-                      <th>Holding</th>
-                      <th>Grupo</th>
-                      <th>Mês/Ano</th>
-                      <th class="text-end">Valor Total (R$)</th>
-                      <th class="text-center">Status OS</th>
-                      <th class="text-center">Status Pagamento</th>
-                      <th class="text-center">Vencimento</th>
-                      <th class="text-center">Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody id="resultsBody">
-                    <tr><td colspan="9" class="text-center text-muted py-4">Nenhum registro encontrado</td></tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
+          <span id="uploadStatus" class="d-block mt-2 fw-semibold" style="font-size:0.9rem;"></span>
+          <div id="uploadFeedback" class="mt-2"></div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== TABELA DE RESULTADOS ===== -->
+  <div class="card-modern card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span><i class="fas fa-chart-line me-2 text-primary"></i> Faturamento por Unidade</span>
+      <div class="d-flex gap-2">
+        <button class="btn btn-soft-primary btn-sm" id="exportCsvBtn"><i class="fas fa-file-csv me-1"></i> CSV</button>
+        <button class="btn btn-soft-success btn-sm" id="exportExcelBtn" title="Exportar para Excel"><i class="fas fa-file-excel me-1"></i> Excel</button>
+      </div>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-modern" id="resultsTable">
+          <thead>
+            <tr>
+              <th>Unidade</th>
+              <th>Holding</th>
+              <th>Grupo</th>
+              <th>Mês/Ano</th>
+              <th class="text-end">Valor Total (R$)</th>
+              <th class="text-center">Status OS</th>
+              <th class="text-center">Status Pagamento</th>
+              <th class="text-center">Vencimento</th>
+              <th class="text-center">Ações</th>
+            </tr>
+          </thead>
+          <tbody id="resultsBody">
+            <tr><td colspan="9" class="text-center text-muted py-4">Nenhum registro encontrado</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
 
         <!-- ==================== MODAL CRIAR OS EM LOTE ==================== -->
 <div class="modal fade" id="criarOSLoteModal" tabindex="-1" aria-hidden="true">
