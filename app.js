@@ -230,8 +230,49 @@ async function buscarEmailClienteOmie(codigoCliente) {
   }
 }
 
+// ========================= VERIFICAR OS DUPLICADA =========================
+async function verificarOSDuplicada(cnpj, mes, ano, unidade) {
+  console.log(`🔍 Verificando OS duplicada para: ${unidade} (${mes}/${ano})`);
+  
+  // Buscar registros de faturamento para esta unidade no mesmo mês/ano
+  const { data: registros, error } = await supabaseClient
+    .from('faturamento')
+    .select('*')
+    .eq('unidade', unidade)
+    .eq('mes', mes)
+    .eq('ano', ano)
+    .not('omie_os_id', 'is', null);
+  
+  if (error) {
+    console.error('Erro ao verificar duplicidade:', error);
+    return { duplicado: false, registro: null };
+  }
+  
+  if (registros && registros.length > 0) {
+    console.log(`⚠️ Já existe OS para ${unidade} em ${mes}/${ano}:`, registros);
+    return { duplicado: true, registro: registros[0] };
+  }
+  
+  return { duplicado: false, registro: null };
+}
+
 // ========================= CRIAR ORDEM DE SERVIÇO NA OMIE (ETAPA 50) =========================
+// ========================= CRIAR ORDEM DE SERVIÇO NA OMIE (COM VALIDAÇÃO E RESUMO) =========================
 async function criarOrdemServicoOmie(registro, codigoCliente) {
+  // ===== VALIDAÇÃO DE DUPLICIDADE =====
+  const { duplicado, registro: existing } = await verificarOSDuplicada(
+    null,
+    registro.mes,
+    registro.ano,
+    registro.unidade
+  );
+  
+  if (duplicado && existing) {
+    const mensagem = `⚠️ Já existe uma OS para "${registro.unidade}" em ${registro.mes}/${registro.ano} (OS ID: ${existing.omie_os_id}). Não é possível criar outra.`;
+    console.log(mensagem);
+    throw new Error(mensagem);
+  }
+  
   const now = new Date();
   const timestamp = now.getTime();
   const random = Math.floor(Math.random() * 10000);
@@ -241,45 +282,15 @@ async function criarOrdemServicoOmie(registro, codigoCliente) {
 
   const emailCliente = await buscarEmailClienteOmie(codigoCliente);
 
-  let descricaoCompleta = '';
+  // ===== GERAR DESCRIÇÃO (COM RESUMO SE NECESSÁRIO) =====
   const detalhes = registro.detalhes || {};
-  
-  if (detalhes.mensalidade) {
-    const mens = detalhes.mensalidade;
-    const valorMensalidade = mens.precoUnitario || 0;
-    descricaoCompleta += `MENSALIDADE: R$ ${valorMensalidade.toFixed(2)}\n`;
-  }
-  
-  if (detalhes['vidas (NR-1)']) {
-    const vidas = detalhes['vidas (NR-1)'];
-    const qtdVidas = vidas.quantidade || 0;
-    const valorVida = vidas.precoUnitario || 0;
-    const subtotalVidas = qtdVidas * valorVida;
-    descricaoCompleta += `VIDAS NR-1: ${qtdVidas} x R$ ${valorVida.toFixed(2)} = R$ ${subtotalVidas.toFixed(2)}\n`;
-  }
-  
-  for (let [exame, info] of Object.entries(detalhes)) {
-    if (exame === 'mensalidade' || exame === 'vidas (NR-1)') continue;
-    
-    if (typeof info === 'object' && info.funcionarios && info.funcionarios.length > 0) {
-      info.funcionarios.forEach(f => {
-        const nomeFunc = f.nome || 'N/A';
-        const dataExame = f.data || '—';
-        const valorUnitario = info.precoUnitario || 0;
-        descricaoCompleta += `${exame.toUpperCase()} - ${nomeFunc} - ${dataExame} - R$ ${valorUnitario.toFixed(2)}\n`;
-      });
-    } else if (typeof info === 'object' && info.quantidade !== undefined) {
-      const qtd = info.quantidade || 0;
-      const valorUnitario = info.precoUnitario || 0;
-      descricaoCompleta += `${exame.toUpperCase()} - ${qtd} unid. - R$ ${valorUnitario.toFixed(2)}\n`;
-    } else {
-      descricaoCompleta += `${exame.toUpperCase()} - ${info}\n`;
-    }
-  }
-  
-  if (!descricaoCompleta) {
-    descricaoCompleta = `Faturamento ${registro.mes}/${registro.ano} - ${registro.unidade}`;
-  }
+  const descricaoCompleta = gerarDescricaoResumida(
+    detalhes,
+    registro.mes,
+    registro.ano,
+    registro.unidade,
+    registro.valor_total
+  );
 
   // Data de vencimento compensada
   let dataVencimentoOriginal = '01/08/2026';
@@ -1264,6 +1275,224 @@ async function buscarClientePaginadoRapido(cnpjLimpo) {
   return null;
 }
 
+// ========================= FORÇAR ATUALIZAÇÃO DE STATUS DE TODAS AS OS =========================
+async function forcarAtualizarStatusTodasOS() {
+  console.log('🔄 FORÇANDO atualização de status de TODAS as OS...');
+  
+  if (!confirm('Deseja FORÇAR a atualização de status de TODAS as OS (incluindo as que já foram faturadas/rejeitadas)?')) {
+    return;
+  }
+
+  try {
+    // Buscar TODOS os registros que têm OS (exceto os que já foram cancelados/pagos)
+    const { data: registros, error } = await supabaseClient
+      .from('faturamento')
+      .select('*')
+      .not('omie_os_id', 'is', null)
+      .not('omie_status', 'in', '("cancelado","pago")');
+    
+    if (error) throw error;
+    
+    if (registros.length === 0) {
+      mostrarAlerta('Nenhuma OS encontrada para atualizar.', 'info');
+      return;
+    }
+    
+    console.log(`📋 ${registros.length} OS para verificar status`);
+    mostrarAlerta(`⏳ Verificando ${registros.length} OS...`, 'info');
+    
+    let atualizados = 0;
+    let erros = 0;
+    let detalhesAtualizacao = [];
+    
+    for (const registro of registros) {
+      try {
+        const osId = registro.omie_os_id;
+        console.log(`🔍 Verificando OS ${osId} - ${registro.unidade}`);
+        
+        // Buscar status completo da OS
+        const statusOS = await consultarStatusOSCompleto(osId);
+        
+        if (!statusOS) {
+          console.log(`   ⚠️ Não foi possível consultar status da OS ${osId}`);
+          erros++;
+          continue;
+        }
+        
+        console.log(`   Etapa: ${statusOS.etapa} | Status NFSe: ${statusOS.statusNFSe} | Descrição: ${statusOS.statusDescricao}`);
+        
+        // Determinar o novo status baseado na etapa e status da NFSe
+        let novoStatus = null;
+        let notaEmitida = false;
+        let boletoEnviado = false;
+        let notaNumero = null;
+        let notaValor = null;
+        let notaStatus = null;
+        let notaDataEmissao = null;
+        let omieErro = null;
+        
+        // Verifica rejeição
+        if (statusOS.statusNFSe === 'R' || statusOS.etapa === '80') {
+          novoStatus = 'rejeitado';
+          notaStatus = 'rejeitado';
+          omieErro = 'OS rejeitada pela OMIE';
+          console.log(`   ❌ REJEITADA!`);
+        } 
+        // Verifica cancelamento
+        else if (statusOS.statusNFSe === 'C' || statusOS.etapa === '70') {
+          novoStatus = 'cancelado';
+          notaStatus = 'cancelado';
+          console.log(`   ⛔ CANCELADA!`);
+        }
+        // Verifica faturada
+        else if (statusOS.statusNFSe === 'F' || statusOS.statusNFSe === 'A' || statusOS.etapa === '60') {
+          novoStatus = 'faturado';
+          notaEmitida = true;
+          boletoEnviado = true;
+          notaStatus = 'faturado';
+          notaNumero = statusOS.numeroNFSe || null;
+          notaValor = statusOS.valorNFSe || null;
+          notaDataEmissao = statusOS.dataEmissao || null;
+          console.log(`   ✅ FATURADA!`);
+        }
+        // Verifica se está pronta para faturar
+        else if (statusOS.etapa === '50') {
+          novoStatus = 'criado';
+          console.log(`   ⏳ PRONTA PARA FATURAR (Etapa 50)`);
+        }
+        // Outros status
+        else {
+          novoStatus = 'criado';
+          console.log(`   ⏳ Status desconhecido: ${statusOS.etapa} - mantendo como criado`);
+        }
+        
+        // Se o status mudou, atualiza
+        if (novoStatus && novoStatus !== registro.omie_status) {
+          console.log(`   🔄 Atualizando status: ${registro.omie_status} → ${novoStatus}`);
+          
+          await supabaseClient
+            .from('faturamento')
+            .update({
+              omie_status: novoStatus,
+              nota_emitida: notaEmitida,
+              boleto_enviado: boletoEnviado,
+              nota_numero: notaNumero,
+              nota_valor: notaValor,
+              nota_status: notaStatus,
+              nota_data_emissao: notaDataEmissao,
+              omie_erro: omieErro
+            })
+            .eq('id', registro.id);
+          
+          atualizados++;
+          detalhesAtualizacao.push(`${registro.unidade}: ${novoStatus} (Etapa ${statusOS.etapa})`);
+        } else {
+          console.log(`   ✅ Status já atualizado: ${registro.omie_status}`);
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
+      } catch (err) {
+        console.error(`❌ Erro ao processar OS ${registro.omie_os_id}:`, err.message);
+        erros++;
+      }
+    }
+    
+    let mensagem = `✅ ${atualizados} OS atualizadas!`;
+    if (detalhesAtualizacao.length > 0) {
+      mensagem += '\n\n' + detalhesAtualizacao.join('\n');
+    }
+    if (erros > 0) {
+      mensagem += `\n\n${erros} erros encontrados.`;
+    }
+    
+    mostrarAlerta(mensagem, atualizados > 0 ? 'success' : 'info');
+    console.log(`📊 ${atualizados} OS atualizadas, ${erros} erros`);
+    
+    // Recarregar a tabela
+    const mes = parseInt(document.getElementById('filterMonth').value) || 0;
+    const ano = parseInt(document.getElementById('filterYear').value) || new Date().getFullYear();
+    const unidade = document.getElementById('filterUnit').value.trim() || '';
+    await carregarRelatorio(mes, ano, unidade, statusFiltroAtual);
+    
+    return { atualizados, erros, detalhes: detalhesAtualizacao };
+    
+  } catch (err) {
+    console.error('❌ Erro ao forçar atualização:', err);
+    mostrarAlerta('Erro ao atualizar status: ' + err.message, 'danger');
+    return { atualizados: 0, erros: 1 };
+  }
+}
+
+// ========================= CONSULTAR STATUS COMPLETO DA OS =========================
+async function consultarStatusOSCompleto(codigoOS) {
+  try {
+    const payload = {
+      endpoint: 'servicos/os',
+      call: 'ConsultarOS',
+      param: [{ nCodOS: parseInt(codigoOS) }]
+    };
+    
+    const response = await fetchOmieProxy(payload);
+    const data = await response.json();
+    
+    if (data.fault) {
+      console.error('Erro ao consultar OS:', data.fault.faultstring);
+      return null;
+    }
+    
+    // Dados do cabeçalho
+    const cabecalho = data.Cabecalho || {};
+    const etapa = cabecalho.cEtapa || '';
+    const statusOS = cabecalho.cStatus || '';
+    
+    // Dados da NFS-e
+    const notaFiscal = data.NotaFiscal || {};
+    const statusNFSe = notaFiscal.cStatus || '';
+    const numeroNFSe = notaFiscal.nNumeroNFSe || '';
+    const valorNFSe = notaFiscal.nValorNFSe || 0;
+    const dataEmissao = notaFiscal.dEmissao || '';
+    const serieNFSe = notaFiscal.cSerieNFSe || '';
+    
+    // Mapeamento de status
+    const statusMap = {
+      'C': 'Cancelada',
+      'F': 'Faturada',
+      'A': 'Aprovada',
+      'R': 'Rejeitada',
+      'N': 'Não faturada',
+      '4': 'Cancelada'
+    };
+    
+    const etapaMap = {
+      '10': 'Rascunho',
+      '20': 'Aguardando aprovação',
+      '30': 'Aprovada',
+      '40': 'Em andamento',
+      '50': 'Pronta para faturar',
+      '60': 'Faturada',
+      '70': 'Cancelada',
+      '80': 'Rejeitada'
+    };
+    
+    return {
+      etapa: etapa,
+      etapaDescricao: etapaMap[etapa] || etapa,
+      statusOS: statusOS,
+      statusNFSe: statusNFSe,
+      statusDescricao: statusMap[statusNFSe] || 'Desconhecido',
+      numeroNFSe: numeroNFSe,
+      valorNFSe: valorNFSe,
+      dataEmissao: dataEmissao,
+      serieNFSe: serieNFSe,
+      dadosCompletos: data
+    };
+  } catch (err) {
+    console.error('❌ Erro ao consultar OS:', err);
+    return null;
+  }
+}
+
 // ========================= FUNÇÃO BUSCAR CODIGO CLIENTE PARA OS =========================
 async function buscarCodigoClienteParaOS(unidade) {
   console.log(`🔍 Buscando código do cliente para: ${unidade}`);
@@ -1499,6 +1728,301 @@ async function exportarPrecos() {
     mostrarAlerta(`Arquivo "${fileName}" exportado com sucesso!`, 'success');
   } catch (err) {
     mostrarAlerta('Erro ao exportar: ' + err.message, 'danger');
+  }
+}
+
+// ========================= CONSULTAR STATUS DA NFS-e (VIA OS) =========================
+async function consultarStatusNFSePorOS(codigoOS) {
+  try {
+    // Consultar a OS para obter os dados da NFS-e
+    const payload = {
+      endpoint: 'servicos/os',
+      call: 'ConsultarOS',
+      param: [{ nCodOS: parseInt(codigoOS) }]
+    };
+    
+    const response = await fetchOmieProxy(payload);
+    const data = await response.json();
+    
+    if (data.fault) {
+      console.error('Erro ao consultar OS:', data.fault.faultstring);
+      return null;
+    }
+    
+    // Extrair dados da NFS-e
+    const notaFiscal = data.NotaFiscal || {};
+    const statusNFSe = notaFiscal.cStatus || '';
+    const numeroNFSe = notaFiscal.nNumeroNFSe || '';
+    const valorNFSe = notaFiscal.nValorNFSe || 0;
+    const dataEmissao = notaFiscal.dEmissao || '';
+    const serieNFSe = notaFiscal.cSerieNFSe || '';
+    
+    // Verificar a etapa da OS
+    const cabecalho = data.Cabecalho || {};
+    const etapa = cabecalho.cEtapa || '';
+    const statusOS = cabecalho.cStatus || '';
+    
+    console.log(`📋 Status NFS-e: ${statusNFSe} | Etapa OS: ${etapa} | Status OS: ${statusOS}`);
+    
+    // Se a OS está na etapa 80 (Rejeitada), forçar status R
+    let statusFinal = statusNFSe;
+    if (etapa === '80') {
+      statusFinal = 'R';
+      console.log('⚠️ OS na etapa 80 - Rejeitada!');
+    }
+    
+    // Mapeamento de status
+    const statusMap = {
+      'C': 'Cancelada',
+      'F': 'Faturada',
+      'N': 'Não faturada',
+      'R': 'Rejeitada',
+      'A': 'Aprovada',
+      '4': 'Cancelada'
+    };
+    
+    const etapaMap = {
+      '10': 'Rascunho',
+      '20': 'Aguardando aprovação',
+      '30': 'Aprovada',
+      '40': 'Em andamento',
+      '50': 'Pronta para faturar',
+      '60': 'Faturada',
+      '70': 'Cancelada',
+      '80': 'Rejeitada'
+    };
+    
+    return {
+      numero: numeroNFSe,
+      status: statusFinal,
+      valor: valorNFSe,
+      serie: serieNFSe,
+      dataEmissao: dataEmissao,
+      etapa: etapa,
+      etapaDescricao: etapaMap[etapa] || etapa,
+      statusOS: statusOS,
+      statusDescricao: statusMap[statusFinal] || 'Desconhecido',
+      dadosCompletos: data
+    };
+    
+  } catch (err) {
+    console.error('❌ Erro ao consultar NFS-e:', err);
+    return null;
+  }
+}
+
+// ========================= FORÇAR ATUALIZAÇÃO DO STATUS DA NFS-e =========================
+async function forcarAtualizarStatusNFSe() {
+  console.log('🔄 FORÇANDO atualização do status da NFS-e...');
+  
+  if (!confirm('Deseja FORÇAR a atualização do status da NFS-e de TODAS as OS?')) {
+    return;
+  }
+
+  try {
+    // Buscar TODOS os registros que têm OS
+    const { data: registros, error } = await supabaseClient
+      .from('faturamento')
+      .select('*')
+      .not('omie_os_id', 'is', null);
+    
+    if (error) throw error;
+    
+    if (registros.length === 0) {
+      mostrarAlerta('Nenhuma OS encontrada para verificar.', 'info');
+      return;
+    }
+    
+    console.log(`📋 ${registros.length} OS para verificar status da NFS-e`);
+    mostrarAlerta(`⏳ Verificando ${registros.length} NFS-e...`, 'info');
+    
+    let atualizados = 0;
+    let erros = 0;
+    let detalhesAtualizacao = [];
+    let rejeitados = 0;
+    let cancelados = 0;
+    let faturados = 0;
+    
+    for (const registro of registros) {
+      try {
+        const osId = registro.omie_os_id;
+        console.log(`🔍 Verificando NFS-e da OS ${osId} - ${registro.unidade}`);
+        
+        // Buscar status da NFS-e via OS
+        const nfseStatus = await consultarStatusNFSePorOS(osId);
+        
+        if (!nfseStatus) {
+          console.log(`   ⚠️ Não foi possível consultar status da OS ${osId}`);
+          erros++;
+          continue;
+        }
+        
+        console.log(`   NFS-e: ${nfseStatus.numero || 'N/A'} | Status: ${nfseStatus.status} - ${nfseStatus.statusDescricao} | Etapa: ${nfseStatus.etapa || 'N/A'}`);
+        
+        // Determinar o status baseado no status da NFS-e e etapa da OS
+        let novoStatus = null;
+        let notaEmitida = false;
+        let boletoEnviado = false;
+        let notaNumero = nfseStatus.numero || null;
+        let notaValor = nfseStatus.valor || null;
+        let notaStatus = null;
+        let notaDataEmissao = nfseStatus.dataEmissao || null;
+        let omieErro = null;
+        
+        // ===== PRIORIDADE 1: Verificar etapa da OS (mais confiável) =====
+        const etapa = nfseStatus.etapa || '';
+        
+        // Etapa 80 = Rejeitada
+        if (etapa === '80') {
+          novoStatus = 'rejeitado';
+          notaStatus = 'rejeitado';
+          notaEmitida = false;
+          boletoEnviado = false;
+          omieErro = 'OS rejeitada pela OMIE (Etapa 80)';
+          rejeitados++;
+          console.log(`   ❌ OS REJEITADA! (Etapa 80)`);
+        }
+        // Etapa 70 = Cancelada
+        else if (etapa === '70') {
+          novoStatus = 'cancelado';
+          notaStatus = 'cancelado';
+          notaEmitida = false;
+          boletoEnviado = false;
+          omieErro = 'OS cancelada na OMIE (Etapa 70)';
+          cancelados++;
+          console.log(`   ⛔ OS CANCELADA! (Etapa 70)`);
+        }
+        // Etapa 60 = Faturada
+        else if (etapa === '60') {
+          novoStatus = 'faturado';
+          notaStatus = 'faturado';
+          notaEmitida = true;
+          boletoEnviado = true;
+          faturados++;
+          console.log(`   ✅ OS FATURADA! (Etapa 60)`);
+        }
+        // ===== PRIORIDADE 2: Verificar status da NFS-e =====
+        else {
+          switch (nfseStatus.status) {
+            case 'R': // Rejeitada
+              novoStatus = 'rejeitado';
+              notaStatus = 'rejeitado';
+              notaEmitida = false;
+              boletoEnviado = false;
+              omieErro = 'NFS-e rejeitada pela OMIE';
+              rejeitados++;
+              console.log(`   ❌ NFS-e REJEITADA!`);
+              break;
+            case 'C': // Cancelada
+            case '4': // Cancelada
+              novoStatus = 'cancelado';
+              notaStatus = 'cancelado';
+              notaEmitida = false;
+              boletoEnviado = false;
+              omieErro = 'NFS-e cancelada na OMIE';
+              cancelados++;
+              console.log(`   ⛔ NFS-e CANCELADA!`);
+              break;
+            case 'F': // Faturada
+            case 'A': // Aprovada
+              novoStatus = 'faturado';
+              notaStatus = 'faturado';
+              notaEmitida = true;
+              boletoEnviado = true;
+              faturados++;
+              console.log(`   ✅ NFS-e FATURADA!`);
+              break;
+            case 'N': // Não faturada
+            default:
+              // Verifica se a OS está na etapa 50 (pronta para faturar)
+              if (etapa === '50') {
+                novoStatus = 'criado';
+                notaEmitida = false;
+                boletoEnviado = false;
+                notaStatus = 'nao_faturada';
+                console.log(`   ⏳ OS pronta para faturar (Etapa 50)`);
+              } else {
+                novoStatus = 'criado';
+                notaEmitida = false;
+                boletoEnviado = false;
+                notaStatus = 'nao_faturada';
+                console.log(`   ⏳ Status desconhecido: ${nfseStatus.status} - mantendo como criado`);
+              }
+              break;
+          }
+        }
+        
+        // Se o status mudou, atualiza
+        if (novoStatus && novoStatus !== registro.omie_status) {
+          console.log(`   🔄 Atualizando status: ${registro.omie_status} → ${novoStatus}`);
+          
+          await supabaseClient
+            .from('faturamento')
+            .update({
+              omie_status: novoStatus,
+              nota_emitida: notaEmitida,
+              boleto_enviado: boletoEnviado,
+              nota_numero: notaNumero,
+              nota_valor: notaValor,
+              nota_status: notaStatus,
+              nota_data_emissao: notaDataEmissao,
+              omie_erro: omieErro
+            })
+            .eq('id', registro.id);
+          
+          atualizados++;
+          detalhesAtualizacao.push(`${registro.unidade}: ${novoStatus} (NFS-e ${notaNumero || 'N/A'})`);
+        } else {
+          console.log(`   ✅ Status já está correto: ${registro.omie_status}`);
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
+      } catch (err) {
+        console.error(`❌ Erro ao processar OS ${registro.omie_os_id}:`, err.message);
+        erros++;
+      }
+    }
+    
+    // Montar mensagem final
+    let mensagem = '';
+    if (atualizados > 0) {
+      mensagem += `✅ ${atualizados} NFS-e atualizadas!`;
+    } else {
+      mensagem += `ℹ️ Nenhuma NFS-e precisou ser atualizada.`;
+    }
+    
+    if (rejeitados > 0) {
+      mensagem += `\n\n⚠️ ${rejeitados} NFS-e REJEITADAS! Verifique os detalhes.`;
+    }
+    if (cancelados > 0) {
+      mensagem += `\n\n⛔ ${cancelados} NFS-e CANCELADAS!`;
+    }
+    if (faturados > 0) {
+      mensagem += `\n\n✅ ${faturados} NFS-e FATURADAS!`;
+    }
+    if (detalhesAtualizacao.length > 0) {
+      mensagem += '\n\n' + detalhesAtualizacao.join('\n');
+    }
+    if (erros > 0) {
+      mensagem += `\n\n❌ ${erros} erros encontrados.`;
+    }
+    
+    mostrarAlerta(mensagem, (atualizados > 0 || rejeitados > 0) ? 'success' : 'info');
+    console.log(`📊 ${atualizados} atualizadas, ${rejeitados} rejeitadas, ${cancelados} canceladas, ${faturados} faturadas, ${erros} erros`);
+    
+    // Recarregar a tabela
+    const mes = parseInt(document.getElementById('filterMonth').value) || 0;
+    const ano = parseInt(document.getElementById('filterYear').value) || new Date().getFullYear();
+    const unidade = document.getElementById('filterUnit').value.trim() || '';
+    await carregarRelatorio(mes, ano, unidade, statusFiltroAtual);
+    
+    return { atualizados, erros, rejeitados, cancelados, faturados, detalhes: detalhesAtualizacao };
+    
+  } catch (err) {
+    console.error('❌ Erro ao forçar atualização:', err);
+    mostrarAlerta('Erro ao atualizar status: ' + err.message, 'danger');
+    return { atualizados: 0, erros: 1 };
   }
 }
 
@@ -1918,6 +2442,83 @@ async function tentarNovamenteBuscarCliente(registroId) {
   }
 }
 
+// ========================= RESETAR OS =========================
+async function resetarOS(idFaturamento) {
+  if (!confirm(`Deseja resetar a OS do registro ${idFaturamento}? Isso vai permitir que você crie uma nova OS.`)) {
+    return;
+  }
+
+  try {
+    // 1. Buscar o registro
+    const { data: registro, error: buscaError } = await supabaseClient
+      .from('faturamento')
+      .select('*')
+      .eq('id', idFaturamento)
+      .single();
+
+    if (buscaError || !registro) {
+      mostrarAlerta('Registro não encontrado.', 'danger');
+      return;
+    }
+
+    console.log('📋 Registro encontrado:', registro);
+
+    // 2. Verifica se tem OS para cancelar na OMIE
+    if (registro.omie_os_id) {
+      const osId = registro.omie_os_id;
+      
+      // Pergunta se quer cancelar na OMIE também
+      if (confirm(`Deseja cancelar a OS ${osId} na OMIE também?`)) {
+        try {
+          const result = await cancelarNFSe(osId, '');
+          if (result.success) {
+            mostrarAlerta(`✅ OS ${osId} cancelada na OMIE!`, 'success');
+          } else if (result.jaCancelada) {
+            mostrarAlerta(`ℹ️ OS ${osId} já estava cancelada.`, 'info');
+          } else {
+            mostrarAlerta(`⚠️ Não foi possível cancelar: ${result.message}`, 'warning');
+          }
+        } catch (err) {
+          console.error('Erro ao cancelar OS:', err);
+          mostrarAlerta(`Erro ao cancelar OS: ${err.message}`, 'warning');
+        }
+      }
+    }
+
+    // 3. Resetar os campos no banco
+    const { error: updateError } = await supabaseClient
+      .from('faturamento')
+      .update({
+        omie_os_id: null,
+        omie_status: null,
+        omie_erro: null,
+        nota_emitida: false,
+        boleto_enviado: false,
+        nota_numero: null,
+        nota_status: null,
+        nota_data_emissao: null,
+        nota_valor: null
+      })
+      .eq('id', idFaturamento);
+
+    if (updateError) {
+      throw updateError;
+    }
+
+    mostrarAlerta(`✅ OS do registro ${idFaturamento} resetada com sucesso!`, 'success');
+    
+    // 4. Recarregar a tabela
+    const mes = parseInt(document.getElementById('filterMonth').value) || 0;
+    const ano = parseInt(document.getElementById('filterYear').value) || new Date().getFullYear();
+    const unidade = document.getElementById('filterUnit').value.trim() || '';
+    await carregarRelatorio(mes, ano, unidade, statusFiltroAtual);
+
+  } catch (err) {
+    console.error('❌ Erro ao resetar OS:', err);
+    mostrarAlerta(`Erro ao resetar OS: ${err.message}`, 'danger');
+  }
+}
+
 function gerarResumoItens(detalhes) {
   if (!detalhes || Object.keys(detalhes).length === 0) {
     return '⚠️ Nenhum item';
@@ -1972,6 +2573,57 @@ function gerarResumoItens(detalhes) {
   }
   
   return itens.length > 0 ? itens.join(' | ') : '⚠️ Nenhum item';
+}
+
+// ========================= CONSULTAR STATUS DA NFS-e PELO NÚMERO =========================
+async function consultarStatusNFSePorNumero(numeroNFSe) {
+  if (!numeroNFSe) return null;
+  
+  try {
+    const payload = {
+      endpoint: 'servicos/nfse',
+      call: 'ListarNFSEs',
+      param: [{
+        pagina: 1,
+        registros_por_pagina: 100
+      }]
+    };
+    
+    const response = await fetchOmieProxy(payload);
+    const data = await response.json();
+    
+    if (data.fault) {
+      console.error('Erro ao consultar NFS-e:', data.fault.faultstring);
+      return null;
+    }
+    
+    const nfses = data.nfseEncontradas || [];
+    
+    for (const nfse of nfses) {
+      const cabecalho = nfse.Cabecalho || {};
+      if (cabecalho.nNumeroNFSe && cabecalho.nNumeroNFSe.toString() === numeroNFSe.toString()) {
+        return {
+          numero: cabecalho.nNumeroNFSe,
+          status: cabecalho.cStatusNFSe || 'N',
+          valor: cabecalho.nValorNFSe || 0,
+          serie: cabecalho.cSerieNFSe || '',
+          dataEmissao: cabecalho.dEmissao || '',
+          statusDescricao: {
+            'C': 'Cancelada',
+            'F': 'Faturada',
+            'N': 'Não faturada',
+            'R': 'Rejeitada',
+            'A': 'Aprovada'
+          }[cabecalho.cStatusNFSe] || 'Desconhecido'
+        };
+      }
+    }
+    
+    return null;
+  } catch (err) {
+    console.error('❌ Erro ao consultar NFS-e:', err);
+    return null;
+  }
 }
 
 function gerarDescricaoOS(registro) {
@@ -2119,7 +2771,49 @@ async function criarTodasOSLote() {
     return;
   }
   
-  if (!confirm(`Deseja criar ${registrosParaCriar.length} OS?`)) {
+  // ===== VALIDAÇÃO DE DUPLICIDADE EM LOTE =====
+  const registrosComDuplicata = [];
+  const registrosValidos = [];
+  
+  for (const reg of registrosParaCriar) {
+    const { duplicado, registro: existing } = await verificarOSDuplicada(
+      null,
+      reg.mes,
+      reg.ano,
+      reg.unidade
+    );
+    
+    if (duplicado && existing) {
+      registrosComDuplicata.push({
+        unidade: reg.unidade,
+        mes: reg.mes,
+        ano: reg.ano,
+        osId: existing.omie_os_id
+      });
+    } else {
+      registrosValidos.push(reg);
+    }
+  }
+  
+  if (registrosComDuplicata.length > 0) {
+    let msg = `⚠️ ${registrosComDuplicata.length} unidade(s) já possuem OS para este mês/ano:\n\n`;
+    registrosComDuplicata.forEach(r => {
+      msg += `   - ${r.unidade} (${r.mes}/${r.ano}) - OS ID: ${r.osId}\n`;
+    });
+    msg += `\nDeseja continuar criando as ${registrosValidos.length} OS restantes?`;
+    
+    if (!confirm(msg)) {
+      mostrarAlerta('Operação cancelada.', 'info');
+      return;
+    }
+  }
+  
+  if (registrosValidos.length === 0) {
+    mostrarAlerta('Nenhuma OS nova para criar. Todas já possuem OS.', 'warning');
+    return;
+  }
+  
+  if (!confirm(`Deseja criar ${registrosValidos.length} OS?`)) {
     return;
   }
   
@@ -2130,17 +2824,17 @@ async function criarTodasOSLote() {
   let criados = 0;
   let erros = 0;
   
-  for (let i = 0; i < registrosParaCriar.length; i++) {
-    const registro = registrosParaCriar[i];
+  for (let i = 0; i < registrosValidos.length; i++) {
+    const registro = registrosValidos[i];
     const status = loteStatus[registro.unidade];
     const codigoCliente = status.codigoCliente;
     
-    const percentual = Math.round(((i + 1) / registrosParaCriar.length) * 100);
+    const percentual = Math.round(((i + 1) / registrosValidos.length) * 100);
     atualizarProgressoLote(percentual);
     
     statusGeral.innerHTML = `
       <i class="fas fa-spinner fa-spin"></i> 
-      Criando OS ${i + 1}/${registrosParaCriar.length}: ${registro.unidade}...
+      Criando OS ${i + 1}/${registrosValidos.length}: ${registro.unidade}...
     `;
     
     try {
@@ -2190,18 +2884,23 @@ async function criarTodasOSLote() {
   
   progressBar.style.display = 'none';
   
+  let msgFinal = '';
   if (erros === 0) {
+    msgFinal = `✅ ${criados} OS criadas com sucesso!`;
+    if (registrosComDuplicata.length > 0) {
+      msgFinal += `\n\n⚠️ ${registrosComDuplicata.length} unidade(s) ignoradas por já possuírem OS.`;
+    }
     statusGeral.className = 'alert alert-success';
-    statusGeral.innerHTML = `<i class="fas fa-check-circle"></i> <strong>${criados} OS criadas com sucesso!</strong>`;
-    mostrarAlerta(`${criados} OS criadas com sucesso!`, 'success');
+    statusGeral.innerHTML = msgFinal.replace(/\n/g, '<br>');
+    mostrarAlerta(msgFinal, 'success');
   } else {
+    msgFinal = `⚠️ ${criados} criadas, ${erros} erros`;
+    if (registrosComDuplicata.length > 0) {
+      msgFinal += `\n\n⚠️ ${registrosComDuplicata.length} unidade(s) ignoradas por já possuírem OS.`;
+    }
     statusGeral.className = 'alert alert-warning';
-    statusGeral.innerHTML = `
-      <i class="fas fa-exclamation-triangle"></i> 
-      <strong>${criados} criadas, ${erros} erros</strong>
-      <br><small>Verifique os detalhes nas janelas.</small>
-    `;
-    mostrarAlerta(`${criados} OS criadas, ${erros} erros.`, 'warning');
+    statusGeral.innerHTML = msgFinal.replace(/\n/g, '<br>');
+    mostrarAlerta(msgFinal, 'warning');
   }
   
   btnCriar.disabled = true;
@@ -2215,6 +2914,257 @@ async function criarTodasOSLote() {
   }, 2000);
 }
 
+// ========================= GERAR DESCRIÇÃO RESUMIDA =========================
+function gerarDescricaoResumida(detalhes, mes, ano, unidade, valorTotal) {
+  let descricao = '';
+  let itens = [];
+  
+  // 1. Mensalidade
+  if (detalhes.mensalidade) {
+    const mens = detalhes.mensalidade;
+    const valor = mens.precoUnitario || 0;
+    itens.push(`MENSALIDADE: R$ ${valor.toFixed(2)}`);
+  }
+  
+  // 2. Vidas NR-1
+  if (detalhes['vidas (NR-1)']) {
+    const vidas = detalhes['vidas (NR-1)'];
+    const qtd = vidas.quantidade || 0;
+    const valor = vidas.precoUnitario || 0;
+    itens.push(`VIDAS NR-1: ${qtd} x R$ ${valor.toFixed(2)} = R$ ${(qtd * valor).toFixed(2)}`);
+  }
+  
+  // 3. Exames
+  const nomesExames = {
+    'exame_clinico': 'EXAME CLINICO',
+    'audiometria': 'AUDIOMETRIA',
+    'acuidade_visual': 'ACUIDADE VISUAL',
+    'eletrocardiograma': 'ECG',
+    'eletroencefalograma': 'EEG',
+    'espirometria': 'ESPIROMETRIA',
+    'raio_x_torax': 'RAIO X TORAX',
+    'hemograma': 'HEMOGRAMA',
+    'anti_hbs': 'ANTI HBS',
+    'anti_hcv': 'ANTI HCV',
+    'anti_hbs_ag': 'ANTI HBS AG',
+    'vdrl': 'VDRL',
+    'coprocultura': 'COPROCULTURA',
+    'parasitologico': 'PARASITOLOGICO',
+    'gama_gt': 'GAMA GT',
+    'glicose': 'GLICOSE',
+    'pesquisa_fungos': 'PESQUISA FUNGOS',
+    'dinamometria': 'DINAMOMETRIA',
+    'visita_tec': 'VISITA TECNICA',
+    'transporte': 'TRANSPORTE'
+  };
+  
+  const exames = ['exame_clinico', 'audiometria', 'acuidade_visual', 'eletrocardiograma', 
+                  'eletroencefalograma', 'espirometria', 'raio_x_torax', 'hemograma',
+                  'anti_hbs', 'anti_hcv', 'anti_hbs_ag', 'vdrl', 'coprocultura',
+                  'parasitologico', 'gama_gt', 'glicose', 'pesquisa_fungos', 
+                  'dinamometria', 'visita_tec', 'transporte'];
+  
+  for (const exame of exames) {
+    if (detalhes[exame]) {
+      const info = detalhes[exame];
+      const qtd = info.quantidade || 0;
+      const valor = info.precoUnitario || 0;
+      const subtotal = qtd * valor;
+      if (qtd > 0 && valor > 0) {
+        const nome = nomesExames[exame] || exame.toUpperCase();
+        itens.push(`${nome} - ${qtd} x ${valor} = R$${subtotal.toFixed(2)}`);
+      }
+    }
+  }
+  
+  // Monta a descrição
+  if (itens.length === 0) {
+    descricao = `Faturamento ${mes}/${ano} - ${unidade}`;
+  } else {
+    descricao = itens.join('\n');
+  }
+  
+  // Se ultrapassar 120 caracteres, resume
+  if (descricao.length > 120) {
+    console.log(`📝 Descrição original: ${descricao.length} caracteres`);
+    
+    // Tenta um resumo mais compacto
+    let resumo = '';
+    let totalExames = 0;
+    let totalValor = 0;
+    let temMensalidade = false;
+    let temVidas = false;
+    let qtdVidas = 0;
+    let valorVidas = 0;
+    
+    // Extrai informações principais
+    if (detalhes.mensalidade) {
+      temMensalidade = true;
+      totalValor += detalhes.mensalidade.precoUnitario || 0;
+    }
+    
+    if (detalhes['vidas (NR-1)']) {
+      temVidas = true;
+      qtdVidas = detalhes['vidas (NR-1)'].quantidade || 0;
+      valorVidas = detalhes['vidas (NR-1)'].precoUnitario || 0;
+      totalValor += qtdVidas * valorVidas;
+    }
+    
+    // Conta total de exames
+    for (const exame of exames) {
+      if (detalhes[exame]) {
+        const qtd = detalhes[exame].quantidade || 0;
+        totalExames += qtd;
+        totalValor += qtd * (detalhes[exame].precoUnitario || 0);
+      }
+    }
+    
+    // Monta resumo compacto
+    let partes = [];
+    if (temMensalidade) {
+      partes.push(`Mensalidade R$ ${(detalhes.mensalidade.precoUnitario || 0).toFixed(2)}`);
+    }
+    if (temVidas) {
+      partes.push(`${qtdVidas} vidas R$ ${(qtdVidas * valorVidas).toFixed(2)}`);
+    }
+    if (totalExames > 0) {
+      partes.push(`${totalExames} exames`);
+    }
+    
+    // Monta a descrição resumida
+    if (partes.length > 0) {
+      resumo = `FAT ${mes}/${ano}: ${partes.join(' | ')}. Total: R$ ${totalValor.toFixed(2)}`;
+    } else {
+      resumo = `Faturamento ${mes}/${ano} - ${unidade}`;
+    }
+    
+    // Se ainda estiver muito longo, encurta mais
+    if (resumo.length > 120) {
+      resumo = `FAT ${mes}/${ano}: ${partes.slice(0, 3).join(' | ')}. Total: R$ ${totalValor.toFixed(2)}`;
+    }
+    
+    // Se ainda estiver muito longo, corta
+    if (resumo.length > 120) {
+      resumo = resumo.substring(0, 117) + '...';
+    }
+    
+    console.log(`📝 Descrição resumida: ${resumo.length} caracteres`);
+    console.log(`   ${resumo}`);
+    
+    return resumo;
+  }
+  
+  return descricao;
+}
+
+// ========================= CONSULTAR STATUS DA NFS-e COM DETALHES =========================
+async function consultarStatusNFSe(numeroNFSe) {
+  try {
+    const payload = {
+      endpoint: 'servicos/nfse',
+      call: 'ListarNFSEs',
+      param: [{
+        pagina: 1,
+        registros_por_pagina: 100
+      }]
+    };
+    
+    const response = await fetchOmieProxy(payload);
+    const data = await response.json();
+    
+    if (data.fault) {
+      console.error('Erro ao consultar NFS-e:', data.fault.faultstring);
+      return null;
+    }
+    
+    const nfses = data.nfseEncontradas || [];
+    
+    // Busca a NFS-e pelo número
+    for (const nfse of nfses) {
+      const cabecalho = nfse.Cabecalho || {};
+      if (cabecalho.nNumeroNFSe && cabecalho.nNumeroNFSe.toString() === numeroNFSe.toString()) {
+        return {
+          numero: cabecalho.nNumeroNFSe,
+          status: cabecalho.cStatusNFSe || 'N',
+          valor: cabecalho.nValorNFSe || 0,
+          serie: cabecalho.cSerieNFSe || '',
+          dataEmissao: cabecalho.dEmissao || '',
+          statusDescricao: {
+            'C': 'Cancelada',
+            'F': 'Faturada',
+            'N': 'Não faturada',
+            'R': 'Rejeitada'
+          }[cabecalho.cStatusNFSe] || 'Desconhecido'
+        };
+      }
+    }
+    
+    return null;
+  } catch (err) {
+    console.error('❌ Erro ao consultar NFS-e:', err);
+    return null;
+  }
+}
+
+// ========================= CONSULTAR STATUS DA OS =========================
+async function consultarStatusOS(codigoOS) {
+  try {
+    const payload = {
+      endpoint: 'servicos/os',
+      call: 'ConsultarOS',
+      param: [{ nCodOS: parseInt(codigoOS) }]
+    };
+    
+    const response = await fetchOmieProxy(payload);
+    const data = await response.json();
+    
+    if (data.fault) {
+      console.error('Erro ao consultar OS:', data.fault.faultstring);
+      return null;
+    }
+    
+    // Verificar se há informações de NFS-e na OS
+    const notaFiscal = data.NotaFiscal || {};
+    const statusNFSe = notaFiscal.cStatus || '';
+    const numeroNFSe = notaFiscal.nNumeroNFSe || '';
+    const valorNFSe = notaFiscal.nValorNFSe || 0;
+    
+    // Verificar também o status da OS
+    const cabecalho = data.Cabecalho || {};
+    const etapa = cabecalho.cEtapa || '';
+    const statusOS = cabecalho.cStatus || '';
+    
+    return {
+      etapa: etapa,
+      statusOS: statusOS,
+      statusNFSe: statusNFSe,
+      numeroNFSe: numeroNFSe,
+      valorNFSe: valorNFSe,
+      statusDescricao: {
+        'C': 'Cancelada',
+        'F': 'Faturada',
+        'N': 'Não faturada',
+        'R': 'Rejeitada',
+        '4': 'Cancelada'
+      }[statusNFSe] || 'Desconhecido',
+      etapaDescricao: {
+        '10': 'Rascunho',
+        '20': 'Aguardando aprovação',
+        '30': 'Aprovada',
+        '40': 'Em andamento',
+        '50': 'Pronta para faturar',
+        '60': 'Faturada',
+        '70': 'Cancelada',
+        '80': 'Rejeitada'
+      }[etapa] || etapa
+    };
+  } catch (err) {
+    console.error('❌ Erro ao consultar OS:', err);
+    return null;
+  }
+}
+
+// ========================= FUNÇÕES DE RELATÓRIO =========================
 // ========================= FUNÇÕES DE RELATÓRIO =========================
 async function carregarRelatorio(mes = 0, ano = 0, filtroUnidade = '', status = 'todos') {
   const filtroHolding = document.getElementById('filterHolding')?.value?.trim() || '';
@@ -2264,6 +3214,10 @@ async function carregarRelatorio(mes = 0, ano = 0, filtroUnidade = '', status = 
     query = query.eq('omie_status', 'faturado');
   } else if (status === 'pago') {
     query = query.eq('pago', true);
+  } else if (status === 'rejeitado') {
+    query = query.eq('omie_status', 'rejeitado');
+  } else if (status === 'cancelado') {
+    query = query.eq('omie_status', 'cancelado');
   }
 
   const { data, error } = await query.order('ano', { ascending: false }).order('mes', { ascending: false });
@@ -2357,9 +3311,10 @@ async function carregarRelatorio(mes = 0, ano = 0, filtroUnidade = '', status = 
 
     const dataVenc = row.data_vencimento ? new Date(row.data_vencimento + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
     
-    const temOs = row.omie_os_id && row.omie_status === 'criado';
+    const temOs = row.omie_os_id && (row.omie_status === 'criado' || row.omie_status === 'erro');
     const osFaturada = row.omie_status === 'faturado' || row.omie_status === 'aprovado';
-    const osErro = row.omie_status === 'erro' || row.omie_status === 'rejeitado' || row.omie_status === 'cancelado';
+    const osRejeitada = row.omie_status === 'rejeitado';
+    const osErro = row.omie_status === 'erro' || row.omie_status === 'cancelado';
 
     const coresHolding = {
       'Métodos': 'primary',
@@ -2399,7 +3354,7 @@ async function carregarRelatorio(mes = 0, ano = 0, filtroUnidade = '', status = 
                   title="Ver detalhes (ID: ${row.id})">
             <i class="fas fa-eye"></i>
           </button>
-          ${!temOs && !osFaturada ? `
+          ${!temOs && !osFaturada && !osRejeitada ? `
             <button class="btn btn-sm ${osErro ? 'btn-danger' : 'btn-outline-primary'} btn-criar-os" 
                     data-id="${row.id}" 
                     data-unidade="${row.unidade}"
@@ -2433,6 +3388,22 @@ async function carregarRelatorio(mes = 0, ano = 0, filtroUnidade = '', status = 
                   title="Atualizar status desta OS">
             <i class="fas fa-sync"></i>
           </button>
+          ${row.omie_os_id ? `
+  <button class="btn btn-sm btn-outline-warning btn-reset-os" 
+          data-id="${row.id}" 
+          data-os-id="${row.omie_os_id}"
+          title="Resetar OS (permite criar novamente)">
+    <i class="fas fa-undo"></i>
+  </button>
+` : ''}
+          ${row.omie_os_id && (row.omie_status === 'criado' || row.omie_status === 'erro') ? `
+            <button class="btn btn-sm btn-outline-danger btn-excluir-os" 
+                    data-id="${row.id}" 
+                    data-os-id="${row.omie_os_id}"
+                    title="Excluir OS (antes de faturar)">
+              <i class="fas fa-trash"></i>
+            </button>
+          ` : ''}
           <button class="btn btn-sm btn-outline-danger btn-excluir-unidade" 
                   data-id="${row.id}" 
                   data-unidade="${row.unidade}"
@@ -2537,6 +3508,22 @@ async function carregarRelatorio(mes = 0, ano = 0, filtroUnidade = '', status = 
     });
   });
 
+  // ========================= BOTÃO RESETAR OS =========================
+  document.querySelectorAll('.btn-reset-os').forEach(btn => {
+    btn.addEventListener('click', async function() {
+      const id = parseInt(this.dataset.id);
+      await resetarOS(id);
+    });
+  });
+
+  // ========================= BOTÃO EXCLUIR OS =========================
+  document.querySelectorAll('.btn-excluir-os').forEach(btn => {
+    btn.addEventListener('click', async function() {
+      const id = parseInt(this.dataset.id);
+      await excluirOS(id);
+    });
+  });
+
   // ========================= BOTÃO EXCLUIR UNIDADE ESPECÍFICA =========================
   document.querySelectorAll('.btn-excluir-unidade').forEach(btn => {
     btn.addEventListener('click', async function() {
@@ -2598,6 +3585,14 @@ async function carregarRelatorio(mes = 0, ano = 0, filtroUnidade = '', status = 
         console.error('❌ Erro ao excluir:', err);
         mostrarAlerta(`Erro ao excluir: ${err.message}`, 'danger');
       }
+    });
+  });
+
+  // ========================= BOTÃO RESETAR OS =========================
+  document.querySelectorAll('.btn-reset-os').forEach(btn => {
+    btn.addEventListener('click', async function() {
+      const id = parseInt(this.dataset.id);
+      await resetarOS(id);
     });
   });
 }
@@ -3026,6 +4021,83 @@ async function excluirPreco(id) {
   }
 }
 
+// ========================= RESETAR OS =========================
+async function resetarOS(idFaturamento) {
+  if (!confirm(`Deseja resetar a OS do registro ${idFaturamento}? Isso vai permitir que você crie uma nova OS.`)) {
+    return;
+  }
+
+  try {
+    // 1. Buscar o registro
+    const { data: registro, error: buscaError } = await supabaseClient
+      .from('faturamento')
+      .select('*')
+      .eq('id', idFaturamento)
+      .single();
+
+    if (buscaError || !registro) {
+      mostrarAlerta('Registro não encontrado.', 'danger');
+      return;
+    }
+
+    console.log('📋 Registro encontrado:', registro);
+
+    // 2. Verifica se tem OS para cancelar na OMIE
+    if (registro.omie_os_id) {
+      const osId = registro.omie_os_id;
+      
+      // Pergunta se quer cancelar na OMIE também
+      if (confirm(`Deseja cancelar a OS ${osId} na OMIE também?`)) {
+        try {
+          const result = await cancelarNFSe(osId, '');
+          if (result.success) {
+            mostrarAlerta(`✅ OS ${osId} cancelada na OMIE!`, 'success');
+          } else if (result.jaCancelada) {
+            mostrarAlerta(`ℹ️ OS ${osId} já estava cancelada.`, 'info');
+          } else {
+            mostrarAlerta(`⚠️ Não foi possível cancelar: ${result.message}`, 'warning');
+          }
+        } catch (err) {
+          console.error('Erro ao cancelar OS:', err);
+          mostrarAlerta(`Erro ao cancelar OS: ${err.message}`, 'warning');
+        }
+      }
+    }
+
+    // 3. Resetar os campos no banco
+    const { error: updateError } = await supabaseClient
+      .from('faturamento')
+      .update({
+        omie_os_id: null,
+        omie_status: null,
+        omie_erro: null,
+        nota_emitida: false,
+        boleto_enviado: false,
+        nota_numero: null,
+        nota_status: null,
+        nota_data_emissao: null,
+        nota_valor: null
+      })
+      .eq('id', idFaturamento);
+
+    if (updateError) {
+      throw updateError;
+    }
+
+    mostrarAlerta(`✅ OS do registro ${idFaturamento} resetada com sucesso!`, 'success');
+    
+    // 4. Recarregar a tabela
+    const mes = parseInt(document.getElementById('filterMonth').value) || 0;
+    const ano = parseInt(document.getElementById('filterYear').value) || new Date().getFullYear();
+    const unidade = document.getElementById('filterUnit').value.trim() || '';
+    await carregarRelatorio(mes, ano, unidade, statusFiltroAtual);
+
+  } catch (err) {
+    console.error('❌ Erro ao resetar OS:', err);
+    mostrarAlerta(`Erro ao resetar OS: ${err.message}`, 'danger');
+  }
+}
+
 function preencherFormulario(dados) {
   document.getElementById('precoId').value = dados.id || '';
   document.getElementById('precoGrupo').value = dados.grupo || '';
@@ -3214,9 +4286,10 @@ async function consultarStatusFaturamentoOS() {
     
     console.log(`📋 ${registros.length} OS para verificar status`);
     
+    // Buscar todas as NFS-e
     const payload = {
-      endpoint: 'produtos/etapafat',
-      call: 'ListarEtapasFaturamento',
+      endpoint: 'servicos/nfse',
+      call: 'ListarNFSEs',
       param: [{
         pagina: 1,
         registros_por_pagina: 100
@@ -3237,28 +4310,82 @@ async function consultarStatusFaturamentoOS() {
     let atualizados = 0;
     let erros = 0;
     let detalhesAtualizacao = [];
+    let rejeitados = 0;
     
     for (const registro of registros) {
       try {
         const osId = registro.omie_os_id;
         console.log(`🔍 Verificando OS ${osId} - ${registro.unidade}`);
         
+        // Buscar status da OS
+        const statusOS = await consultarStatusOS(osId);
+        
+        if (!statusOS) {
+          console.log(`   ⚠️ Não foi possível consultar status da OS ${osId}`);
+          erros++;
+          continue;
+        }
+        
+        console.log(`   Etapa: ${statusOS.etapaDescricao} (${statusOS.etapa})`);
+        console.log(`   Status NFS-e: ${statusOS.statusDescricao} (${statusOS.statusNFSe})`);
+        
+        // Verifica se a OS foi rejeitada (Etapa 80 ou status R)
+        if (statusOS.etapa === '80' || statusOS.statusNFSe === 'R') {
+          console.log(`   ❌ OS REJEITADA!`);
+          await supabaseClient
+            .from('faturamento')
+            .update({
+              omie_status: 'rejeitado',
+              nota_emitida: false,
+              boleto_enviado: false,
+              nota_status: 'rejeitado',
+              omie_erro: 'OS rejeitada pela OMIE'
+            })
+            .eq('id', registro.id);
+          rejeitados++;
+          detalhesAtualizacao.push(`${registro.unidade}: REJEITADA`);
+          continue;
+        }
+        
+        // Verifica se tem NFS-e vinculada
         const nfseVinculada = nfses.find(n => {
           const nCodOS = n.OrdemServico?.nCodigoOS || n.OrdemServico?.nCodOS;
           return nCodOS && parseInt(nCodOS) === parseInt(osId);
         });
         
         if (nfseVinculada) {
-          const statusNFSe = nfseVinculada.Cabecalho?.cStatusNFSe || '';
-          const numeroNFSe = nfseVinculada.Cabecalho?.nNumeroNFSe || '';
-          const valorNFSe = nfseVinculada.Cabecalho?.nValorNFSe || 0;
+          const cabecalho = nfseVinculada.Cabecalho || {};
+          const statusNFSe = cabecalho.cStatusNFSe || '';
+          const numeroNFSe = cabecalho.nNumeroNFSe || '';
+          const valorNFSe = cabecalho.nValorNFSe || 0;
           
+          // Mapeia os status corretamente
           let statusMap = {
             'F': 'faturado',
             'A': 'aprovado',
             'R': 'rejeitado',
-            'C': 'cancelado'
+            'C': 'cancelado',
+            'N': 'nao_faturada'
           };
+          
+          // Verifica se é Rejeitada
+          if (statusNFSe === 'R') {
+            await supabaseClient
+              .from('faturamento')
+              .update({
+                omie_status: 'rejeitado',
+                nota_emitida: false,
+                boleto_enviado: false,
+                nota_numero: numeroNFSe,
+                nota_valor: valorNFSe,
+                nota_status: 'rejeitado',
+                nota_data_emissao: cabecalho.dEmissao || null
+              })
+              .eq('id', registro.id);
+            rejeitados++;
+            detalhesAtualizacao.push(`${registro.unidade}: REJEITADA - ${numeroNFSe}`);
+            continue;
+          }
           
           const novoStatus = statusMap[statusNFSe] || statusNFSe;
           
@@ -3271,7 +4398,7 @@ async function consultarStatusFaturamentoOS() {
               nota_numero: numeroNFSe,
               nota_valor: valorNFSe,
               nota_status: novoStatus,
-              nota_data_emissao: nfseVinculada.Emissao?.cDataEmissao || null
+              nota_data_emissao: cabecalho.dEmissao || null
             })
             .eq('id', registro.id);
           
@@ -3280,41 +4407,33 @@ async function consultarStatusFaturamentoOS() {
           atualizados++;
           
         } else {
-          console.log(`⏳ OS ${osId} sem NFS-e encontrada, verificando etapa...`);
+          console.log(`⏳ OS ${osId} sem NFS-e encontrada, etapa: ${statusOS.etapa}`);
           
-          const payloadOS = {
-            endpoint: 'servicos/os',
-            call: 'ConsultarOS',
-            param: [{ nCodOS: parseInt(osId) }]
-          };
-          
-          const responseOS = await fetchOmieProxy(payloadOS);
-          const osData = await responseOS.json();
-          
-          if (osData.fault) {
-            console.error(`❌ Erro ao consultar OS ${osId}:`, osData.fault.faultstring);
-            erros++;
-            continue;
-          }
-          
-          const etapa = osData.Cabecalho?.cEtapa || osData.cabecalho?.cEtapa || '';
-          const isFaturada = etapa === '60' || etapa === '70' || etapa === '80';
+          // Verifica se a OS está faturada (Etapa 60, 70 ou 80)
+          const isFaturada = statusOS.etapa === '60' || statusOS.etapa === '70' || statusOS.etapa === '80';
           
           if (isFaturada) {
+            let novoStatus = 'faturado';
+            if (statusOS.etapa === '80') {
+              novoStatus = 'rejeitado';
+            } else if (statusOS.etapa === '70') {
+              novoStatus = 'cancelado';
+            }
+            
             await supabaseClient
               .from('faturamento')
               .update({
-                omie_status: 'faturado',
+                omie_status: novoStatus,
                 nota_emitida: true,
                 boleto_enviado: true
               })
               .eq('id', registro.id);
             
-            console.log(`✅ OS ${osId} - Faturada (Etapa ${etapa})`);
-            detalhesAtualizacao.push(`${registro.unidade}: Faturada (Etapa ${etapa})`);
+            console.log(`✅ OS ${osId} - ${novoStatus} (Etapa ${statusOS.etapa})`);
+            detalhesAtualizacao.push(`${registro.unidade}: ${novoStatus} (Etapa ${statusOS.etapa})`);
             atualizados++;
           } else {
-            console.log(`⏳ OS ${osId} - Etapa ${etapa} (aguardando faturamento)`);
+            console.log(`⏳ OS ${osId} - Etapa ${statusOS.etapa} (aguardando faturamento)`);
           }
         }
         
@@ -3327,6 +4446,9 @@ async function consultarStatusFaturamentoOS() {
     }
     
     let mensagem = `${atualizados} OS atualizadas!`;
+    if (rejeitados > 0) {
+      mensagem += `\n\n⚠️ ${rejeitados} OS REJEITADAS! Verifique os detalhes.`;
+    }
     if (detalhesAtualizacao.length > 0) {
       mensagem += '\n\n' + detalhesAtualizacao.join('\n');
     }
@@ -3335,13 +4457,115 @@ async function consultarStatusFaturamentoOS() {
     }
     
     mostrarAlerta(mensagem, atualizados > 0 ? 'success' : 'info');
-    console.log(`📊 ${atualizados} OS atualizadas, ${erros} erros`);
-    return { atualizados, erros, detalhes: detalhesAtualizacao };
+    console.log(`📊 ${atualizados} OS atualizadas, ${rejeitados} rejeitadas, ${erros} erros`);
+    return { atualizados, erros, rejeitados, detalhes: detalhesAtualizacao };
     
   } catch (err) {
     console.error('❌ Erro ao consultar status:', err);
     mostrarAlerta('Erro ao atualizar status: ' + err.message, 'danger');
     return { atualizados: 0, erros: 1 };
+  }
+}
+
+// ========================= EXCLUIR OS (ANTES DE FATURAR) =========================
+async function excluirOS(idFaturamento) {
+  if (!confirm(`Deseja excluir a OS do registro ${idFaturamento}?`)) {
+    return;
+  }
+
+  try {
+    // 1. Buscar o registro
+    const { data: registro, error: buscaError } = await supabaseClient
+      .from('faturamento')
+      .select('*')
+      .eq('id', idFaturamento)
+      .single();
+
+    if (buscaError || !registro) {
+      mostrarAlerta('Registro não encontrado.', 'danger');
+      return;
+    }
+
+    if (!registro.omie_os_id) {
+      mostrarAlerta('Este registro não possui OS para excluir.', 'warning');
+      return;
+    }
+
+    console.log('📋 Registro encontrado:', registro);
+
+    // 2. Excluir a OS na OMIE
+    const osId = registro.omie_os_id;
+    
+    if (!confirm(`Deseja excluir a OS ${osId} na OMIE?`)) {
+      return;
+    }
+
+    try {
+      // CORREÇÃO: Estrutura correta para excluir OS
+      const payloadExcluir = {
+        endpoint: 'servicos/os',
+        call: 'ExcluirOS',
+        param: [{
+          nCodOS: parseInt(osId)  // <--- CORRETO: nCodOS diretamente no param
+        }]
+      };
+
+      console.log('📤 Excluindo OS na OMIE...');
+      console.log('📤 Payload:', JSON.stringify(payloadExcluir, null, 2));
+      
+      const responseExcluir = await fetchOmieProxy(payloadExcluir);
+      const resultExcluir = await responseExcluir.json();
+
+      if (resultExcluir.fault) {
+        // Verifica se já foi faturada
+        if (resultExcluir.fault.faultstring && resultExcluir.fault.faultstring.includes('faturada')) {
+          throw new Error('Não é possível excluir uma OS que já foi faturada. Use o cancelamento.');
+        }
+        throw new Error(`Erro OMIE: ${resultExcluir.fault.faultstring}`);
+      }
+
+      console.log(`✅ OS ${osId} excluída na OMIE!`);
+      mostrarAlerta(`✅ OS ${osId} excluída com sucesso!`, 'success');
+
+    } catch (err) {
+      if (err.message.includes('faturada')) {
+        mostrarAlerta(`⚠️ ${err.message}`, 'warning');
+        return;
+      }
+      throw err;
+    }
+
+    // 3. Limpar os campos no banco
+    const { error: updateError } = await supabaseClient
+      .from('faturamento')
+      .update({
+        omie_os_id: null,
+        omie_status: null,
+        omie_erro: null,
+        nota_emitida: false,
+        boleto_enviado: false,
+        nota_numero: null,
+        nota_status: null,
+        nota_data_emissao: null,
+        nota_valor: null
+      })
+      .eq('id', idFaturamento);
+
+    if (updateError) {
+      throw updateError;
+    }
+
+    console.log('✅ Registro limpo no banco.');
+    
+    // 4. Recarregar a tabela
+    const mes = parseInt(document.getElementById('filterMonth').value) || 0;
+    const ano = parseInt(document.getElementById('filterYear').value) || new Date().getFullYear();
+    const unidade = document.getElementById('filterUnit').value.trim() || '';
+    await carregarRelatorio(mes, ano, unidade, statusFiltroAtual);
+
+  } catch (err) {
+    console.error('❌ Erro ao excluir OS:', err);
+    mostrarAlerta(`Erro ao excluir OS: ${err.message}`, 'danger');
   }
 }
 
@@ -4230,28 +5454,22 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   // ========================= ATUALIZAR STATUS NFS-e =========================
-  document.getElementById('btnAtualizarStatusNFSe').addEventListener('click', async function() {
-    const btn = this;
-    const originalText = btn.innerHTML;
-    
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Atualizando...';
-    
-    try {
-      const resultado = await consultarStatusFaturamentoOS();
-      
-      const mes = parseInt(document.getElementById('filterMonth').value);
-      const ano = parseInt(document.getElementById('filterYear').value);
-      const unidade = document.getElementById('filterUnit').value.trim();
-      await carregarRelatorio(mes, ano, unidade, statusFiltroAtual);
-      
-    } catch (err) {
-      mostrarAlerta('Erro ao atualizar status: ' + err.message, 'danger');
-    } finally {
-      btn.disabled = false;
-      btn.innerHTML = originalText;
-    }
-  });
+document.getElementById('btnAtualizarStatusNFSe').addEventListener('click', async function() {
+  const btn = this;
+  const originalText = btn.innerHTML;
+  
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Atualizando NFS-e...';
+  
+  try {
+    await forcarAtualizarStatusNFSe();
+  } catch (err) {
+    mostrarAlerta('Erro ao atualizar: ' + err.message, 'danger');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = originalText;
+  }
+});
 
   // ========================= EVENTO BOTÃO CRIAR OS EM LOTE =========================
   document.getElementById('btnCriarOSLote').addEventListener('click', abrirModalCriarOSLote);
@@ -4336,6 +5554,13 @@ document.addEventListener('DOMContentLoaded', function () {
       }
     });
   }
+
+document.getElementById('btnResetarOSLote').addEventListener('click', function() {
+  const mes = parseInt(document.getElementById('filterMonth').value) || 0;
+  const ano = parseInt(document.getElementById('filterYear').value) || new Date().getFullYear();
+  const unidade = document.getElementById('filterUnit').value.trim() || '';
+  resetarOSLote(mes, ano, unidade);
+});
 
   // ========================= OUTROS =========================
   function popularAnos() {
