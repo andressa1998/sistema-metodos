@@ -1054,6 +1054,11 @@ async function processarUpload(file) {
   console.log(`   Unidades não encontradas: ${unidadesNaoEncontradas.length} - ${unidadesNaoEncontradas.join(', ')}`);
   console.log(`   Valor total: R$ ${totalGeral.toFixed(2)}`);
 
+  // ✅ ADICIONE AQUI:
+  const anoFiltro = parseInt(document.getElementById('dashboardYear')?.value) || new Date().getFullYear();
+  await carregarGraficos(anoFiltro);
+  await carregarCards(0, anoFiltro);
+
   return {
     totalRegistros: registrosParaInserir.length + registrosParaAtualizar.length,
     totalGeral,
@@ -1067,6 +1072,8 @@ async function processarUpload(file) {
       atualizadas: unidadesAtualizadas,
       novas: unidadesNovas
     }
+
+    
   };
 }
 
@@ -1548,80 +1555,121 @@ async function buscarDadosClienteOmie(unidade) {
   }
 }
 
-// ========================= GRÁFICOS =========================
 function processarDadosPorMes(dados, ano) {
-  const meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-  const totalPorMes = new Array(12).fill(0);
-  const examesPorMes = new Array(12).fill(0);
-  const mensalidadePorMes = new Array(12).fill(0);
+    const meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+    const totalPorMes = new Array(12).fill(0);
+    const examesPorMes = new Array(12).fill(0);
+    const mensalidadePorMes = new Array(12).fill(0);
 
-  dados.forEach(row => {
-    if (ano > 0 && row.ano !== ano) return;
-    const mesIndex = row.mes - 1;
-    totalPorMes[mesIndex] += row.valor_total;
-    if (row.detalhes) {
-      for (let [nome, info] of Object.entries(row.detalhes)) {
-        let qtd = (typeof info === 'object' && info.quantidade !== undefined) ? info.quantidade : info;
-        let preco = (typeof info === 'object' && info.precoUnitario !== undefined) ? info.precoUnitario : 0;
-        if (nome === 'mensalidade') {
-          mensalidadePorMes[mesIndex] += qtd * preco;
-        } else if (nome !== 'vidas (NR-1)') {
-          examesPorMes[mesIndex] += qtd * preco;
+    console.log(`📊 Processando ${dados.length} registros`);
+
+    dados.forEach(row => {
+        const mesIndex = row.mes - 1;
+        if (mesIndex >= 0 && mesIndex < 12) {
+            // 🔥 SOMA DIRETAMENTE
+            totalPorMes[mesIndex] += row.valor_total || 0;
+            
+            // Processar detalhes
+            if (row.detalhes) {
+                for (let [nome, info] of Object.entries(row.detalhes)) {
+                    let qtd = (typeof info === 'object' && info.quantidade !== undefined) ? info.quantidade : info;
+                    let preco = (typeof info === 'object' && info.precoUnitario !== undefined) ? info.precoUnitario : 0;
+                    const valor = (qtd || 0) * (preco || 0);
+                    
+                    if (nome === 'mensalidade') {
+                        mensalidadePorMes[mesIndex] += valor;
+                    } else if (nome !== 'vidas (NR-1)') {
+                        examesPorMes[mesIndex] += valor;
+                    }
+                }
+            }
         }
-      }
-    }
-  });
+    });
 
-  return { meses, totalPorMes, examesPorMes, mensalidadePorMes };
+    console.log('📊 TOTAL POR MÊS:', totalPorMes);
+    meses.forEach((mes, i) => {
+        if (totalPorMes[i] > 0) {
+            console.log(`   ${mes}: R$ ${totalPorMes[i].toFixed(2)}`);
+        }
+    });
+
+    return { meses, totalPorMes, examesPorMes, mensalidadePorMes };
 }
 
 function renderizarGraficos(dados, ano) {
-  const { meses, totalPorMes, examesPorMes, mensalidadePorMes } = processarDadosPorMes(dados, ano);
-
-  function criarOuAtualizarGrafico(canvasId, label, data, cor) {
-    const ctx = document.getElementById(canvasId).getContext('2d');
-    let chart = null;
-    if (window[canvasId + 'Chart']) {
-      chart = window[canvasId + 'Chart'];
-      chart.data.datasets[0].data = data;
-      chart.data.datasets[0].label = label;
-      chart.update();
-    } else {
-      chart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-          labels: meses,
-          datasets: [{
-            label: label,
-            data: data,
-            backgroundColor: cor,
-            borderColor: cor,
-            borderWidth: 1
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: { legend: { display: false } },
-          scales: {
-            y: {
-              beginAtZero: true,
-              ticks: {
-                callback: function(value) {
-                  return 'R$ ' + value.toLocaleString('pt-BR');
-                }
-              }
-            }
-          }
+    console.log(`📊 Renderizando gráficos com ${dados?.length || 0} registros`);
+    
+    // 🔥 VERIFICAR DISTRIBUIÇÃO POR MÊS/ANO
+    const mesesCount = {};
+    dados?.forEach(row => {
+        const key = `${row.mes}/${row.ano}`;
+        mesesCount[key] = (mesesCount[key] || 0) + 1;
+    });
+    console.log('📋 DISTRIBUIÇÃO DOS DADOS:');
+    Object.keys(mesesCount).sort().forEach(key => {
+        console.log(`   ${key}: ${mesesCount[key]} registros`);
+    });
+    
+    const { meses, totalPorMes, examesPorMes, mensalidadePorMes } = processarDadosPorMes(dados, ano);
+    
+    console.log('📊 TOTAL POR MÊS:', totalPorMes);
+    meses.forEach((mes, i) => {
+        if (totalPorMes[i] > 0) {
+            console.log(`   ${mes}: R$ ${totalPorMes[i].toFixed(2)}`);
         }
-      });
-      window[canvasId + 'Chart'] = chart;
-    }
-  }
+    });
 
-  criarOuAtualizarGrafico('chartTotal', 'Valor Total', totalPorMes, '#213b7c');
-  criarOuAtualizarGrafico('chartExames', 'Exames', examesPorMes, '#41bae8');
-  criarOuAtualizarGrafico('chartMensalidade', 'Mensalidade', mensalidadePorMes, '#f59e0b');
+    function criarOuAtualizarGrafico(canvasId, label, data, cor) {
+        const ctx = document.getElementById(canvasId);
+        if (!ctx) {
+            console.error(`❌ Canvas ${canvasId} não encontrado`);
+            return;
+        }
+        
+        const ctx2d = ctx.getContext('2d');
+        
+        if (window[canvasId + 'Chart']) {
+            window[canvasId + 'Chart'].destroy();
+            window[canvasId + 'Chart'] = null;
+        }
+        
+        window[canvasId + 'Chart'] = new Chart(ctx2d, {
+            type: 'bar',
+            data: {
+                labels: meses,
+                datasets: [{
+                    label: label,
+                    data: data,
+                    backgroundColor: cor,
+                    borderColor: cor,
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { 
+                    legend: { display: false } 
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function(value) {
+                                return 'R$ ' + value.toLocaleString('pt-BR');
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        
+        console.log(`✅ Gráfico ${canvasId} atualizado`);
+    }
+
+    criarOuAtualizarGrafico('chartTotal', 'Valor Total', totalPorMes, '#213b7c');
+    criarOuAtualizarGrafico('chartExames', 'Exames', examesPorMes, '#41bae8');
+    criarOuAtualizarGrafico('chartMensalidade', 'Mensalidade', mensalidadePorMes, '#f59e0b');
 }
 
 // ========================= EXPORTAR PREÇOS =========================
@@ -4725,6 +4773,24 @@ function abrirModalCriarOs(id, unidade, valor, mes, ano, detalhes) {
   modal.show();
 }
 
+async function atualizarDashboardAposUpload() {
+    const ano = parseInt(document.getElementById('dashboardYear')?.value) || new Date().getFullYear();
+    const mes = parseInt(document.getElementById('dashboardMonth')?.value) || 0;
+    
+    console.log(`🔄 Atualizando Dashboard para ${mes}/${ano}...`);
+    
+    await carregarCards(mes, ano);
+    await carregarGraficos(ano);
+    
+    // Também atualiza a tabela de processamento
+    const mesFiltro = parseInt(document.getElementById('filterMonth')?.value) || 0;
+    const anoFiltro = parseInt(document.getElementById('filterYear')?.value) || new Date().getFullYear();
+    const unidadeFiltro = document.getElementById('filterUnit')?.value?.trim() || '';
+    await carregarRelatorio(mesFiltro, anoFiltro, unidadeFiltro, statusFiltroAtual);
+    
+    console.log('✅ Dashboard atualizado!');
+}
+
 // ========================= DASHBOARD =========================
 function atualizarDashboards(dados) {
   let totalExames = 0;
@@ -4817,15 +4883,61 @@ async function carregarCards(mes = 0, ano = 0) {
 }
 
 async function carregarGraficos(ano = 0) {
-  let query = supabaseClient.from('faturamento').select('*');
-  if (ano > 0) query = query.eq('ano', ano);
-
-  const { data, error } = await query;
-  if (error) {
-    mostrarAlerta('Erro ao carregar gráficos: ' + error.message, 'danger');
-    return;
-  }
-  renderizarGraficos(data || [], ano);
+    console.log(`🔄 Carregando gráficos para o ano: ${ano}`);
+    
+    // 🔥 BUSCAR TODOS OS REGISTROS SEM LIMITE
+    let allData = [];
+    let page = 1;
+    const pageSize = 1000;
+    let hasMore = true;
+    
+    while (hasMore) {
+        let query = supabaseClient
+            .from('faturamento')
+            .select('*')
+            .range((page - 1) * pageSize, page * pageSize - 1);
+        
+        if (ano > 0) {
+            query = query.eq('ano', ano);
+        }
+        
+        const { data, error } = await query;
+        
+        if (error) {
+            console.error('❌ Erro ao carregar gráficos:', error);
+            mostrarAlerta('Erro ao carregar gráficos: ' + error.message, 'danger');
+            return;
+        }
+        
+        if (!data || data.length === 0) {
+            hasMore = false;
+        } else {
+            allData = allData.concat(data);
+            console.log(`📊 Página ${page}: ${data.length} registros (Total: ${allData.length})`);
+            page++;
+            
+            if (data.length < pageSize) {
+                hasMore = false;
+            }
+        }
+    }
+    
+    console.log(`📊 TOTAL: ${allData.length} registros encontrados para o ano ${ano}`);
+    
+    // 🔥 VERIFICAR SE TEM JANEIRO
+    const janData = allData?.filter(row => row.mes === 1) || [];
+    console.log(`📅 Janeiro: ${janData.length} registros`);
+    if (janData.length > 0) {
+        const totalJan = janData.reduce((s, r) => s + r.valor_total, 0);
+        console.log(`   Total Janeiro: R$ ${totalJan.toFixed(2)}`);
+        janData.slice(0, 5).forEach(r => {
+            console.log(`   Exemplo: ${r.unidade} - R$ ${r.valor_total.toFixed(2)}`);
+        });
+    } else {
+        console.warn('⚠️ NENHUM dado de Janeiro encontrado!');
+    }
+    
+    renderizarGraficos(allData || [], ano);
 }
 
 // ========================= FUNÇÕES DE CRUD PREÇOS =========================
@@ -7104,6 +7216,7 @@ document.addEventListener('DOMContentLoaded', function () {
       carregarBoletos();
     }
   }, 500);
+
 
   // ========================= OUTROS =========================
   function popularAnos() {
