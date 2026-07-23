@@ -782,24 +782,43 @@
       <div class="d-flex gap-2">
         <button class="btn btn-soft-primary btn-sm" id="exportCsvBtn"><i class="fas fa-file-csv me-1"></i> CSV</button>
         <button class="btn btn-soft-success btn-sm" id="exportExcelBtn" title="Exportar para Excel"><i class="fas fa-file-excel me-1"></i> Excel</button>
+        <button class="btn btn-soft-secondary btn-sm" id="clearTableFiltersBtn" title="Limpar filtros da tabela">
+          <i class="fas fa-times"></i> Limpar Filtros
+        </button>
       </div>
     </div>
     <div class="card-body p-0">
       <div class="table-responsive">
         <table class="table table-modern" id="resultsTable">
           <thead>
-            <tr>
-              <th>Unidade</th>
-              <th>Holding</th>
-              <th>Grupo</th>
-              <th>Mês/Ano</th>
-              <th class="text-end">Valor Total (R$)</th>
-              <th class="text-center">Status OS</th>
-              <th class="text-center">Status Pagamento</th>
-              <th class="text-center">Vencimento</th>
-              <th class="text-center">Ações</th>
-            </tr>
-          </thead>
+  <tr>
+    <th data-sort="unidade" style="cursor: pointer;">
+      Unidade <i class="fas fa-sort text-muted ms-1"></i>
+    </th>
+    <th data-sort="holding" style="cursor: pointer;">
+      Holding <i class="fas fa-sort text-muted ms-1"></i>
+    </th>
+    <th data-sort="grupo" style="cursor: pointer;">
+      Grupo <i class="fas fa-sort text-muted ms-1"></i>
+    </th>
+    <th data-sort="mesano" style="cursor: pointer;">
+      Mês/Ano <i class="fas fa-sort text-muted ms-1"></i>
+    </th>
+    <th data-sort="valor" style="cursor: pointer;" class="text-end">
+      Valor Total (R$) <i class="fas fa-sort text-muted ms-1"></i>
+    </th>
+    <th data-sort="status_os" style="cursor: pointer;" class="text-center">
+      Status OS <i class="fas fa-sort text-muted ms-1"></i>
+    </th>
+    <th data-sort="status_pagamento" style="cursor: pointer;" class="text-center">
+      Status Pagamento <i class="fas fa-sort text-muted ms-1"></i>
+    </th>
+    <th data-sort="vencimento" style="cursor: pointer;" class="text-center">
+      Vencimento <i class="fas fa-sort text-muted ms-1"></i>
+    </th>
+    <th class="text-center">Ações</th>
+  </tr>
+</thead>
           <tbody id="resultsBody">
             <tr><td colspan="9" class="text-center text-muted py-4">Nenhum registro encontrado</td></tr>
           </tbody>
@@ -807,6 +826,40 @@
       </div>
     </div>
   </div>
+  <!-- ===== PAGINAÇÃO ===== -->
+<div class="row mt-3">
+  <div class="col-md-6">
+    <div class="d-flex align-items-center gap-2">
+      <span class="text-muted" style="font-size:0.9rem;">Mostrar</span>
+      <select id="pageSizeSelect" class="form-select form-select-sm" style="width: auto;">
+        <option value="10">10</option>
+        <option value="25" selected>25</option>
+        <option value="50">50</option>
+        <option value="100">100</option>
+        <option value="200">200</option>
+      </select>
+      <span class="text-muted" style="font-size:0.9rem;">registros por página</span>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <nav aria-label="Paginação">
+      <ul class="pagination justify-content-end mb-0" id="paginationControls">
+        <li class="page-item" id="prevPageBtn">
+          <a class="page-link" href="#" aria-label="Anterior">
+            <span aria-hidden="true">&laquo;</span>
+          </a>
+        </li>
+        <li class="page-item active" id="page1"><a class="page-link" href="#" data-page="1">1</a></li>
+        <li class="page-item" id="nextPageBtn">
+          <a class="page-link" href="#" aria-label="Próxima">
+            <span aria-hidden="true">&raquo;</span>
+          </a>
+        </li>
+      </ul>
+    </nav>
+  </div>
+</div>
+<div id="paginationInfo" class="text-center text-muted small mt-2"></div>
 </div>
 
         <!-- ==================== MODAL CRIAR OS EM LOTE ==================== -->

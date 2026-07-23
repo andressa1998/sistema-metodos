@@ -54,6 +54,16 @@ let chartExames = null;
 let chartMensalidade = null;
 let statusFiltroAtual = 'todos';
 
+// ========================= PAGINAÇÃO =========================
+let paginaAtual = 1;
+let registrosPorPagina = 25;
+let todosOsDados = [];
+let dadosFiltrados = [];
+
+// ========================= FILTROS POR COLUNA =========================
+let filtrosColuna = {};
+let dadosOriginais = [];
+
 // ========================= FUNÇÃO NORMALIZAR UNIDADE MELHORADA =========================
 function normalizarUnidade(nome) {
   if (!nome) return '';
@@ -256,7 +266,6 @@ async function verificarOSDuplicada(cnpj, mes, ano, unidade) {
   return { duplicado: false, registro: null };
 }
 
-// ========================= CRIAR ORDEM DE SERVIÇO NA OMIE (ETAPA 50) =========================
 // ========================= CRIAR ORDEM DE SERVIÇO NA OMIE (COM VALIDAÇÃO E RESUMO) =========================
 async function criarOrdemServicoOmie(registro, codigoCliente) {
   // ===== VALIDAÇÃO DE DUPLICIDADE =====
@@ -3667,7 +3676,143 @@ async function consultarStatusOS(codigoOS) {
   }
 }
 
-// ========================= FUNÇÕES DE RELATÓRIO =========================
+// ================================================================
+// ORDENAÇÃO (SORT) POR COLUNA
+// ================================================================
+
+let colunaOrdenacao = null;
+let ordemOrdenacao = 'asc'; // 'asc' ou 'desc'
+
+// Função para ordenar os dados
+function ordenarDados(dados, coluna, ordem) {
+    if (!coluna) return dados;
+    
+    return [...dados].sort((a, b) => {
+        let valorA, valorB;
+        
+        // Pega os valores de acordo com a coluna
+        switch(coluna) {
+            case 'unidade':
+                valorA = (a.unidade || '').toLowerCase();
+                valorB = (b.unidade || '').toLowerCase();
+                break;
+            case 'holding':
+                valorA = (window._mapaUnidades?.[a.unidade]?.holding || '').toLowerCase();
+                valorB = (window._mapaUnidades?.[b.unidade]?.holding || '').toLowerCase();
+                break;
+            case 'grupo':
+                valorA = (window._mapaUnidades?.[a.unidade]?.grupo || '').toLowerCase();
+                valorB = (window._mapaUnidades?.[b.unidade]?.grupo || '').toLowerCase();
+                break;
+            case 'mesano':
+                valorA = a.ano * 100 + a.mes;
+                valorB = b.ano * 100 + b.mes;
+                break;
+            case 'valor':
+                valorA = a.valor_total;
+                valorB = b.valor_total;
+                break;
+            case 'status_os':
+                valorA = obterStatusOS(a);
+                valorB = obterStatusOS(b);
+                break;
+            case 'status_pagamento':
+                valorA = obterStatusPagamento(a);
+                valorB = obterStatusPagamento(b);
+                break;
+            case 'vencimento':
+                valorA = a.data_vencimento || '';
+                valorB = b.data_vencimento || '';
+                break;
+            default:
+                return 0;
+        }
+        
+        // Comparação
+        if (typeof valorA === 'string') {
+            return ordem === 'asc' 
+                ? valorA.localeCompare(valorB)
+                : valorB.localeCompare(valorA);
+        } else {
+            return ordem === 'asc' 
+                ? valorA - valorB
+                : valorB - valorA;
+        }
+    });
+}
+
+// Função auxiliar para obter o texto do Status OS
+function obterStatusOS(row) {
+    if (row.omie_status === 'criado') return 'OS Criada';
+    if (row.omie_status === 'faturado' || row.omie_status === 'aprovado') return 'Faturado';
+    if (row.omie_status === 'rejeitado') return 'Rejeitado';
+    if (row.omie_status === 'cancelado') return 'Cancelado';
+    if (row.omie_status === 'erro') return 'Erro';
+    return 'Pendente';
+}
+
+// Função auxiliar para obter o texto do Status Pagamento
+function obterStatusPagamento(row) {
+    if (row.pago) return 'Pago';
+    if (row.data_vencimento) {
+        const hoje = new Date();
+        const venc = new Date(row.data_vencimento + 'T00:00:00');
+        const diff = Math.ceil((venc - hoje) / (1000 * 60 * 60 * 24));
+        if (diff < 0) return 'Vencido';
+        if (diff <= 2) return 'Próx. venc.';
+    }
+    return 'Pendente';
+}
+
+// Função para lidar com o clique no cabeçalho
+function handleSortClick(e) {
+    const th = e.currentTarget;
+    const coluna = th.dataset.sort;
+    if (!coluna) return;
+    
+    // Se for a mesma coluna, inverte a ordem
+    if (colunaOrdenacao === coluna) {
+        ordemOrdenacao = ordemOrdenacao === 'asc' ? 'desc' : 'asc';
+    } else {
+        colunaOrdenacao = coluna;
+        ordemOrdenacao = 'asc';
+    }
+    
+    // Ordena os dados
+    dadosFiltrados = ordenarDados(todosOsDados, colunaOrdenacao, ordemOrdenacao);
+    paginaAtual = 1;
+    
+    // Atualiza os ícones
+    document.querySelectorAll('thead th[data-sort]').forEach(th => {
+        const icon = th.querySelector('i.fa-sort, i.fa-sort-up, i.fa-sort-down');
+        if (icon) {
+            const col = th.dataset.sort;
+            if (col === colunaOrdenacao) {
+                icon.className = ordemOrdenacao === 'asc' 
+                    ? 'fas fa-sort-up text-primary ms-1' 
+                    : 'fas fa-sort-down text-primary ms-1';
+            } else {
+                icon.className = 'fas fa-sort text-muted ms-1';
+            }
+        }
+    });
+    
+    renderizarPagina();
+}
+
+// Função para resetar a ordenação
+function resetarOrdenacao() {
+    colunaOrdenacao = null;
+    ordemOrdenacao = 'asc';
+    document.querySelectorAll('thead th[data-sort] i.fa-sort, thead th[data-sort] i.fa-sort-up, thead th[data-sort] i.fa-sort-down')
+        .forEach(icon => {
+            icon.className = 'fas fa-sort text-muted ms-1';
+        });
+    dadosFiltrados = [...todosOsDados];
+    paginaAtual = 1;
+    renderizarPagina();
+}
+
 // ========================= FUNÇÕES DE RELATÓRIO =========================
 async function carregarRelatorio(mes = 0, ano = 0, filtroUnidade = '', status = 'todos') {
   const filtroHolding = document.getElementById('filterHolding')?.value?.trim() || '';
@@ -3705,6 +3850,10 @@ async function carregarRelatorio(mes = 0, ano = 0, filtroUnidade = '', status = 
       atualizarDashboards([]);
       const tbody = document.getElementById('resultsBody');
       tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted py-4">Nenhum registro encontrado</td></tr>`;
+      const pagInfo = document.getElementById('paginationInfo');
+      if (pagInfo) pagInfo.textContent = '';
+      const pagControls = document.getElementById('paginationControls');
+      if (pagControls) pagControls.style.display = 'none';
       return;
     }
   }
@@ -3729,6 +3878,7 @@ async function carregarRelatorio(mes = 0, ano = 0, filtroUnidade = '', status = 
     return;
   }
 
+  // Buscar mapa de unidades
   let mapaUnidades = {};
   if (data && data.length > 0) {
     const unidades = [...new Set(data.map(item => item.unidade))];
@@ -3747,20 +3897,267 @@ async function carregarRelatorio(mes = 0, ano = 0, filtroUnidade = '', status = 
     }
   }
 
+  // Atualizar dashboards
   atualizarDashboards(data);
+  window._mapaUnidades = mapaUnidades;
 
-  const tbody = document.getElementById('resultsBody');
-  if (!data || data.length === 0) {
+  // Guardar dados para paginação
+  todosOsDados = data || [];
+  dadosFiltrados = todosOsDados;
+  paginaAtual = 1;
+  
+  // Se não há dados, mostrar mensagem
+  if (todosOsDados.length === 0) {
+    const tbody = document.getElementById('resultsBody');
     tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted py-4">Nenhum registro encontrado</td></tr>`;
+    const pagInfo = document.getElementById('paginationInfo');
+    if (pagInfo) pagInfo.textContent = '';
+    const pagControls = document.getElementById('paginationControls');
+    if (pagControls) pagControls.style.display = 'none';
     return;
   }
 
+  // Renderizar página (agora com await)
+  await renderizarPagina(mapaUnidades);
+}
+
+// ========================= RENDERIZAR PÁGINA =========================
+async function renderizarPagina(mapaUnidades = null) {
+  const inicio = (paginaAtual - 1) * registrosPorPagina;
+  const fim = Math.min(inicio + registrosPorPagina, dadosFiltrados.length);
+  const dadosPagina = dadosFiltrados.slice(inicio, fim);
+  
   const meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
     'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
   const hoje = new Date();
 
+  const tbody = document.getElementById('resultsBody');
+  if (dadosPagina.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted py-4">Nenhum registro encontrado</td></tr>`;
+    const pagControls = document.getElementById('paginationControls');
+    if (pagControls) pagControls.style.display = 'none';
+    const pagInfo = document.getElementById('paginationInfo');
+    if (pagInfo) pagInfo.textContent = '';
+    return;
+  }
+
+  // Buscar mapa de unidades para os dados da página
+  const unidadesPagina = [...new Set(dadosPagina.map(item => item.unidade))];
+  
+  // Se não veio mapaUnidades ou está vazio, buscar do banco
+  let mapaFinal = mapaUnidades || {};
+  
+  if (!mapaFinal || Object.keys(mapaFinal).length === 0) {
+    const { data: precosData } = await supabaseClient
+      .from('precos')
+      .select('unidade, holding, grupo')
+      .in('unidade', unidadesPagina);
+    
+    if (precosData) {
+      precosData.forEach(item => {
+        mapaFinal[item.unidade] = {
+          holding: item.holding || 'N/A',
+          grupo: item.grupo || 'N/A'
+        };
+      });
+    }
+  }
+  
+  // Para unidades não encontradas
+  unidadesPagina.forEach(unidade => {
+    if (!mapaFinal[unidade]) {
+      mapaFinal[unidade] = { holding: 'N/A', grupo: 'N/A' };
+    }
+  });
+
+  // Renderizar a tabela
   let html = '';
-  data.forEach(row => {
+  dadosPagina.forEach(row => {
+    const mesNome = meses[row.mes - 1];
+    const infoUnidade = mapaFinal[row.unidade] || { holding: 'N/A', grupo: 'N/A' };
+    
+    let statusOSClass = 'secondary';
+    let statusOSText = 'Pendente';
+    let statusOSIcon = 'fa-clock';
+
+    if (row.omie_status === 'criado') {
+      statusOSClass = 'primary';
+      statusOSText = 'OS Criada';
+      statusOSIcon = 'fa-file-invoice';
+    } else if (row.omie_status === 'faturado' || row.omie_status === 'aprovado') {
+      statusOSClass = 'success';
+      statusOSText = 'Faturado ✅';
+      statusOSIcon = 'fa-check-circle';
+    } else if (row.omie_status === 'rejeitado') {
+      statusOSClass = 'danger';
+      statusOSText = 'Rejeitado ❌';
+      statusOSIcon = 'fa-times-circle';
+    } else if (row.omie_status === 'cancelado') {
+      statusOSClass = 'secondary';
+      statusOSText = 'Cancelado ⛔';
+      statusOSIcon = 'fa-ban';
+    } else if (row.omie_status === 'erro') {
+      statusOSClass = 'danger';
+      statusOSText = 'Erro';
+      statusOSIcon = 'fa-exclamation-triangle';
+    }
+    
+    let statusPagamentoClass = 'secondary';
+    let statusPagamentoText = 'Pendente';
+    let statusPagamentoIcon = 'fa-hourglass-half';
+    
+    if (row.pago) {
+      statusPagamentoClass = 'success';
+      statusPagamentoText = 'Pago';
+      statusPagamentoIcon = 'fa-check-circle';
+    } else if (row.data_vencimento) {
+      const venc = new Date(row.data_vencimento + 'T00:00:00');
+      const diffDays = Math.ceil((venc - hoje) / (1000 * 60 * 60 * 24));
+      if (diffDays < 0) {
+        statusPagamentoClass = 'danger';
+        statusPagamentoText = 'Vencido';
+        statusPagamentoIcon = 'fa-times-circle';
+      } else if (diffDays <= 2) {
+        statusPagamentoClass = 'warning';
+        statusPagamentoText = 'Próx. venc.';
+        statusPagamentoIcon = 'fa-exclamation-triangle';
+      }
+    }
+
+    const dataVenc = row.data_vencimento ? new Date(row.data_vencimento + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
+    
+    const temOs = row.omie_os_id && (row.omie_status === 'criado' || row.omie_status === 'erro');
+    const osFaturada = row.omie_status === 'faturado' || row.omie_status === 'aprovado';
+    const osRejeitada = row.omie_status === 'rejeitado';
+    const osErro = row.omie_status === 'erro' || row.omie_status === 'cancelado';
+
+    const coresHolding = {
+      'Métodos': 'primary',
+      'DOP': 'success',
+      'Eficaz': 'info',
+      'Exata': 'warning',
+      'VMK': 'danger',
+      'WL': 'secondary'
+    };
+    const corHolding = coresHolding[infoUnidade.holding] || 'secondary';
+
+    html += `<tr>
+      <td><strong>${row.unidade}</strong></td>
+      <td><span class="badge bg-${corHolding}">${infoUnidade.holding}</span></td>
+      <td><span class="badge bg-secondary">${infoUnidade.grupo}</span></td>
+      <td>${mesNome}/${row.ano}</td>
+      <td class="text-end">R$ ${row.valor_total.toFixed(2)}</td>
+      <td class="text-center">
+        <span class="badge bg-${statusOSClass}">
+          <i class="fas ${statusOSIcon}"></i> ${statusOSText}
+        </span>
+      </td>
+      <td class="text-center">
+        <span class="badge bg-${statusPagamentoClass}">
+          <i class="fas ${statusPagamentoIcon}"></i> ${statusPagamentoText}
+        </span>
+      </td>
+      <td class="text-center">${dataVenc}</td>
+      <td class="text-center">
+        <div class="btn-group btn-group-sm" role="group">
+          <button class="btn btn-sm btn-outline-primary btn-detalhes" 
+                  data-id="${row.id}" 
+                  data-unidade="${row.unidade}"
+                  data-mes="${row.mes}"
+                  data-ano="${row.ano}"
+                  data-detalhes='${JSON.stringify(row.detalhes)}'
+                  title="Ver detalhes (ID: ${row.id})">
+            <i class="fas fa-eye"></i>
+          </button>
+          ${!temOs && !osFaturada && !osRejeitada ? `
+            <button class="btn btn-sm ${osErro ? 'btn-danger' : 'btn-outline-primary'} btn-criar-os" 
+                    data-id="${row.id}" 
+                    data-unidade="${row.unidade}"
+                    data-valor="${row.valor_total}"
+                    data-mes="${row.mes}"
+                    data-ano="${row.ano}"
+                    data-detalhes='${JSON.stringify(row.detalhes)}'
+                    data-os-id="${row.omie_os_id || ''}"
+                    data-os-status="${row.omie_status || ''}"
+                    data-os-erro="${row.omie_erro || ''}"
+                    title="${osErro ? 'Erro ao criar OS' : 'Criar OS na Etapa 50'}">
+              <i class="fas ${osErro ? 'fa-exclamation-triangle' : 'fa-file-invoice'}"></i>
+              ${osErro ? 'Erro' : 'Criar OS'}
+            </button>
+          ` : `
+            <button class="btn btn-sm ${osFaturada ? 'btn-success' : 'btn-primary'}" disabled>
+              <i class="fas ${osFaturada ? 'fa-check-circle' : 'fa-file-invoice'}"></i>
+              ${osFaturada ? 'Faturado' : 'OS OK'}
+            </button>
+          `}
+          ${(row.omie_status === 'faturado' || row.omie_status === 'aprovado') ? `
+            <button class="btn btn-sm btn-outline-danger btn-cancelar-nfse" 
+                    data-id="${row.id}" 
+                    data-os-id="${row.omie_os_id}"
+                    title="Cancelar NFS-e">
+              <i class="fas fa-ban"></i>
+            </button>
+          ` : ''}
+          <button class="btn btn-sm btn-outline-info btn-atualizar-status-individual" 
+                  data-id="${row.id}" 
+                  title="Atualizar status desta OS">
+            <i class="fas fa-sync"></i>
+          </button>
+          ${row.omie_os_id ? `
+            <button class="btn btn-sm btn-outline-warning btn-reset-os" 
+                    data-id="${row.id}" 
+                    data-os-id="${row.omie_os_id}"
+                    title="Resetar OS (permite criar novamente)">
+              <i class="fas fa-undo"></i>
+            </button>
+          ` : ''}
+          ${row.omie_os_id && (row.omie_status === 'criado' || row.omie_status === 'erro') ? `
+            <button class="btn btn-sm btn-outline-danger btn-excluir-os" 
+                    data-id="${row.id}" 
+                    data-os-id="${row.omie_os_id}"
+                    title="Excluir OS (antes de faturar)">
+              <i class="fas fa-trash"></i>
+            </button>
+          ` : ''}
+          <button class="btn btn-sm btn-outline-danger btn-excluir-unidade" 
+                  data-id="${row.id}" 
+                  data-unidade="${row.unidade}"
+                  data-mes="${row.mes}"
+                  data-ano="${row.ano}"
+                  title="Excluir esta unidade específica">
+            <i class="fas fa-trash"></i>
+          </button>
+        </div>
+      </td>
+    </tr>`;
+  });
+  tbody.innerHTML = html;
+
+  // Atualizar informações da paginação
+  const totalRegistros = dadosFiltrados.length;
+  const totalPaginas = Math.ceil(totalRegistros / registrosPorPagina);
+  const exibindo = dadosPagina.length;
+  const pagInfo = document.getElementById('paginationInfo');
+  if (pagInfo) {
+    pagInfo.textContent = `Mostrando ${inicio + 1} a ${inicio + exibindo} de ${totalRegistros} registros (Página ${paginaAtual} de ${totalPaginas})`;
+  }
+
+  // Atualizar controles de paginação
+  atualizarControlesPaginacao(totalPaginas);
+
+  // Adicionar eventos dos botões
+  adicionarEventosBotoes();
+}
+
+// ========================= RENDERIZAR TABELA =========================
+function renderizarTabela(dadosPagina, mapaUnidades) {
+  const meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+  const hoje = new Date();
+  const tbody = document.getElementById('resultsBody');
+
+  let html = '';
+  dadosPagina.forEach(row => {
     const mesNome = meses[row.mes - 1];
     const infoUnidade = mapaUnidades[row.unidade] || { holding: 'N/A', grupo: 'N/A' };
     
@@ -3892,13 +4289,13 @@ async function carregarRelatorio(mes = 0, ano = 0, filtroUnidade = '', status = 
             <i class="fas fa-sync"></i>
           </button>
           ${row.omie_os_id ? `
-  <button class="btn btn-sm btn-outline-warning btn-reset-os" 
-          data-id="${row.id}" 
-          data-os-id="${row.omie_os_id}"
-          title="Resetar OS (permite criar novamente)">
-    <i class="fas fa-undo"></i>
-  </button>
-` : ''}
+            <button class="btn btn-sm btn-outline-warning btn-reset-os" 
+                    data-id="${row.id}" 
+                    data-os-id="${row.omie_os_id}"
+                    title="Resetar OS (permite criar novamente)">
+              <i class="fas fa-undo"></i>
+            </button>
+          ` : ''}
           ${row.omie_os_id && (row.omie_status === 'criado' || row.omie_status === 'erro') ? `
             <button class="btn btn-sm btn-outline-danger btn-excluir-os" 
                     data-id="${row.id}" 
@@ -3921,183 +4318,227 @@ async function carregarRelatorio(mes = 0, ano = 0, filtroUnidade = '', status = 
   });
   tbody.innerHTML = html;
 
-  // ========================= EVENTOS DOS BOTÕES =========================
+  // Atualizar informações da paginação
+  const totalRegistros = dadosFiltrados.length;
+  const totalPaginas = Math.ceil(totalRegistros / registrosPorPagina);
+  const exibindo = dadosPagina.length;
+  const pagInfo = document.getElementById('paginationInfo');
+  if (pagInfo) {
+    pagInfo.textContent = `Mostrando ${inicio + 1} a ${inicio + exibindo} de ${totalRegistros} registros (Página ${paginaAtual} de ${totalPaginas})`;
+  }
 
+  // Atualizar controles de paginação
+  atualizarControlesPaginacao(totalPaginas);
+
+  // Adicionar eventos dos botões
+  adicionarEventosBotoes();
+}
+
+// ========================= ADICIONAR EVENTOS DOS BOTÕES =========================
+function adicionarEventosBotoes() {
   document.querySelectorAll('.btn-detalhes').forEach(btn => {
-    btn.addEventListener('click', function() {
-      const id = parseInt(this.dataset.id);
-      const unidade = this.dataset.unidade;
-      const mes = parseInt(this.dataset.mes);
-      const ano = parseInt(this.dataset.ano);
-      const detalhes = JSON.parse(this.dataset.detalhes);
-      mostrarDetalhes(id, unidade, mes, ano, detalhes);
-    });
+    btn.removeEventListener('click', handleDetalhes);
+    btn.addEventListener('click', handleDetalhes);
   });
 
   document.querySelectorAll('.btn-criar-os').forEach(btn => {
-    btn.addEventListener('click', function() {
-      const id = this.dataset.id;
-      const unidade = this.dataset.unidade;
-      const valor = parseFloat(this.dataset.valor);
-      const mes = this.dataset.mes;
-      const ano = this.dataset.ano;
-      const detalhes = JSON.parse(this.dataset.detalhes);
-      const osStatus = this.dataset.osStatus;
-      
-      if (osStatus === 'criado') {
-        mostrarAlerta(`OS já criada para ${unidade}.`, 'info');
-        return;
-      }
-      
-      abrirModalCriarOs(id, unidade, valor, mes, ano, detalhes);
-    });
+    btn.removeEventListener('click', handleCriarOs);
+    btn.addEventListener('click', handleCriarOs);
   });
 
   document.querySelectorAll('.btn-atualizar-status-individual').forEach(btn => {
-    btn.addEventListener('click', async function() {
-      const id = this.dataset.id;
-      const originalHtml = this.innerHTML;
-      
-      this.disabled = true;
-      this.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-      
-      try {
-        await atualizarStatusOSIndividual(id);
-        mostrarAlerta('Status atualizado com sucesso!', 'success');
-        
-        const mes = parseInt(document.getElementById('filterMonth').value);
-        const ano = parseInt(document.getElementById('filterYear').value);
-        const unidade = document.getElementById('filterUnit').value.trim();
-        await carregarRelatorio(mes, ano, unidade, statusFiltroAtual);
-        
-      } catch (err) {
-        mostrarAlerta('Erro ao atualizar: ' + err.message, 'danger');
-      } finally {
-        this.disabled = false;
-        this.innerHTML = originalHtml;
-      }
-    });
+    btn.removeEventListener('click', handleAtualizarStatus);
+    btn.addEventListener('click', handleAtualizarStatus);
   });
 
   document.querySelectorAll('.btn-cancelar-nfse').forEach(btn => {
-    btn.addEventListener('click', async function() {
-      const id = this.dataset.id;
-      const osId = this.dataset.osId;
-      
-      if (!id || !osId) {
-        mostrarAlerta('Dados insuficientes para cancelar.', 'danger');
-        return;
-      }
-      
-      try {
-        const result = await cancelarNFSe(osId, '');
-        
-        if (result.success) {
-          mostrarAlerta(result.message, 'success');
-        } else if (result.jaCancelada) {
-          mostrarAlerta(result.message, 'warning');
-        } else {
-          mostrarAlerta(result.message, 'danger');
-        }
-        
-        const mes = parseInt(document.getElementById('filterMonth').value);
-        const ano = parseInt(document.getElementById('filterYear').value);
-        const unidade = document.getElementById('filterUnit').value.trim();
-        await carregarRelatorio(mes, ano, unidade, statusFiltroAtual);
-        
-      } catch (err) {
-        mostrarAlerta('Erro ao cancelar: ' + err.message, 'danger');
-      }
-    });
+    btn.removeEventListener('click', handleCancelarNfse);
+    btn.addEventListener('click', handleCancelarNfse);
   });
 
-  // ========================= BOTÃO RESETAR OS =========================
   document.querySelectorAll('.btn-reset-os').forEach(btn => {
-    btn.addEventListener('click', async function() {
-      const id = parseInt(this.dataset.id);
-      await resetarOS(id);
-    });
+    btn.removeEventListener('click', handleResetOs);
+    btn.addEventListener('click', handleResetOs);
   });
 
-  // ========================= BOTÃO EXCLUIR OS =========================
   document.querySelectorAll('.btn-excluir-os').forEach(btn => {
-    btn.addEventListener('click', async function() {
-      const id = parseInt(this.dataset.id);
-      await excluirOS(id);
-    });
+    btn.removeEventListener('click', handleExcluirOs);
+    btn.addEventListener('click', handleExcluirOs);
   });
 
-  // ========================= BOTÃO EXCLUIR UNIDADE ESPECÍFICA =========================
   document.querySelectorAll('.btn-excluir-unidade').forEach(btn => {
-    btn.addEventListener('click', async function() {
-      const id = parseInt(this.dataset.id);
-      const unidade = this.dataset.unidade;
-      const mes = parseInt(this.dataset.mes);
-      const ano = parseInt(this.dataset.ano);
-      
-      try {
-        const { data: registro, error: buscaError } = await supabaseClient
-          .from('faturamento')
-          .select('id, unidade, mes, ano')
-          .eq('id', id)
-          .maybeSingle();
-        
-        if (buscaError || !registro) {
-          mostrarAlerta(`Registro não encontrado (ID: ${id}). Pode ter sido excluído anteriormente.`, 'warning');
-          const mesFiltro = parseInt(document.getElementById('filterMonth').value) || 0;
-          const anoFiltro = parseInt(document.getElementById('filterYear').value) || new Date().getFullYear();
-          const unidadeFiltro = document.getElementById('filterUnit').value.trim() || '';
-          await carregarRelatorio(mesFiltro, anoFiltro, unidadeFiltro, statusFiltroAtual);
-          return;
-        }
-        
-        if (!confirm(`Deseja realmente excluir o registro de "${unidade}" (${mes}/${ano})? ID: ${id}`)) {
-          return;
-        }
-        
-        const { error } = await supabaseClient
-          .from('faturamento')
-          .delete()
-          .eq('id', id);
-        
-        if (error) throw error;
-        
-        const { data: verifica } = await supabaseClient
-          .from('faturamento')
-          .select('id')
-          .eq('id', id)
-          .maybeSingle();
-        
-        if (verifica) {
-          mostrarAlerta(`Erro: O registro de "${unidade}" não foi excluído.`, 'danger');
-          return;
-        }
-        
-        mostrarAlerta(`✅ Registro de "${unidade}" (${mes}/${ano}) excluído com sucesso!`, 'success');
-        console.log(`✅ Registro ${id} excluído com sucesso.`);
-        
-        const mesFiltro = parseInt(document.getElementById('filterMonth').value) || 0;
-        const anoFiltro = parseInt(document.getElementById('filterYear').value) || new Date().getFullYear();
-        const unidadeFiltro = document.getElementById('filterUnit').value.trim() || '';
-        await carregarRelatorio(mesFiltro, anoFiltro, unidadeFiltro, statusFiltroAtual);
-        
-        await carregarCards(mesFiltro, anoFiltro);
-        await carregarGraficos(anoFiltro);
-        
-      } catch (err) {
-        console.error('❌ Erro ao excluir:', err);
-        mostrarAlerta(`Erro ao excluir: ${err.message}`, 'danger');
+    btn.removeEventListener('click', handleExcluirUnidade);
+    btn.addEventListener('click', handleExcluirUnidade);
+  });
+}
+
+// ========================= HANDLERS DOS BOTÕES =========================
+function handleDetalhes() {
+  const id = parseInt(this.dataset.id);
+  const unidade = this.dataset.unidade;
+  const mes = parseInt(this.dataset.mes);
+  const ano = parseInt(this.dataset.ano);
+  const detalhes = JSON.parse(this.dataset.detalhes);
+  mostrarDetalhes(id, unidade, mes, ano, detalhes);
+}
+
+function handleCriarOs() {
+  const id = this.dataset.id;
+  const unidade = this.dataset.unidade;
+  const valor = parseFloat(this.dataset.valor);
+  const mes = this.dataset.mes;
+  const ano = this.dataset.ano;
+  const detalhes = JSON.parse(this.dataset.detalhes);
+  const osStatus = this.dataset.osStatus;
+  
+  if (osStatus === 'criado') {
+    mostrarAlerta(`OS já criada para ${unidade}.`, 'info');
+    return;
+  }
+  
+  abrirModalCriarOs(id, unidade, valor, mes, ano, detalhes);
+}
+
+async function handleAtualizarStatus() {
+  const id = this.dataset.id;
+  const originalHtml = this.innerHTML;
+  
+  this.disabled = true;
+  this.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+  
+  try {
+    await atualizarStatusOSIndividual(id);
+    mostrarAlerta('Status atualizado com sucesso!', 'success');
+    recarregarTabela();
+  } catch (err) {
+    mostrarAlerta('Erro ao atualizar: ' + err.message, 'danger');
+  } finally {
+    this.disabled = false;
+    this.innerHTML = originalHtml;
+  }
+}
+
+async function handleCancelarNfse() {
+  const id = this.dataset.id;
+  const osId = this.dataset.osId;
+  
+  if (!id || !osId) {
+    mostrarAlerta('Dados insuficientes para cancelar.', 'danger');
+    return;
+  }
+  
+  try {
+    const result = await cancelarNFSe(osId, '');
+    
+    if (result.success) {
+      mostrarAlerta(result.message, 'success');
+    } else if (result.jaCancelada) {
+      mostrarAlerta(result.message, 'warning');
+    } else {
+      mostrarAlerta(result.message, 'danger');
+    }
+    recarregarTabela();
+  } catch (err) {
+    mostrarAlerta('Erro ao cancelar: ' + err.message, 'danger');
+  }
+}
+
+async function handleResetOs() {
+  const id = parseInt(this.dataset.id);
+  await resetarOS(id);
+}
+
+async function handleExcluirOs() {
+  const id = parseInt(this.dataset.id);
+  await excluirOS(id);
+}
+
+async function handleExcluirUnidade() {
+  const id = parseInt(this.dataset.id);
+  const unidade = this.dataset.unidade;
+  const mes = parseInt(this.dataset.mes);
+  const ano = parseInt(this.dataset.ano);
+  await excluirUnidadeProcessamento(id, unidade, mes, ano);
+}
+
+// ========================= ATUALIZAR CONTROLES DE PAGINAÇÃO =========================
+function atualizarControlesPaginacao(totalPaginas) {
+  const paginationContainer = document.getElementById('paginationControls');
+  if (!paginationContainer) return;
+
+  // Mostrar controles
+  paginationContainer.style.display = 'flex';
+
+  // Atualizar botão anterior
+  const prevBtn = document.getElementById('prevPageBtn');
+  if (prevBtn) {
+    prevBtn.classList.toggle('disabled', paginaAtual <= 1);
+    prevBtn.onclick = function(e) {
+      e.preventDefault();
+      if (paginaAtual > 1) {
+        paginaAtual--;
+        renderizarPagina();
+      }
+    };
+  }
+
+  // Atualizar botão próximo
+  const nextBtn = document.getElementById('nextPageBtn');
+  if (nextBtn) {
+    nextBtn.classList.toggle('disabled', paginaAtual >= totalPaginas);
+    nextBtn.onclick = function(e) {
+      e.preventDefault();
+      if (paginaAtual < totalPaginas) {
+        paginaAtual++;
+        renderizarPagina();
+      }
+    };
+  }
+
+  // Remover páginas existentes (exceto anterior e próximo)
+  const pageItems = paginationContainer.querySelectorAll('.page-item:not(#prevPageBtn):not(#nextPageBtn)');
+  pageItems.forEach(el => el.remove());
+
+  if (totalPaginas <= 1) {
+    paginationContainer.style.display = 'none';
+    return;
+  }
+
+  // Adicionar páginas
+  let startPage = Math.max(1, paginaAtual - 4);
+  let endPage = Math.min(totalPaginas, startPage + 9);
+  
+  if (endPage - startPage < 9) {
+    startPage = Math.max(1, endPage - 9);
+  }
+
+  // Inserir páginas
+  for (let i = startPage; i <= endPage; i++) {
+    const li = document.createElement('li');
+    li.className = `page-item ${i === paginaAtual ? 'active' : ''}`;
+    li.innerHTML = `<a class="page-link" href="#" data-page="${i}">${i}</a>`;
+    
+    // Inserir antes do botão próximo
+    paginationContainer.insertBefore(li, nextBtn);
+    
+    li.addEventListener('click', function(e) {
+      e.preventDefault();
+      const page = parseInt(this.querySelector('a').dataset.page);
+      if (page !== paginaAtual) {
+        paginaAtual = page;
+        renderizarPagina();
       }
     });
-  });
+  }
+}
 
-  // ========================= BOTÃO RESETAR OS =========================
-  document.querySelectorAll('.btn-reset-os').forEach(btn => {
-    btn.addEventListener('click', async function() {
-      const id = parseInt(this.dataset.id);
-      await resetarOS(id);
-    });
-  });
+// ========================= RECARREGAR TABELA =========================
+function recarregarTabela() {
+  console.log('🔄 Recarregando tabela...');
+  const mes = parseInt(document.getElementById('filterMonth')?.value) || 0;
+  const ano = parseInt(document.getElementById('filterYear')?.value) || new Date().getFullYear();
+  const unidade = document.getElementById('filterUnit')?.value?.trim() || '';
+  carregarRelatorio(mes, ano, unidade, statusFiltroAtual);
 }
 
 // ========================= CARREGAR HOLDINGS E GRUPOS PARA FILTRO =========================
@@ -6122,6 +6563,156 @@ document.addEventListener('DOMContentLoaded', function () {
     document.body.classList.remove('modal-open');
   };
 
+  // ================================================================
+// FILTROS POR COLUNA - NOVO RECURSO
+// ================================================================
+
+let filtrosColuna = {};
+
+// ===== FUNÇÃO PRINCIPAL: APLICAR FILTROS =====
+function aplicarFiltrosTabela() {
+    const buscaGlobal = document.getElementById('globalSearchInput')?.value?.toLowerCase().trim() || '';
+    
+    // Se não há filtros de coluna e não há busca global, usa todos os dados
+    if (Object.keys(filtrosColuna).length === 0 && !buscaGlobal) {
+        dadosFiltrados = [...todosOsDados];
+    } else {
+        // Aplica os filtros de coluna e busca global
+        dadosFiltrados = todosOsDados.filter(row => {
+            // 1. Filtros por coluna específica
+            for (const [coluna, valorFiltro] of Object.entries(filtrosColuna)) {
+                if (!valorFiltro) continue;
+                
+                let valorCelula = obterValorCelula(row, coluna);
+                if (!valorCelula.toLowerCase().includes(valorFiltro.toLowerCase())) {
+                    return false;
+                }
+            }
+            
+            // 2. Busca global (se houver texto digitado)
+            if (buscaGlobal) {
+                const textoCompleto = obterTextoCompletoLinha(row);
+                if (!textoCompleto.toLowerCase().includes(buscaGlobal)) {
+                    return false;
+                }
+            }
+            
+            return true;
+        });
+    }
+    
+    // 3. Aplica ordenação (se houver)
+    if (colunaOrdenacao) {
+        dadosFiltrados = ordenarDados(dadosFiltrados, colunaOrdenacao, ordemOrdenacao);
+    }
+    
+    // 4. Volta para a primeira página e renderiza
+    paginaAtual = 1;
+    renderizarPagina();
+}
+
+// Pega o valor de uma célula específica
+function obterValorCelula(row, coluna) {
+    const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+                   'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+    
+    switch(coluna) {
+        case 'unidade': return row.unidade || '';
+        case 'holding': return window._mapaUnidades?.[row.unidade]?.holding || '';
+        case 'grupo': return window._mapaUnidades?.[row.unidade]?.grupo || '';
+        case 'mesano': return `${meses[row.mes-1]}/${row.ano}`;
+        case 'valor': return row.valor_total.toFixed(2);
+        case 'status_os': return obterStatusOS(row);
+        case 'status_pagamento': return obterStatusPagamento(row);
+        case 'vencimento': return row.data_vencimento ? new Date(row.data_vencimento + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
+        default: return '';
+    }
+}
+
+function obterStatusOS(row) {
+    if (row.omie_status === 'criado') return 'OS Criada';
+    if (row.omie_status === 'faturado' || row.omie_status === 'aprovado') return 'Faturado';
+    if (row.omie_status === 'rejeitado') return 'Rejeitado';
+    if (row.omie_status === 'cancelado') return 'Cancelado';
+    if (row.omie_status === 'erro') return 'Erro';
+    return 'Pendente';
+}
+
+function obterStatusPagamento(row) {
+    if (row.pago) return 'Pago';
+    if (row.data_vencimento) {
+        const hoje = new Date();
+        const venc = new Date(row.data_vencimento + 'T00:00:00');
+        const diff = Math.ceil((venc - hoje) / (1000 * 60 * 60 * 24));
+        if (diff < 0) return 'Vencido';
+        if (diff <= 2) return 'Próx. venc.';
+    }
+    return 'Pendente';
+}
+
+function obterTextoCompletoLinha(row) {
+    const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+                   'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+    return `${row.unidade} ${window._mapaUnidades?.[row.unidade]?.holding || ''} ${window._mapaUnidades?.[row.unidade]?.grupo || ''} ${meses[row.mes-1]}/${row.ano} ${row.valor_total.toFixed(2)} ${obterStatusOS(row)} ${obterStatusPagamento(row)}`;
+}
+
+// Definir filtro de uma coluna
+function setFilterColuna(coluna, valor) {
+    if (valor && valor.trim()) {
+        filtrosColuna[coluna] = valor.trim();
+    } else {
+        delete filtrosColuna[coluna];
+    }
+    
+    // Atualiza indicadores visuais
+    document.querySelectorAll('thead th[data-filter]').forEach(th => {
+        const col = th.dataset.filter;
+        const indicator = th.querySelector('.filter-indicator');
+        if (indicator) {
+            indicator.style.display = filtrosColuna[col] ? 'inline' : 'none';
+        }
+    });
+    
+    aplicarFiltrosTabela();
+}
+
+// Limpar todos os filtros
+function limparFiltrosTabela() {
+    filtrosColuna = {};
+    document.getElementById('globalSearchInput').value = '';
+    document.querySelectorAll('.filter-indicator').forEach(el => el.style.display = 'none');
+    dadosFiltrados = [...todosOsDados];
+    paginaAtual = 1;
+    renderizarPagina();
+}
+
+// Clique no cabeçalho da coluna
+function handleColumnFilterClick(e) {
+    const th = e.currentTarget;
+    const coluna = th.dataset.filter;
+    if (!coluna) return;
+    
+    // Pega o valor da primeira linha da coluna
+    const primeiraLinha = document.querySelector('#resultsBody tr:not([style*="display: none"])');
+    if (!primeiraLinha) return;
+    
+    const cells = primeiraLinha.querySelectorAll('td');
+    const colIndex = Array.from(th.parentElement.children).indexOf(th);
+    if (colIndex >= cells.length) return;
+    
+    let valor = cells[colIndex]?.textContent?.trim() || '';
+    // Remove emojis/icons
+    valor = valor.replace(/[✅❌⛔⚠️]/g, '').trim();
+    
+    // Se já está filtrado, remove o filtro
+    if (filtrosColuna[coluna] === valor) {
+        setFilterColuna(coluna, '');
+        return;
+    }
+    
+    setFilterColuna(coluna, valor);
+}
+
   // ========================= DASHBOARD FILTROS =========================
   function popularAnosDashboard() {
     const select = document.getElementById('dashboardYear');
@@ -6348,6 +6939,35 @@ document.getElementById('exportExcelBtn')?.addEventListener('click', function() 
   const fileName = `faturamento_${new Date().toISOString().slice(0,10)}.xlsx`;
   XLSX.writeFile(wb, fileName);
   mostrarAlerta(`Arquivo "${fileName}" exportado com sucesso!`, 'success');
+});
+
+// No DOMContentLoaded, adicione:
+document.getElementById('pageSizeSelect')?.addEventListener('change', function() {
+  registrosPorPagina = parseInt(this.value);
+  paginaAtual = 1;
+  renderizarPagina();
+});
+
+// ===== FILTROS POR COLUNA =====
+// Adiciona evento de clique nos cabeçalhos
+document.querySelectorAll('thead th[data-filter]').forEach(th => {
+    th.addEventListener('click', handleColumnFilterClick);
+});
+
+// Busca global com delay
+let buscaTimeout;
+document.getElementById('globalSearchInput')?.addEventListener('input', function() {
+    clearTimeout(buscaTimeout);
+    buscaTimeout = setTimeout(aplicarFiltrosTabela, 300);
+});
+
+// Botão limpar filtros
+document.getElementById('clearTableFiltersBtn')?.addEventListener('click', limparFiltrosTabela);
+
+// ===== ORDENAÇÃO POR COLUNA =====
+// Adiciona evento de clique nos cabeçalhos
+document.querySelectorAll('thead th[data-sort]').forEach(th => {
+    th.addEventListener('click', handleSortClick);
 });
 
   // ========================= OUTROS =========================
