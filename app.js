@@ -4075,20 +4075,20 @@ async function renderizarPagina(mapaUnidades = null) {
             </button>
           ` : ''}
           ${row.omie_os_id && (row.omie_status === 'criado' || row.omie_status === 'erro') ? `
-            <button class="btn btn-sm btn-outline-danger btn-excluir-os" 
-                    data-id="${row.id}" 
-                    data-os-id="${row.omie_os_id}"
-                    title="Excluir OS (antes de faturar)">
-              <i class="fas fa-trash"></i>
-            </button>
-          ` : ''}
+          <button class="btn btn-sm btn-danger btn-excluir-os" 
+                  data-id="${row.id}" 
+                  data-os-id="${row.omie_os_id}"
+                  title="Excluir a OS na OMIE (antes de faturar)">
+            <i class="fas fa-trash-alt"></i>
+          </button>
+        ` : ''}
           <button class="btn btn-sm btn-outline-danger btn-excluir-unidade" 
                   data-id="${row.id}" 
                   data-unidade="${row.unidade}"
                   data-mes="${row.mes}"
                   data-ano="${row.ano}"
-                  title="Excluir esta unidade específica">
-            <i class="fas fa-trash"></i>
+                  title="Excluir esta unidade do processamento">
+            <i class="fas fa-times"></i>
           </button>
         </div>
       </td>
