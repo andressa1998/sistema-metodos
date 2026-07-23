@@ -64,14 +64,17 @@ let dadosFiltrados = [];
 let filtrosColuna = {};
 let dadosOriginais = [];
 
+// ========================= VARIÁVEIS DE FILTRO DE BOLETOS =========================
+let boletoStatusFiltro = 'todos';
+let dadosBoletos = [];
+let boletosFiltrados = [];
+
 // ========================= FUNÇÃO NORMALIZAR UNIDADE MELHORADA =========================
 function normalizarUnidade(nome) {
   if (!nome) return '';
-  // Remove acentos e caracteres especiais
   let normalizado = nome.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   normalizado = normalizado.replace(/[()\-.,/]/g, ' ');
   
-  // Remove sufixos comuns
   const sufixos = [
     ' LTDA', ' LTDA.', ' S/A', ' S.A.', ' ME', ' EIRELI', ' SS', ' S/S',
     ' ADMINISTRADORA', ' ADMINISTRADORA DE CARTOES',
@@ -83,7 +86,6 @@ function normalizarUnidade(nome) {
     normalizado = normalizado.replace(regex, '');
   });
   
-  // Remove acentos manualmente (garantia extra)
   normalizado = normalizado.replace(/[áàâãä]/gi, 'a');
   normalizado = normalizado.replace(/[éèêë]/gi, 'e');
   normalizado = normalizado.replace(/[íìîï]/gi, 'i');
@@ -194,7 +196,6 @@ const CODIGO_SERVICO_LC116 = '17.12';
 
 // ========================= FUNÇÕES OMIE =========================
 
-// Buscar e-mail do cliente
 async function buscarEmailClienteOmie(codigoCliente) {
   try {
     console.log(`🔍 Buscando e-mail do cliente código: ${codigoCliente}`);
@@ -244,7 +245,6 @@ async function buscarEmailClienteOmie(codigoCliente) {
 async function verificarOSDuplicada(cnpj, mes, ano, unidade) {
   console.log(`🔍 Verificando OS duplicada para: ${unidade} (${mes}/${ano})`);
   
-  // Buscar registros de faturamento para esta unidade no mesmo mês/ano
   const { data: registros, error } = await supabaseClient
     .from('faturamento')
     .select('*')
@@ -266,9 +266,8 @@ async function verificarOSDuplicada(cnpj, mes, ano, unidade) {
   return { duplicado: false, registro: null };
 }
 
-// ========================= CRIAR ORDEM DE SERVIÇO NA OMIE (COM VALIDAÇÃO E RESUMO) =========================
+// ========================= CRIAR ORDEM DE SERVIÇO NA OMIE =========================
 async function criarOrdemServicoOmie(registro, codigoCliente) {
-  // ===== VALIDAÇÃO DE DUPLICIDADE =====
   const { duplicado, registro: existing } = await verificarOSDuplicada(
     null,
     registro.mes,
@@ -291,7 +290,6 @@ async function criarOrdemServicoOmie(registro, codigoCliente) {
 
   const emailCliente = await buscarEmailClienteOmie(codigoCliente);
 
-  // ===== GERAR DESCRIÇÃO (COM RESUMO SE NECESSÁRIO) =====
   const detalhes = registro.detalhes || {};
   const descricaoCompleta = gerarDescricaoResumida(
     detalhes,
@@ -301,7 +299,6 @@ async function criarOrdemServicoOmie(registro, codigoCliente) {
     registro.valor_total
   );
 
-  // Data de vencimento compensada
   let dataVencimentoOriginal = '01/08/2026';
   if (registro.data_vencimento) {
     const partes = registro.data_vencimento.split('-');
@@ -605,7 +602,6 @@ async function processarUpload(file) {
 
   const dataRows = rows.slice(headerRowIndex + 1);
 
-  // ===== DETECTAR MÊS DOS EXAMES =====
   const mapMesAno = {};
   let maxCount = 0;
   let mesEscolhido = 0, anoEscolhido = 0;
@@ -649,7 +645,6 @@ async function processarUpload(file) {
     anoEscolhido = now.getFullYear();
   }
 
-  // ===== CALCULAR MÊS DE FATURAMENTO =====
   let mesFaturamento = mesEscolhido + 1;
   let anoFaturamento = anoEscolhido;
   if (mesFaturamento > 12) {
@@ -660,7 +655,6 @@ async function processarUpload(file) {
   console.log(`📅 Mês dos exames: ${mesEscolhido}/${anoEscolhido}`);
   console.log(`📅 Mês de faturamento: ${mesFaturamento}/${anoFaturamento}`);
 
-  // ===== EXTRAIR EXAMES POR UNIDADE (TUDO NORMALIZADO) =====
   const examesPorUnidade = {};
   const unidadesNaPlanilha = new Set();
 
@@ -677,7 +671,6 @@ async function processarUpload(file) {
     const exameNormalizado = normalizarNomeExame(exameUpload);
     if (!exameNormalizado) continue;
 
-    // TUDO NORMALIZADO
     const chaveUnidade = normalizarUnidade(unidadePlanilha);
     unidadesNaPlanilha.add(chaveUnidade);
 
@@ -702,7 +695,6 @@ async function processarUpload(file) {
 
   if (unidadesError) throw unidadesError;
 
-  // ===== MAPEAR UNIDADES ENCONTRADAS (TUDO NORMALIZADO) =====
   const unidadesEncontradas = {};
   const unidadesNaoEncontradas = [];
 
@@ -711,7 +703,6 @@ async function processarUpload(file) {
     
     console.log(`🔍 Buscando unidade: "${chaveNorm}"`);
     
-    // 1. Busca pela razão social (normalizada)
     for (let u of todasUnidades) {
       if (u.razao_social) {
         const razaoNorm = normalizarUnidade(u.razao_social);
@@ -723,7 +714,6 @@ async function processarUpload(file) {
       }
     }
     
-    // 2. Busca pelo nome da unidade (normalizado)
     if (!unidadeEncontrada) {
       for (let u of todasUnidades) {
         const unidadeNorm = normalizarUnidade(u.unidade);
@@ -735,7 +725,6 @@ async function processarUpload(file) {
       }
     }
     
-    // 3. Busca por contém na razão social
     if (!unidadeEncontrada) {
       for (let u of todasUnidades) {
         if (u.razao_social) {
@@ -749,7 +738,6 @@ async function processarUpload(file) {
       }
     }
     
-    // 4. Busca por contém no nome
     if (!unidadeEncontrada) {
       for (let u of todasUnidades) {
         const unidadeNorm = normalizarUnidade(u.unidade);
@@ -770,7 +758,6 @@ async function processarUpload(file) {
     }
   }
 
-  // Incluir unidades com mensalidade/vidas
   for (let unidade of todasUnidades) {
     const temMensalidade = unidade.mensalidade && unidade.mensalidade > 0;
     const temVidas = unidade.vidas && unidade.vidas > 0 && unidade.qtd_vidas && unidade.qtd_vidas > 0;
@@ -786,7 +773,6 @@ async function processarUpload(file) {
 
   console.log(`📊 Total de unidades a processar: ${Object.keys(unidadesEncontradas).length}`);
 
-  // ===== BUSCAR REGISTROS EXISTENTES =====
   const { data: registrosExistentes, error: buscaExistenteError } = await supabaseClient
     .from('faturamento')
     .select('*')
@@ -806,7 +792,6 @@ async function processarUpload(file) {
 
   console.log(`📋 Registros existentes para ${mesFaturamento}/${anoFaturamento}:`, Object.keys(mapaExistentes));
 
-  // ===== PROCESSAR CADA UNIDADE =====
   const unidadesProcessadas = new Set();
   const registrosParaInserir = [];
   const registrosParaAtualizar = [];
@@ -830,7 +815,6 @@ async function processarUpload(file) {
     const detalhes = {};
     let total = 0;
 
-    // Mensalidade
     if (unidade.mensalidade && unidade.mensalidade > 0) {
       total += unidade.mensalidade;
       detalhes['mensalidade'] = { 
@@ -840,7 +824,6 @@ async function processarUpload(file) {
       };
     }
 
-    // Vidas NR-1
     if (unidade.vidas && unidade.vidas > 0 && unidade.qtd_vidas && unidade.qtd_vidas > 0) {
       const valorVidas = unidade.vidas * unidade.qtd_vidas;
       total += valorVidas;
@@ -851,12 +834,10 @@ async function processarUpload(file) {
       };
     }
 
-    // ===== BUSCAR EXAMES (USANDO A CHAVE NORMALIZADA DA PLANILHA) =====
     let examesDaUnidade = examesPorUnidade[chavePlanilha] || [];
     
     console.log(`   📋 Exames encontrados pela chave "${chavePlanilha}": ${examesDaUnidade.length}`);
     
-    // Se não encontrou, tenta pela razão social normalizada
     if (examesDaUnidade.length === 0 && unidade.razao_social) {
       const razaoNorm = normalizarUnidade(unidade.razao_social);
       console.log(`   🔍 Tentando pela razão social: "${razaoNorm}"`);
@@ -866,7 +847,6 @@ async function processarUpload(file) {
       }
     }
     
-    // Se não encontrou, tenta pelo nome da unidade normalizado
     if (examesDaUnidade.length === 0) {
       const unidadeNorm = normalizarUnidade(unidade.unidade);
       console.log(`   🔍 Tentando pelo nome da unidade: "${unidadeNorm}"`);
@@ -876,14 +856,12 @@ async function processarUpload(file) {
       }
     }
     
-    // Se ainda não encontrou, faz uma busca forçada
     if (examesDaUnidade.length === 0) {
       console.log(`   🔍 Busca forçada em todas as chaves...`);
       const razaoNorm = unidade.razao_social ? normalizarUnidade(unidade.razao_social) : '';
       const unidadeNorm = normalizarUnidade(unidade.unidade);
       
       for (let [chave, exames] of Object.entries(examesPorUnidade)) {
-        // Verifica se a chave contém a razão social OU o nome da unidade
         if ((razaoNorm && (chave.includes(razaoNorm) || razaoNorm.includes(chave))) ||
             (unidadeNorm && (chave.includes(unidadeNorm) || unidadeNorm.includes(chave)))) {
           examesDaUnidade = exames;
@@ -924,14 +902,12 @@ async function processarUpload(file) {
     console.log(`   📋 Itens encontrados:`, Object.keys(detalhes));
     console.log(`   💰 Total: R$ ${total.toFixed(2)}`);
 
-    // Data de vencimento
     const diaVencimento = unidade.dia_vencimento || 10;
     const ultimoDia = new Date(anoFaturamento, mesFaturamento, 0).getDate();
     const diaFinal = Math.min(diaVencimento, ultimoDia);
     const dataVencimento = new Date(anoFaturamento, mesFaturamento - 1, diaFinal);
     const dataVencimentoStr = dataVencimento.toISOString().split('T')[0];
 
-    // ===== VERIFICA SE EXISTE REGISTRO =====
     let registroExistente = mapaExistentes[nomeUnidade];
     
     if (registroExistente) {
@@ -1011,7 +987,6 @@ async function processarUpload(file) {
     throw new Error('Nenhuma unidade com itens para faturar.');
   }
 
-  // ===== INSERIR =====
   if (registrosParaInserir.length > 0) {
     console.log(`📥 Inserindo ${registrosParaInserir.length} novos registros...`);
     console.log('📋 NOVAS UNIDADES:', registrosParaInserir.map(r => r.unidade));
@@ -1054,7 +1029,6 @@ async function processarUpload(file) {
     }
   }
 
-  // ===== ATUALIZAR =====
   if (registrosParaAtualizar.length > 0) {
     console.log(`📤 Atualizando ${registrosParaAtualizar.length} registros existentes...`);
     
@@ -1100,11 +1074,9 @@ async function processarUpload(file) {
 async function limparCacheUnidade(unidade) {
   console.log(`🧹 Limpando cache da unidade: ${unidade}`);
   
-  // Limpa cache do cliente
   const cacheKey = `cliente_unidade_${unidade}`;
   sessionStorage.removeItem(cacheKey);
   
-  // Limpa cache de busca paginada
   const keysToRemove = [];
   for (let i = 0; i < sessionStorage.length; i++) {
     const key = sessionStorage.key(i);
@@ -1114,7 +1086,6 @@ async function limparCacheUnidade(unidade) {
   }
   keysToRemove.forEach(key => sessionStorage.removeItem(key));
   
-  // Reseta cache global
   clientesCache = null;
   ultimaBuscaClientes = 0;
   
@@ -1122,8 +1093,6 @@ async function limparCacheUnidade(unidade) {
 }
 
 // ========================= FUNÇÕES DE BUSCA DE CLIENTES OTIMIZADAS =========================
-// Estas funções estão no escopo GLOBAL
-
 async function buscarClientePorCnpjOmie(cnpj) {
   const cnpjLimpo = normalizarCnpj(cnpj);
   if (!cnpjLimpo || cnpjLimpo.length !== 14) {
@@ -1133,7 +1102,6 @@ async function buscarClientePorCnpjOmie(cnpj) {
   
   console.log(`🔍 Buscando cliente com CNPJ: ${cnpjLimpo}`);
   
-  // TENTATIVA 1: Consulta direta
   try {
     const payload = {
       endpoint: 'geral/clientes',
@@ -1160,7 +1128,6 @@ async function buscarClientePorCnpjOmie(cnpj) {
     console.log('⚠️ Consulta direta falhou:', err.message);
   }
   
-  // TENTATIVA 2: Listagem com filtro
   try {
     const payload = {
       endpoint: 'geral/clientes',
@@ -1195,7 +1162,6 @@ async function buscarClientePorCnpjOmie(cnpj) {
     console.log('⚠️ Listagem com filtro falhou:', err.message);
   }
   
-  // TENTATIVA 3: Busca paginada rápida
   try {
     console.log('📤 Buscando em páginas...');
     const cliente = await buscarClientePaginadoRapido(cnpjLimpo);
@@ -1293,7 +1259,6 @@ async function forcarAtualizarStatusTodasOS() {
   }
 
   try {
-    // Buscar TODOS os registros que têm OS (exceto os que já foram cancelados/pagos)
     const { data: registros, error } = await supabaseClient
       .from('faturamento')
       .select('*')
@@ -1319,7 +1284,6 @@ async function forcarAtualizarStatusTodasOS() {
         const osId = registro.omie_os_id;
         console.log(`🔍 Verificando OS ${osId} - ${registro.unidade}`);
         
-        // Buscar status completo da OS
         const statusOS = await consultarStatusOSCompleto(osId);
         
         if (!statusOS) {
@@ -1330,7 +1294,6 @@ async function forcarAtualizarStatusTodasOS() {
         
         console.log(`   Etapa: ${statusOS.etapa} | Status NFSe: ${statusOS.statusNFSe} | Descrição: ${statusOS.statusDescricao}`);
         
-        // Determinar o novo status baseado na etapa e status da NFSe
         let novoStatus = null;
         let notaEmitida = false;
         let boletoEnviado = false;
@@ -1340,20 +1303,17 @@ async function forcarAtualizarStatusTodasOS() {
         let notaDataEmissao = null;
         let omieErro = null;
         
-        // Verifica rejeição
         if (statusOS.statusNFSe === 'R' || statusOS.etapa === '80') {
           novoStatus = 'rejeitado';
           notaStatus = 'rejeitado';
           omieErro = 'OS rejeitada pela OMIE';
           console.log(`   ❌ REJEITADA!`);
         } 
-        // Verifica cancelamento
         else if (statusOS.statusNFSe === 'C' || statusOS.etapa === '70') {
           novoStatus = 'cancelado';
           notaStatus = 'cancelado';
           console.log(`   ⛔ CANCELADA!`);
         }
-        // Verifica faturada
         else if (statusOS.statusNFSe === 'F' || statusOS.statusNFSe === 'A' || statusOS.etapa === '60') {
           novoStatus = 'faturado';
           notaEmitida = true;
@@ -1364,18 +1324,15 @@ async function forcarAtualizarStatusTodasOS() {
           notaDataEmissao = statusOS.dataEmissao || null;
           console.log(`   ✅ FATURADA!`);
         }
-        // Verifica se está pronta para faturar
         else if (statusOS.etapa === '50') {
           novoStatus = 'criado';
           console.log(`   ⏳ PRONTA PARA FATURAR (Etapa 50)`);
         }
-        // Outros status
         else {
           novoStatus = 'criado';
           console.log(`   ⏳ Status desconhecido: ${statusOS.etapa} - mantendo como criado`);
         }
         
-        // Se o status mudou, atualiza
         if (novoStatus && novoStatus !== registro.omie_status) {
           console.log(`   🔄 Atualizando status: ${registro.omie_status} → ${novoStatus}`);
           
@@ -1418,7 +1375,6 @@ async function forcarAtualizarStatusTodasOS() {
     mostrarAlerta(mensagem, atualizados > 0 ? 'success' : 'info');
     console.log(`📊 ${atualizados} OS atualizadas, ${erros} erros`);
     
-    // Recarregar a tabela
     const mes = parseInt(document.getElementById('filterMonth').value) || 0;
     const ano = parseInt(document.getElementById('filterYear').value) || new Date().getFullYear();
     const unidade = document.getElementById('filterUnit').value.trim() || '';
@@ -1450,12 +1406,10 @@ async function consultarStatusOSCompleto(codigoOS) {
       return null;
     }
     
-    // Dados do cabeçalho
     const cabecalho = data.Cabecalho || {};
     const etapa = cabecalho.cEtapa || '';
     const statusOS = cabecalho.cStatus || '';
     
-    // Dados da NFS-e
     const notaFiscal = data.NotaFiscal || {};
     const statusNFSe = notaFiscal.cStatus || '';
     const numeroNFSe = notaFiscal.nNumeroNFSe || '';
@@ -1463,7 +1417,6 @@ async function consultarStatusOSCompleto(codigoOS) {
     const dataEmissao = notaFiscal.dEmissao || '';
     const serieNFSe = notaFiscal.cSerieNFSe || '';
     
-    // Mapeamento de status
     const statusMap = {
       'C': 'Cancelada',
       'F': 'Faturada',
@@ -1743,7 +1696,6 @@ async function exportarPrecos() {
 // ========================= CONSULTAR STATUS DA NFS-e (VIA OS) =========================
 async function consultarStatusNFSePorOS(codigoOS) {
   try {
-    // Consultar a OS para obter os dados da NFS-e
     const payload = {
       endpoint: 'servicos/os',
       call: 'ConsultarOS',
@@ -1758,7 +1710,6 @@ async function consultarStatusNFSePorOS(codigoOS) {
       return null;
     }
     
-    // Extrair dados da NFS-e
     const notaFiscal = data.NotaFiscal || {};
     const statusNFSe = notaFiscal.cStatus || '';
     const numeroNFSe = notaFiscal.nNumeroNFSe || '';
@@ -1766,21 +1717,18 @@ async function consultarStatusNFSePorOS(codigoOS) {
     const dataEmissao = notaFiscal.dEmissao || '';
     const serieNFSe = notaFiscal.cSerieNFSe || '';
     
-    // Verificar a etapa da OS
     const cabecalho = data.Cabecalho || {};
     const etapa = cabecalho.cEtapa || '';
     const statusOS = cabecalho.cStatus || '';
     
     console.log(`📋 Status NFS-e: ${statusNFSe} | Etapa OS: ${etapa} | Status OS: ${statusOS}`);
     
-    // Se a OS está na etapa 80 (Rejeitada), forçar status R
     let statusFinal = statusNFSe;
     if (etapa === '80') {
       statusFinal = 'R';
       console.log('⚠️ OS na etapa 80 - Rejeitada!');
     }
     
-    // Mapeamento de status
     const statusMap = {
       'C': 'Cancelada',
       'F': 'Faturada',
@@ -1876,7 +1824,6 @@ async function verificarPagamentoOS(idFaturamento) {
       mostrarAlerta('⏳ Boleto ainda não foi pago.', 'info');
     }
     
-    // Recarregar a tabela
     const mes = parseInt(document.getElementById('filterMonth').value) || 0;
     const ano = parseInt(document.getElementById('filterYear').value) || new Date().getFullYear();
     const unidade = document.getElementById('filterUnit').value.trim() || '';
@@ -1888,7 +1835,7 @@ async function verificarPagamentoOS(idFaturamento) {
   }
 }
 
-// ===== BUSCAR STATUS DE PAGAMENTO AUTOMATICAMENTE (VERSÃO CORRIGIDA) =====
+// ===== BUSCAR STATUS DE PAGAMENTO AUTOMATICAMENTE =====
 async function buscarStatusPagamentoAutomatico() {
   console.log('🔄 Buscando status de pagamento automaticamente...');
   
@@ -1897,7 +1844,6 @@ async function buscarStatusPagamentoAutomatico() {
   }
 
   try {
-    // 1. Buscar todos os registros com OS e que não estão pagos
     const { data: registros, error } = await supabaseClient
       .from('faturamento')
       .select('*')
@@ -1919,7 +1865,6 @@ async function buscarStatusPagamentoAutomatico() {
     let naoEncontrados = 0;
     let detalhesAtualizacao = [];
     
-    // 2. Buscar TODOS os movimentos financeiros da OMIE
     console.log('📤 Buscando todos os movimentos financeiros na OMIE...');
     
     let todosMovimentos = [];
@@ -1968,7 +1913,6 @@ async function buscarStatusPagamentoAutomatico() {
     
     console.log(`📋 Total de ${todosMovimentos.length} movimentos encontrados`);
     
-    // 3. Criar mapa de movimentos por OS
     const mapaMovimentosPorOS = {};
     for (const m of todosMovimentos) {
       const detalhes = m.detalhes || {};
@@ -1984,7 +1928,6 @@ async function buscarStatusPagamentoAutomatico() {
     
     console.log(`📋 ${Object.keys(mapaMovimentosPorOS).length} OS com movimentos encontrados`);
     
-    // 4. Para cada registro, verificar se há movimento pago
     for (const registro of registros) {
       try {
         const osId = registro.omie_os_id;
@@ -2000,17 +1943,14 @@ async function buscarStatusPagamentoAutomatico() {
         
         console.log(`   📋 ${movimentos.length} movimentos encontrados`);
         
-        // Verificar se algum movimento está pago
         let encontradoPago = false;
         for (const m of movimentos) {
           const detalhes = m.detalhes || {};
           const resumo = m.resumo || {};
           
-          // ===== VERIFICAR STATUS DE PAGAMENTO CORRETAMENTE =====
           const status = (detalhes.cStatus || '').toUpperCase();
           const liquidado = (resumo.cLiquidado || '').toUpperCase();
           
-          // Status que indicam pagamento
           const statusPago = [
             'RECEBIDO',
             'LIQUIDADO',
@@ -2025,7 +1965,6 @@ async function buscarStatusPagamentoAutomatico() {
             console.log(`   ✅ BOLETO PAGO! Status: ${status} | Valor: R$ ${resumo.nValPago || 0}`);
             encontradoPago = true;
             
-            // Atualizar o registro
             await supabaseClient
               .from('faturamento')
               .update({
@@ -2058,7 +1997,6 @@ async function buscarStatusPagamentoAutomatico() {
       }
     }
     
-    // 5. Mostrar resultado
     let mensagem = `✅ ${pagos} boletos marcados como PAGOS!`;
     if (naoEncontrados > 0) {
       mensagem += `\n\n⚠️ ${naoEncontrados} OS sem movimentos encontrados.`;
@@ -2073,7 +2011,6 @@ async function buscarStatusPagamentoAutomatico() {
     mostrarAlerta(mensagem, pagos > 0 ? 'success' : 'info');
     console.log(`📊 ${pagos} pagos, ${naoEncontrados} sem movimentos, ${erros} erros`);
     
-    // Recarregar a tabela
     const mes = parseInt(document.getElementById('filterMonth').value) || 0;
     const ano = parseInt(document.getElementById('filterYear').value) || new Date().getFullYear();
     const unidade = document.getElementById('filterUnit').value.trim() || '';
@@ -2097,7 +2034,6 @@ async function buscarEAtualizarBoletosPagos() {
   }
 
   try {
-    // 1. Buscar todos os registros com status FATURADO e NÃO PAGOS
     const { data: registros, error } = await supabaseClient
       .from('faturamento')
       .select('*')
@@ -2120,14 +2056,12 @@ async function buscarEAtualizarBoletosPagos() {
     let naoEncontrados = 0;
     let detalhesAtualizacao = [];
     
-    // 2. Para cada registro, buscar CNPJ e verificar pagamento
     for (let i = 0; i < registros.length; i++) {
       const registro = registros[i];
       
       try {
         console.log(`🔍 [${i+1}/${registros.length}] ${registro.unidade}`);
         
-        // Buscar CNPJ da unidade
         const { data: unidade, error: errUnidade } = await supabaseClient
           .from('precos')
           .select('cnpj')
@@ -2143,7 +2077,6 @@ async function buscarEAtualizarBoletosPagos() {
         const cnpjLimpo = unidade.cnpj.replace(/\D/g, '');
         console.log(`   CNPJ: ${cnpjLimpo}`);
         
-        // Buscar movimentos pelo CNPJ (sem filtro de data para pegar todos)
         const payload = {
           endpoint: 'financas/mf',
           call: 'ListarMovimentos',
@@ -2165,7 +2098,6 @@ async function buscarEAtualizarBoletosPagos() {
         
         const movimentos = data.movimentos || [];
         
-        // Filtrar movimentos pagos (RECEBIDO, LIQUIDADO, PAGO)
         const pagosEncontrados = movimentos.filter(m => {
           const detalhes = m.detalhes || {};
           const status = (detalhes.cStatus || '').toUpperCase();
@@ -2178,8 +2110,6 @@ async function buscarEAtualizarBoletosPagos() {
           continue;
         }
         
-        // Pegar o primeiro boleto pago (geralmente é o mais recente)
-        // Ordenar por data de pagamento (o mais recente primeiro)
         pagosEncontrados.sort((a, b) => {
           const dataA = a.detalhes?.dDtPagamento || '';
           const dataB = b.detalhes?.dDtPagamento || '';
@@ -2197,15 +2127,11 @@ async function buscarEAtualizarBoletosPagos() {
         
         console.log(`   ✅ BOLETO PAGO! Título: ${titulo} | Status: ${status} | Valor: R$ ${valorPago}`);
         
-        // Verificar se o valor pago corresponde ao valor do registro
-        // Se não corresponder exatamente, pode ser outro boleto
-        // Vamos verificar se o valor está próximo (diferença de até R$ 10)
         const diferenca = Math.abs(registro.valor_total - valorPago);
         if (diferenca > 10) {
           console.log(`   ⚠️ Valor do boleto (R$ ${valorPago}) difere do registro (R$ ${registro.valor_total})`);
           console.log(`   🔍 Verificando outros boletos pagos...`);
           
-          // Tentar encontrar um boleto com valor correspondente
           let boletoCorrespondente = null;
           for (const m of pagosEncontrados) {
             const vPago = m.resumo?.nValPago || m.detalhes?.nValorTitulo || 0;
@@ -2220,7 +2146,6 @@ async function buscarEAtualizarBoletosPagos() {
             const r = boletoCorrespondente.resumo || {};
             console.log(`   ✅ Encontrado boleto correspondente!`);
             
-            // Atualizar com os dados do boleto correspondente
             const updateData = {
               pago: true,
               status_boleto: 'pago',
@@ -2250,7 +2175,6 @@ async function buscarEAtualizarBoletosPagos() {
           continue;
         }
         
-        // Atualizar o registro
         const updateData = {
           pago: true,
           status_boleto: 'pago'
@@ -2281,7 +2205,6 @@ async function buscarEAtualizarBoletosPagos() {
           console.log(`   ✅ Registro ${registro.id} atualizado para PAGO!`);
         }
         
-        // Delay para não sobrecarregar a API
         await new Promise(resolve => setTimeout(resolve, 300));
         
       } catch (err) {
@@ -2290,7 +2213,6 @@ async function buscarEAtualizarBoletosPagos() {
       }
     }
     
-    // Mostrar resultado
     let mensagem = `✅ ${pagos} boletos marcados como PAGOS!`;
     if (semCNPJ > 0) {
       mensagem += `\n\n⚠️ ${semCNPJ} unidades sem CNPJ cadastrado.`;
@@ -2308,7 +2230,6 @@ async function buscarEAtualizarBoletosPagos() {
     mostrarAlerta(mensagem, pagos > 0 ? 'success' : 'info');
     console.log(`📊 ${pagos} pagos, ${semCNPJ} sem CNPJ, ${naoEncontrados} não encontrados, ${erros} erros`);
     
-    // Recarregar a tabela
     const mes = parseInt(document.getElementById('filterMonth').value) || 0;
     const ano = parseInt(document.getElementById('filterYear').value) || new Date().getFullYear();
     const unidade = document.getElementById('filterUnit').value.trim() || '';
@@ -2332,7 +2253,6 @@ async function forcarAtualizarStatusNFSe() {
   }
 
   try {
-    // Buscar TODOS os registros que têm OS
     const { data: registros, error } = await supabaseClient
       .from('faturamento')
       .select('*')
@@ -2360,7 +2280,6 @@ async function forcarAtualizarStatusNFSe() {
         const osId = registro.omie_os_id;
         console.log(`🔍 Verificando NFS-e da OS ${osId} - ${registro.unidade}`);
         
-        // Buscar status da NFS-e via OS
         const nfseStatus = await consultarStatusNFSePorOS(osId);
         
         if (!nfseStatus) {
@@ -2371,7 +2290,6 @@ async function forcarAtualizarStatusNFSe() {
         
         console.log(`   NFS-e: ${nfseStatus.numero || 'N/A'} | Status: ${nfseStatus.status} - ${nfseStatus.statusDescricao} | Etapa: ${nfseStatus.etapa || 'N/A'}`);
         
-        // Determinar o status baseado no status da NFS-e e etapa da OS
         let novoStatus = null;
         let notaEmitida = false;
         let boletoEnviado = false;
@@ -2381,10 +2299,8 @@ async function forcarAtualizarStatusNFSe() {
         let notaDataEmissao = nfseStatus.dataEmissao || null;
         let omieErro = null;
         
-        // ===== PRIORIDADE 1: Verificar etapa da OS (mais confiável) =====
         const etapa = nfseStatus.etapa || '';
         
-        // Etapa 80 = Rejeitada
         if (etapa === '80') {
           novoStatus = 'rejeitado';
           notaStatus = 'rejeitado';
@@ -2394,7 +2310,6 @@ async function forcarAtualizarStatusNFSe() {
           rejeitados++;
           console.log(`   ❌ OS REJEITADA! (Etapa 80)`);
         }
-        // Etapa 70 = Cancelada
         else if (etapa === '70') {
           novoStatus = 'cancelado';
           notaStatus = 'cancelado';
@@ -2404,7 +2319,6 @@ async function forcarAtualizarStatusNFSe() {
           cancelados++;
           console.log(`   ⛔ OS CANCELADA! (Etapa 70)`);
         }
-        // Etapa 60 = Faturada
         else if (etapa === '60') {
           novoStatus = 'faturado';
           notaStatus = 'faturado';
@@ -2413,10 +2327,9 @@ async function forcarAtualizarStatusNFSe() {
           faturados++;
           console.log(`   ✅ OS FATURADA! (Etapa 60)`);
         }
-        // ===== PRIORIDADE 2: Verificar status da NFS-e =====
         else {
           switch (nfseStatus.status) {
-            case 'R': // Rejeitada
+            case 'R':
               novoStatus = 'rejeitado';
               notaStatus = 'rejeitado';
               notaEmitida = false;
@@ -2425,8 +2338,8 @@ async function forcarAtualizarStatusNFSe() {
               rejeitados++;
               console.log(`   ❌ NFS-e REJEITADA!`);
               break;
-            case 'C': // Cancelada
-            case '4': // Cancelada
+            case 'C':
+            case '4':
               novoStatus = 'cancelado';
               notaStatus = 'cancelado';
               notaEmitida = false;
@@ -2435,8 +2348,8 @@ async function forcarAtualizarStatusNFSe() {
               cancelados++;
               console.log(`   ⛔ NFS-e CANCELADA!`);
               break;
-            case 'F': // Faturada
-            case 'A': // Aprovada
+            case 'F':
+            case 'A':
               novoStatus = 'faturado';
               notaStatus = 'faturado';
               notaEmitida = true;
@@ -2444,9 +2357,8 @@ async function forcarAtualizarStatusNFSe() {
               faturados++;
               console.log(`   ✅ NFS-e FATURADA!`);
               break;
-            case 'N': // Não faturada
+            case 'N':
             default:
-              // Verifica se a OS está na etapa 50 (pronta para faturar)
               if (etapa === '50') {
                 novoStatus = 'criado';
                 notaEmitida = false;
@@ -2464,7 +2376,6 @@ async function forcarAtualizarStatusNFSe() {
           }
         }
         
-        // Se o status mudou, atualiza
         if (novoStatus && novoStatus !== registro.omie_status) {
           console.log(`   🔄 Atualizando status: ${registro.omie_status} → ${novoStatus}`);
           
@@ -2496,7 +2407,6 @@ async function forcarAtualizarStatusNFSe() {
       }
     }
     
-    // Montar mensagem final
     let mensagem = '';
     if (atualizados > 0) {
       mensagem += `✅ ${atualizados} NFS-e atualizadas!`;
@@ -2523,7 +2433,6 @@ async function forcarAtualizarStatusNFSe() {
     mostrarAlerta(mensagem, (atualizados > 0 || rejeitados > 0) ? 'success' : 'info');
     console.log(`📊 ${atualizados} atualizadas, ${rejeitados} rejeitadas, ${cancelados} canceladas, ${faturados} faturadas, ${erros} erros`);
     
-    // Recarregar a tabela
     const mes = parseInt(document.getElementById('filterMonth').value) || 0;
     const ano = parseInt(document.getElementById('filterYear').value) || new Date().getFullYear();
     const unidade = document.getElementById('filterUnit').value.trim() || '';
@@ -2961,7 +2870,6 @@ async function resetarOS(idFaturamento) {
   }
 
   try {
-    // 1. Buscar o registro
     const { data: registro, error: buscaError } = await supabaseClient
       .from('faturamento')
       .select('*')
@@ -2975,11 +2883,9 @@ async function resetarOS(idFaturamento) {
 
     console.log('📋 Registro encontrado:', registro);
 
-    // 2. Verifica se tem OS para cancelar na OMIE
     if (registro.omie_os_id) {
       const osId = registro.omie_os_id;
       
-      // Pergunta se quer cancelar na OMIE também
       if (confirm(`Deseja cancelar a OS ${osId} na OMIE também?`)) {
         try {
           const result = await cancelarNFSe(osId, '');
@@ -2997,7 +2903,6 @@ async function resetarOS(idFaturamento) {
       }
     }
 
-    // 3. Resetar os campos no banco
     const { error: updateError } = await supabaseClient
       .from('faturamento')
       .update({
@@ -3019,7 +2924,6 @@ async function resetarOS(idFaturamento) {
 
     mostrarAlerta(`✅ OS do registro ${idFaturamento} resetada com sucesso!`, 'success');
     
-    // 4. Recarregar a tabela
     const mes = parseInt(document.getElementById('filterMonth').value) || 0;
     const ano = parseInt(document.getElementById('filterYear').value) || new Date().getFullYear();
     const unidade = document.getElementById('filterUnit').value.trim() || '';
@@ -3283,7 +3187,6 @@ async function criarTodasOSLote() {
     return;
   }
   
-  // ===== VALIDAÇÃO DE DUPLICIDADE EM LOTE =====
   const registrosComDuplicata = [];
   const registrosValidos = [];
   
@@ -3431,14 +3334,12 @@ function gerarDescricaoResumida(detalhes, mes, ano, unidade, valorTotal) {
   let descricao = '';
   let itens = [];
   
-  // 1. Mensalidade
   if (detalhes.mensalidade) {
     const mens = detalhes.mensalidade;
     const valor = mens.precoUnitario || 0;
     itens.push(`MENSALIDADE: R$ ${valor.toFixed(2)}`);
   }
   
-  // 2. Vidas NR-1
   if (detalhes['vidas (NR-1)']) {
     const vidas = detalhes['vidas (NR-1)'];
     const qtd = vidas.quantidade || 0;
@@ -3446,7 +3347,6 @@ function gerarDescricaoResumida(detalhes, mes, ano, unidade, valorTotal) {
     itens.push(`VIDAS NR-1: ${qtd} x R$ ${valor.toFixed(2)} = R$ ${(qtd * valor).toFixed(2)}`);
   }
   
-  // 3. Exames
   const nomesExames = {
     'exame_clinico': 'EXAME CLINICO',
     'audiometria': 'AUDIOMETRIA',
@@ -3489,18 +3389,15 @@ function gerarDescricaoResumida(detalhes, mes, ano, unidade, valorTotal) {
     }
   }
   
-  // Monta a descrição
   if (itens.length === 0) {
     descricao = `Faturamento ${mes}/${ano} - ${unidade}`;
   } else {
     descricao = itens.join('\n');
   }
   
-  // Se ultrapassar 120 caracteres, resume
   if (descricao.length > 120) {
     console.log(`📝 Descrição original: ${descricao.length} caracteres`);
     
-    // Tenta um resumo mais compacto
     let resumo = '';
     let totalExames = 0;
     let totalValor = 0;
@@ -3509,7 +3406,6 @@ function gerarDescricaoResumida(detalhes, mes, ano, unidade, valorTotal) {
     let qtdVidas = 0;
     let valorVidas = 0;
     
-    // Extrai informações principais
     if (detalhes.mensalidade) {
       temMensalidade = true;
       totalValor += detalhes.mensalidade.precoUnitario || 0;
@@ -3522,7 +3418,6 @@ function gerarDescricaoResumida(detalhes, mes, ano, unidade, valorTotal) {
       totalValor += qtdVidas * valorVidas;
     }
     
-    // Conta total de exames
     for (const exame of exames) {
       if (detalhes[exame]) {
         const qtd = detalhes[exame].quantidade || 0;
@@ -3531,7 +3426,6 @@ function gerarDescricaoResumida(detalhes, mes, ano, unidade, valorTotal) {
       }
     }
     
-    // Monta resumo compacto
     let partes = [];
     if (temMensalidade) {
       partes.push(`Mensalidade R$ ${(detalhes.mensalidade.precoUnitario || 0).toFixed(2)}`);
@@ -3543,19 +3437,16 @@ function gerarDescricaoResumida(detalhes, mes, ano, unidade, valorTotal) {
       partes.push(`${totalExames} exames`);
     }
     
-    // Monta a descrição resumida
     if (partes.length > 0) {
       resumo = `FAT ${mes}/${ano}: ${partes.join(' | ')}. Total: R$ ${totalValor.toFixed(2)}`;
     } else {
       resumo = `Faturamento ${mes}/${ano} - ${unidade}`;
     }
     
-    // Se ainda estiver muito longo, encurta mais
     if (resumo.length > 120) {
       resumo = `FAT ${mes}/${ano}: ${partes.slice(0, 3).join(' | ')}. Total: R$ ${totalValor.toFixed(2)}`;
     }
     
-    // Se ainda estiver muito longo, corta
     if (resumo.length > 120) {
       resumo = resumo.substring(0, 117) + '...';
     }
@@ -3591,7 +3482,6 @@ async function consultarStatusNFSe(numeroNFSe) {
     
     const nfses = data.nfseEncontradas || [];
     
-    // Busca a NFS-e pelo número
     for (const nfse of nfses) {
       const cabecalho = nfse.Cabecalho || {};
       if (cabecalho.nNumeroNFSe && cabecalho.nNumeroNFSe.toString() === numeroNFSe.toString()) {
@@ -3635,13 +3525,11 @@ async function consultarStatusOS(codigoOS) {
       return null;
     }
     
-    // Verificar se há informações de NFS-e na OS
     const notaFiscal = data.NotaFiscal || {};
     const statusNFSe = notaFiscal.cStatus || '';
     const numeroNFSe = notaFiscal.nNumeroNFSe || '';
     const valorNFSe = notaFiscal.nValorNFSe || 0;
     
-    // Verificar também o status da OS
     const cabecalho = data.Cabecalho || {};
     const etapa = cabecalho.cEtapa || '';
     const statusOS = cabecalho.cStatus || '';
@@ -3681,16 +3569,14 @@ async function consultarStatusOS(codigoOS) {
 // ================================================================
 
 let colunaOrdenacao = null;
-let ordemOrdenacao = 'asc'; // 'asc' ou 'desc'
+let ordemOrdenacao = 'asc';
 
-// Função para ordenar os dados
 function ordenarDados(dados, coluna, ordem) {
     if (!coluna) return dados;
     
     return [...dados].sort((a, b) => {
         let valorA, valorB;
         
-        // Pega os valores de acordo com a coluna
         switch(coluna) {
             case 'unidade':
                 valorA = (a.unidade || '').toLowerCase();
@@ -3728,7 +3614,6 @@ function ordenarDados(dados, coluna, ordem) {
                 return 0;
         }
         
-        // Comparação
         if (typeof valorA === 'string') {
             return ordem === 'asc' 
                 ? valorA.localeCompare(valorB)
@@ -3741,7 +3626,6 @@ function ordenarDados(dados, coluna, ordem) {
     });
 }
 
-// Função auxiliar para obter o texto do Status OS
 function obterStatusOS(row) {
     if (row.omie_status === 'criado') return 'OS Criada';
     if (row.omie_status === 'faturado' || row.omie_status === 'aprovado') return 'Faturado';
@@ -3751,7 +3635,6 @@ function obterStatusOS(row) {
     return 'Pendente';
 }
 
-// Função auxiliar para obter o texto do Status Pagamento
 function obterStatusPagamento(row) {
     if (row.pago) return 'Pago';
     if (row.data_vencimento) {
@@ -3764,13 +3647,11 @@ function obterStatusPagamento(row) {
     return 'Pendente';
 }
 
-// Função para lidar com o clique no cabeçalho
 function handleSortClick(e) {
     const th = e.currentTarget;
     const coluna = th.dataset.sort;
     if (!coluna) return;
     
-    // Se for a mesma coluna, inverte a ordem
     if (colunaOrdenacao === coluna) {
         ordemOrdenacao = ordemOrdenacao === 'asc' ? 'desc' : 'asc';
     } else {
@@ -3778,11 +3659,9 @@ function handleSortClick(e) {
         ordemOrdenacao = 'asc';
     }
     
-    // Ordena os dados
     dadosFiltrados = ordenarDados(todosOsDados, colunaOrdenacao, ordemOrdenacao);
     paginaAtual = 1;
     
-    // Atualiza os ícones
     document.querySelectorAll('thead th[data-sort]').forEach(th => {
         const icon = th.querySelector('i.fa-sort, i.fa-sort-up, i.fa-sort-down');
         if (icon) {
@@ -3800,7 +3679,6 @@ function handleSortClick(e) {
     renderizarPagina();
 }
 
-// Função para resetar a ordenação
 function resetarOrdenacao() {
     colunaOrdenacao = null;
     ordemOrdenacao = 'asc';
@@ -3813,7 +3691,7 @@ function resetarOrdenacao() {
     renderizarPagina();
 }
 
-// ========================= FUNÇÕES DE RELATÓRIO =========================
+// ========================= CARREGAR RELATÓRIO =========================
 async function carregarRelatorio(mes = 0, ano = 0, filtroUnidade = '', status = 'todos') {
   const filtroHolding = document.getElementById('filterHolding')?.value?.trim() || '';
   const filtroGrupo = document.getElementById('filterGrupo')?.value?.trim() || '';
@@ -3848,6 +3726,7 @@ async function carregarRelatorio(mes = 0, ano = 0, filtroUnidade = '', status = 
         return;
       }
       atualizarDashboards([]);
+      atualizarCardsBoletosComDados([]);
       const tbody = document.getElementById('resultsBody');
       tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted py-4">Nenhum registro encontrado</td></tr>`;
       const pagInfo = document.getElementById('paginationInfo');
@@ -3878,10 +3757,24 @@ async function carregarRelatorio(mes = 0, ano = 0, filtroUnidade = '', status = 
     return;
   }
 
-  // Buscar mapa de unidades
+  let dadosFiltradosPorBoleto = data || [];
+  
+  if (boletoStatusFiltro !== 'todos') {
+    dadosFiltradosPorBoleto = dadosFiltradosPorBoleto.filter(row => {
+      const statusBoleto = obterStatusBoleto(row);
+      
+      if (boletoStatusFiltro === 'pago' && !row.pago) return false;
+      if (boletoStatusFiltro === 'vencido' && statusBoleto.status !== 'Vencido') return false;
+      if (boletoStatusFiltro === 'a_vencer' && statusBoleto.status !== 'A Vencer') return false;
+      if (boletoStatusFiltro === 'proximo' && statusBoleto.status !== 'Próx. Venc.') return false;
+      
+      return true;
+    });
+  }
+
   let mapaUnidades = {};
-  if (data && data.length > 0) {
-    const unidades = [...new Set(data.map(item => item.unidade))];
+  if (dadosFiltradosPorBoleto && dadosFiltradosPorBoleto.length > 0) {
+    const unidades = [...new Set(dadosFiltradosPorBoleto.map(item => item.unidade))];
     const { data: precosData } = await supabaseClient
       .from('precos')
       .select('unidade, holding, grupo')
@@ -3897,16 +3790,22 @@ async function carregarRelatorio(mes = 0, ano = 0, filtroUnidade = '', status = 
     }
   }
 
-  // Atualizar dashboards
-  atualizarDashboards(data);
-  window._mapaUnidades = mapaUnidades;
+  atualizarDashboards(dadosFiltradosPorBoleto);
+  atualizarCardsBoletosComDados(dadosFiltradosPorBoleto);
 
-  // Guardar dados para paginação
-  todosOsDados = data || [];
+  todosOsDados = dadosFiltradosPorBoleto || [];
   dadosFiltrados = todosOsDados;
   paginaAtual = 1;
   
-  // Se não há dados, mostrar mensagem
+  window._mapaUnidades = mapaUnidades;
+  
+  colunaOrdenacao = null;
+  ordemOrdenacao = 'asc';
+  document.querySelectorAll('thead th[data-sort] i.fa-sort, thead th[data-sort] i.fa-sort-up, thead th[data-sort] i.fa-sort-down')
+    .forEach(icon => {
+      icon.className = 'fas fa-sort text-muted ms-1';
+    });
+  
   if (todosOsDados.length === 0) {
     const tbody = document.getElementById('resultsBody');
     tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted py-4">Nenhum registro encontrado</td></tr>`;
@@ -3917,8 +3816,76 @@ async function carregarRelatorio(mes = 0, ano = 0, filtroUnidade = '', status = 
     return;
   }
 
-  // Renderizar página (agora com await)
   await renderizarPagina(mapaUnidades);
+}
+
+// ===== ATUALIZAR CARDS DE BOLETOS =====
+function atualizarCardsBoletosComDados(dados) {
+    let pagos = 0, vencidos = 0, aVencer = 0, proximos = 0;
+    let valorPagos = 0, valorVencidos = 0, valorAVencer = 0, valorProximos = 0;
+
+    dados.forEach(row => {
+        const status = obterStatusBoleto(row);
+        const valor = row.valor_total || 0;
+
+        if (row.pago) {
+            pagos++;
+            valorPagos += valor;
+        } else if (status.status === 'Vencido') {
+            vencidos++;
+            valorVencidos += valor;
+        } else if (status.status === 'Próx. Venc.') {
+            proximos++;
+            valorProximos += valor;
+        } else if (status.status === 'A Vencer') {
+            aVencer++;
+            valorAVencer += valor;
+        }
+    });
+
+    const elPagos = document.getElementById('totalBoletosPagos');
+    const elPagosValor = document.getElementById('totalBoletosPagosValor');
+    const elVencidos = document.getElementById('totalBoletosVencidos');
+    const elVencidosValor = document.getElementById('totalBoletosVencidosValor');
+    const elAVencer = document.getElementById('totalBoletosAVencer');
+    const elAVencerValor = document.getElementById('totalBoletosAVencerValor');
+    const elProximos = document.getElementById('totalBoletosProximos');
+    const elProximosValor = document.getElementById('totalBoletosProximosValor');
+
+    if (elPagos) elPagos.textContent = pagos;
+    if (elPagosValor) elPagosValor.textContent = valorPagos.toFixed(2);
+    if (elVencidos) elVencidos.textContent = vencidos;
+    if (elVencidosValor) elVencidosValor.textContent = valorVencidos.toFixed(2);
+    if (elAVencer) elAVencer.textContent = aVencer;
+    if (elAVencerValor) elAVencerValor.textContent = valorAVencer.toFixed(2);
+    if (elProximos) elProximos.textContent = proximos;
+    if (elProximosValor) elProximosValor.textContent = valorProximos.toFixed(2);
+}
+
+function obterStatusBoleto(row) {
+    // Se já está marcado como pago
+    if (row.pago) return { status: 'Pago', classe: 'success', icone: '✅' };
+    
+    // Se não tem data de vencimento, considera como "Sem data"
+    if (!row.data_vencimento) {
+        return { status: 'Sem data', classe: 'secondary', icone: '❓' };
+    }
+    
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    
+    const venc = new Date(row.data_vencimento + 'T00:00:00');
+    const diff = Math.ceil((venc - hoje) / (1000 * 60 * 60 * 24));
+    
+    console.log(`📅 ${row.unidade} - Venc: ${row.data_vencimento} - Diff: ${diff} dias`);
+    
+    if (diff < 0) {
+        return { status: 'Vencido', classe: 'danger', icone: '❌', dias: diff };
+    } else if (diff <= 5) {
+        return { status: 'Próx. Venc.', classe: 'warning', icone: '⚠️', dias: diff };
+    } else {
+        return { status: 'A Vencer', classe: 'info', icone: '⏳', dias: diff };
+    }
 }
 
 // ========================= RENDERIZAR PÁGINA =========================
@@ -3941,10 +3908,8 @@ async function renderizarPagina(mapaUnidades = null) {
     return;
   }
 
-  // Buscar mapa de unidades para os dados da página
   const unidadesPagina = [...new Set(dadosPagina.map(item => item.unidade))];
   
-  // Se não veio mapaUnidades ou está vazio, buscar do banco
   let mapaFinal = mapaUnidades || {};
   
   if (!mapaFinal || Object.keys(mapaFinal).length === 0) {
@@ -3963,14 +3928,12 @@ async function renderizarPagina(mapaUnidades = null) {
     }
   }
   
-  // Para unidades não encontradas
   unidadesPagina.forEach(unidade => {
     if (!mapaFinal[unidade]) {
       mapaFinal[unidade] = { holding: 'N/A', grupo: 'N/A' };
     }
   });
 
-  // Renderizar a tabela
   let html = '';
   dadosPagina.forEach(row => {
     const mesNome = meses[row.mes - 1];
@@ -4133,7 +4096,6 @@ async function renderizarPagina(mapaUnidades = null) {
   });
   tbody.innerHTML = html;
 
-  // Atualizar informações da paginação
   const totalRegistros = dadosFiltrados.length;
   const totalPaginas = Math.ceil(totalRegistros / registrosPorPagina);
   const exibindo = dadosPagina.length;
@@ -4142,10 +4104,7 @@ async function renderizarPagina(mapaUnidades = null) {
     pagInfo.textContent = `Mostrando ${inicio + 1} a ${inicio + exibindo} de ${totalRegistros} registros (Página ${paginaAtual} de ${totalPaginas})`;
   }
 
-  // Atualizar controles de paginação
   atualizarControlesPaginacao(totalPaginas);
-
-  // Adicionar eventos dos botões
   adicionarEventosBotoes();
 }
 
@@ -4318,7 +4277,6 @@ function renderizarTabela(dadosPagina, mapaUnidades) {
   });
   tbody.innerHTML = html;
 
-  // Atualizar informações da paginação
   const totalRegistros = dadosFiltrados.length;
   const totalPaginas = Math.ceil(totalRegistros / registrosPorPagina);
   const exibindo = dadosPagina.length;
@@ -4327,10 +4285,7 @@ function renderizarTabela(dadosPagina, mapaUnidades) {
     pagInfo.textContent = `Mostrando ${inicio + 1} a ${inicio + exibindo} de ${totalRegistros} registros (Página ${paginaAtual} de ${totalPaginas})`;
   }
 
-  // Atualizar controles de paginação
   atualizarControlesPaginacao(totalPaginas);
-
-  // Adicionar eventos dos botões
   adicionarEventosBotoes();
 }
 
@@ -4466,10 +4421,8 @@ function atualizarControlesPaginacao(totalPaginas) {
   const paginationContainer = document.getElementById('paginationControls');
   if (!paginationContainer) return;
 
-  // Mostrar controles
   paginationContainer.style.display = 'flex';
 
-  // Atualizar botão anterior
   const prevBtn = document.getElementById('prevPageBtn');
   if (prevBtn) {
     prevBtn.classList.toggle('disabled', paginaAtual <= 1);
@@ -4482,7 +4435,6 @@ function atualizarControlesPaginacao(totalPaginas) {
     };
   }
 
-  // Atualizar botão próximo
   const nextBtn = document.getElementById('nextPageBtn');
   if (nextBtn) {
     nextBtn.classList.toggle('disabled', paginaAtual >= totalPaginas);
@@ -4495,7 +4447,6 @@ function atualizarControlesPaginacao(totalPaginas) {
     };
   }
 
-  // Remover páginas existentes (exceto anterior e próximo)
   const pageItems = paginationContainer.querySelectorAll('.page-item:not(#prevPageBtn):not(#nextPageBtn)');
   pageItems.forEach(el => el.remove());
 
@@ -4504,7 +4455,6 @@ function atualizarControlesPaginacao(totalPaginas) {
     return;
   }
 
-  // Adicionar páginas
   let startPage = Math.max(1, paginaAtual - 4);
   let endPage = Math.min(totalPaginas, startPage + 9);
   
@@ -4512,13 +4462,11 @@ function atualizarControlesPaginacao(totalPaginas) {
     startPage = Math.max(1, endPage - 9);
   }
 
-  // Inserir páginas
   for (let i = startPage; i <= endPage; i++) {
     const li = document.createElement('li');
     li.className = `page-item ${i === paginaAtual ? 'active' : ''}`;
     li.innerHTML = `<a class="page-link" href="#" data-page="${i}">${i}</a>`;
     
-    // Inserir antes do botão próximo
     paginationContainer.insertBefore(li, nextBtn);
     
     li.addEventListener('click', function(e) {
@@ -4715,7 +4663,6 @@ function abrirModalCriarOs(id, unidade, valor, mes, ano, detalhes) {
   confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Buscando cliente...';
   statusMessage.innerHTML = '<div class="alert alert-info"><i class="fas fa-spinner fa-spin"></i> Buscando código do cliente na OMIE...</div>';
   
-  // Usando a função global buscarCodigoClienteParaOS
   buscarCodigoClienteParaOS(unidade).then(async (codigoCliente) => {
     if (codigoCliente) {
       statusMessage.innerHTML = `<div class="alert alert-success">
@@ -4815,27 +4762,45 @@ function atualizarDashboards(dados) {
     }
   });
 
-  document.getElementById('totalExames').textContent = totalExames;
-  document.getElementById('valorTotal').textContent = 'R$ ' + formatarMoeda(valorTotal);
-  document.getElementById('totalVidas').textContent = totalVidasQtd;
-  document.getElementById('totalMensalidade').textContent = 'R$ ' + formatarMoeda(totalMensalidade);
+  const elTotalExames = document.getElementById('totalExames');
+  const elValorTotal = document.getElementById('valorTotal');
+  const elTotalVidas = document.getElementById('totalVidas');
+  const elTotalMensalidade = document.getElementById('totalMensalidade');
+  const elClinicoQtd = document.getElementById('clinicoQtd');
+  const elClinicoValor = document.getElementById('clinicoValor');
+  const elComplementarQtd = document.getElementById('complementarQtd');
+  const elComplementarValor = document.getElementById('complementarValor');
 
-  document.getElementById('clinicoQtd').textContent = clinicoQtd;
-  document.getElementById('clinicoValor').textContent = 'R$ ' + formatarMoeda(clinicoValor);
-  document.getElementById('complementarQtd').textContent = complementarQtd;
-  document.getElementById('complementarValor').textContent = 'R$ ' + formatarMoeda(complementarValor);
+  if (elTotalExames) elTotalExames.textContent = totalExames;
+  if (elValorTotal) elValorTotal.textContent = 'R$ ' + formatarMoeda(valorTotal);
+  if (elTotalVidas) elTotalVidas.textContent = totalVidasQtd;
+  if (elTotalMensalidade) elTotalMensalidade.textContent = 'R$ ' + formatarMoeda(totalMensalidade);
+  if (elClinicoQtd) elClinicoQtd.textContent = clinicoQtd;
+  if (elClinicoValor) elClinicoValor.textContent = 'R$ ' + formatarMoeda(clinicoValor);
+  if (elComplementarQtd) elComplementarQtd.textContent = complementarQtd;
+  if (elComplementarValor) elComplementarValor.textContent = 'R$ ' + formatarMoeda(complementarValor);
 
   const totalExamesValor = clinicoValor + complementarValor;
-  document.getElementById('comparativoTotal').textContent = 'R$ ' + formatarMoeda(valorTotal);
-  document.getElementById('comparativoMensalidade').textContent = 'R$ ' + formatarMoeda(totalMensalidade);
-  document.getElementById('comparativoExames').textContent = 'R$ ' + formatarMoeda(totalExamesValor);
-  document.getElementById('comparativoVidas').textContent = 'R$ ' + formatarMoeda(totalVidasValor);
+  const elComparativoTotal = document.getElementById('comparativoTotal');
+  const elComparativoMensalidade = document.getElementById('comparativoMensalidade');
+  const elComparativoExames = document.getElementById('comparativoExames');
+  const elComparativoVidas = document.getElementById('comparativoVidas');
+
+  if (elComparativoTotal) elComparativoTotal.textContent = 'R$ ' + formatarMoeda(valorTotal);
+  if (elComparativoMensalidade) elComparativoMensalidade.textContent = 'R$ ' + formatarMoeda(totalMensalidade);
+  if (elComparativoExames) elComparativoExames.textContent = 'R$ ' + formatarMoeda(totalExamesValor);
+  if (elComparativoVidas) elComparativoVidas.textContent = 'R$ ' + formatarMoeda(totalVidasValor);
 
   const maxValor = Math.max(valorTotal, totalMensalidade, totalExamesValor, totalVidasValor, 1);
-  document.getElementById('barTotal').style.width = (valorTotal / maxValor * 100) + '%';
-  document.getElementById('barMensalidade').style.width = (totalMensalidade / maxValor * 100) + '%';
-  document.getElementById('barExames').style.width = (totalExamesValor / maxValor * 100) + '%';
-  document.getElementById('barVidas').style.width = (totalVidasValor / maxValor * 100) + '%';
+  const elBarTotal = document.getElementById('barTotal');
+  const elBarMensalidade = document.getElementById('barMensalidade');
+  const elBarExames = document.getElementById('barExames');
+  const elBarVidas = document.getElementById('barVidas');
+
+  if (elBarTotal) elBarTotal.style.width = (valorTotal / maxValor * 100) + '%';
+  if (elBarMensalidade) elBarMensalidade.style.width = (totalMensalidade / maxValor * 100) + '%';
+  if (elBarExames) elBarExames.style.width = (totalExamesValor / maxValor * 100) + '%';
+  if (elBarVidas) elBarVidas.style.width = (totalVidasValor / maxValor * 100) + '%';
 }
 
 async function carregarCards(mes = 0, ano = 0) {
@@ -4922,13 +4887,10 @@ async function salvarPreco(dados) {
   const payload = { ...dados };
   delete payload.id;
   
-  // Remove apenas campos que são null, undefined ou string vazia
-  // MAS MANTÉM 0 (zero)
   Object.keys(payload).forEach(key => {
     if (payload[key] === null || payload[key] === undefined || payload[key] === '') {
       delete payload[key];
     }
-    // Não remove 0!
   });
   
   console.log('📤 PAYLOAD:', payload);
@@ -4965,83 +4927,6 @@ async function excluirPreco(id) {
   }
 }
 
-// ========================= RESETAR OS =========================
-async function resetarOS(idFaturamento) {
-  if (!confirm(`Deseja resetar a OS do registro ${idFaturamento}? Isso vai permitir que você crie uma nova OS.`)) {
-    return;
-  }
-
-  try {
-    // 1. Buscar o registro
-    const { data: registro, error: buscaError } = await supabaseClient
-      .from('faturamento')
-      .select('*')
-      .eq('id', idFaturamento)
-      .single();
-
-    if (buscaError || !registro) {
-      mostrarAlerta('Registro não encontrado.', 'danger');
-      return;
-    }
-
-    console.log('📋 Registro encontrado:', registro);
-
-    // 2. Verifica se tem OS para cancelar na OMIE
-    if (registro.omie_os_id) {
-      const osId = registro.omie_os_id;
-      
-      // Pergunta se quer cancelar na OMIE também
-      if (confirm(`Deseja cancelar a OS ${osId} na OMIE também?`)) {
-        try {
-          const result = await cancelarNFSe(osId, '');
-          if (result.success) {
-            mostrarAlerta(`✅ OS ${osId} cancelada na OMIE!`, 'success');
-          } else if (result.jaCancelada) {
-            mostrarAlerta(`ℹ️ OS ${osId} já estava cancelada.`, 'info');
-          } else {
-            mostrarAlerta(`⚠️ Não foi possível cancelar: ${result.message}`, 'warning');
-          }
-        } catch (err) {
-          console.error('Erro ao cancelar OS:', err);
-          mostrarAlerta(`Erro ao cancelar OS: ${err.message}`, 'warning');
-        }
-      }
-    }
-
-    // 3. Resetar os campos no banco
-    const { error: updateError } = await supabaseClient
-      .from('faturamento')
-      .update({
-        omie_os_id: null,
-        omie_status: null,
-        omie_erro: null,
-        nota_emitida: false,
-        boleto_enviado: false,
-        nota_numero: null,
-        nota_status: null,
-        nota_data_emissao: null,
-        nota_valor: null
-      })
-      .eq('id', idFaturamento);
-
-    if (updateError) {
-      throw updateError;
-    }
-
-    mostrarAlerta(`✅ OS do registro ${idFaturamento} resetada com sucesso!`, 'success');
-    
-    // 4. Recarregar a tabela
-    const mes = parseInt(document.getElementById('filterMonth').value) || 0;
-    const ano = parseInt(document.getElementById('filterYear').value) || new Date().getFullYear();
-    const unidade = document.getElementById('filterUnit').value.trim() || '';
-    await carregarRelatorio(mes, ano, unidade, statusFiltroAtual);
-
-  } catch (err) {
-    console.error('❌ Erro ao resetar OS:', err);
-    mostrarAlerta(`Erro ao resetar OS: ${err.message}`, 'danger');
-  }
-}
-
 function preencherFormulario(dados) {
   document.getElementById('precoId').value = dados.id || '';
   document.getElementById('precoGrupo').value = dados.grupo || '';
@@ -5050,7 +4935,6 @@ function preencherFormulario(dados) {
   document.getElementById('precoRazaoSocial').value = dados.razao_social || '';
   document.getElementById('precoCnpj').value = dados.cnpj || '';
   
-  // Preenche os campos, mostrando 0 se for 0
   document.getElementById('precoExameClinico').value = dados.exame_clinico !== null && dados.exame_clinico !== undefined ? dados.exame_clinico : '';
   document.getElementById('precoMensalidade').value = dados.mensalidade !== null && dados.mensalidade !== undefined ? dados.mensalidade : '';
   document.getElementById('precoVidas').value = dados.vidas !== null && dados.vidas !== undefined ? dados.vidas : '';
@@ -5080,11 +4964,9 @@ function preencherFormulario(dados) {
 function lerFormulario() {
   const id = document.getElementById('precoId').value;
   
-  // Função auxiliar para parsear valores numéricos
   function parseNumero(valor) {
     if (valor === null || valor === undefined || valor === '') return null;
     const parsed = parseFloat(valor);
-    // Retorna null apenas se for NaN, mas mantém 0
     return isNaN(parsed) ? null : parsed;
   }
   
@@ -5230,7 +5112,6 @@ async function consultarStatusFaturamentoOS() {
     
     console.log(`📋 ${registros.length} OS para verificar status`);
     
-    // Buscar todas as NFS-e
     const payload = {
       endpoint: 'servicos/nfse',
       call: 'ListarNFSEs',
@@ -5261,7 +5142,6 @@ async function consultarStatusFaturamentoOS() {
         const osId = registro.omie_os_id;
         console.log(`🔍 Verificando OS ${osId} - ${registro.unidade}`);
         
-        // Buscar status da OS
         const statusOS = await consultarStatusOS(osId);
         
         if (!statusOS) {
@@ -5273,7 +5153,6 @@ async function consultarStatusFaturamentoOS() {
         console.log(`   Etapa: ${statusOS.etapaDescricao} (${statusOS.etapa})`);
         console.log(`   Status NFS-e: ${statusOS.statusDescricao} (${statusOS.statusNFSe})`);
         
-        // Verifica se a OS foi rejeitada (Etapa 80 ou status R)
         if (statusOS.etapa === '80' || statusOS.statusNFSe === 'R') {
           console.log(`   ❌ OS REJEITADA!`);
           await supabaseClient
@@ -5291,7 +5170,6 @@ async function consultarStatusFaturamentoOS() {
           continue;
         }
         
-        // Verifica se tem NFS-e vinculada
         const nfseVinculada = nfses.find(n => {
           const nCodOS = n.OrdemServico?.nCodigoOS || n.OrdemServico?.nCodOS;
           return nCodOS && parseInt(nCodOS) === parseInt(osId);
@@ -5303,7 +5181,6 @@ async function consultarStatusFaturamentoOS() {
           const numeroNFSe = cabecalho.nNumeroNFSe || '';
           const valorNFSe = cabecalho.nValorNFSe || 0;
           
-          // Mapeia os status corretamente
           let statusMap = {
             'F': 'faturado',
             'A': 'aprovado',
@@ -5312,7 +5189,6 @@ async function consultarStatusFaturamentoOS() {
             'N': 'nao_faturada'
           };
           
-          // Verifica se é Rejeitada
           if (statusNFSe === 'R') {
             await supabaseClient
               .from('faturamento')
@@ -5353,7 +5229,6 @@ async function consultarStatusFaturamentoOS() {
         } else {
           console.log(`⏳ OS ${osId} sem NFS-e encontrada, etapa: ${statusOS.etapa}`);
           
-          // Verifica se a OS está faturada (Etapa 60, 70 ou 80)
           const isFaturada = statusOS.etapa === '60' || statusOS.etapa === '70' || statusOS.etapa === '80';
           
           if (isFaturada) {
@@ -5418,7 +5293,6 @@ async function excluirOS(idFaturamento) {
   }
 
   try {
-    // 1. Buscar o registro
     const { data: registro, error: buscaError } = await supabaseClient
       .from('faturamento')
       .select('*')
@@ -5437,7 +5311,6 @@ async function excluirOS(idFaturamento) {
 
     console.log('📋 Registro encontrado:', registro);
 
-    // 2. Excluir a OS na OMIE
     const osId = registro.omie_os_id;
     
     if (!confirm(`Deseja excluir a OS ${osId} na OMIE?`)) {
@@ -5445,12 +5318,11 @@ async function excluirOS(idFaturamento) {
     }
 
     try {
-      // CORREÇÃO: Estrutura correta para excluir OS
       const payloadExcluir = {
         endpoint: 'servicos/os',
         call: 'ExcluirOS',
         param: [{
-          nCodOS: parseInt(osId)  // <--- CORRETO: nCodOS diretamente no param
+          nCodOS: parseInt(osId)
         }]
       };
 
@@ -5461,7 +5333,6 @@ async function excluirOS(idFaturamento) {
       const resultExcluir = await responseExcluir.json();
 
       if (resultExcluir.fault) {
-        // Verifica se já foi faturada
         if (resultExcluir.fault.faultstring && resultExcluir.fault.faultstring.includes('faturada')) {
           throw new Error('Não é possível excluir uma OS que já foi faturada. Use o cancelamento.');
         }
@@ -5479,7 +5350,6 @@ async function excluirOS(idFaturamento) {
       throw err;
     }
 
-    // 3. Limpar os campos no banco
     const { error: updateError } = await supabaseClient
       .from('faturamento')
       .update({
@@ -5501,7 +5371,6 @@ async function excluirOS(idFaturamento) {
 
     console.log('✅ Registro limpo no banco.');
     
-    // 4. Recarregar a tabela
     const mes = parseInt(document.getElementById('filterMonth').value) || 0;
     const ano = parseInt(document.getElementById('filterYear').value) || new Date().getFullYear();
     const unidade = document.getElementById('filterUnit').value.trim() || '';
@@ -5513,10 +5382,9 @@ async function excluirOS(idFaturamento) {
   }
 }
 
-// ========================= BUSCAR MOVIMENTOS FINANCEIROS (CORRIGIDO) =========================
+// ========================= BUSCAR MOVIMENTOS FINANCEIROS =========================
 async function buscarMovimentosFinanceiros(osId) {
   try {
-    // ESTRUTURA CORRETA: usar nPagina e nRegPorPagina, não pagina
     const payload = {
       endpoint: 'financas/mf',
       call: 'ListarMovimentos',
@@ -5592,7 +5460,7 @@ async function consultarStatusPagamento(codigoTitulo) {
   }
 }
 
-// ========================= ATUALIZAR STATUS DE PAGAMENTO (CORRIGIDO) =========================
+// ========================= ATUALIZAR STATUS DE PAGAMENTO =========================
 async function atualizarStatusPagamento() {
   console.log('🔄 Atualizando status de pagamento...');
   
@@ -5601,7 +5469,6 @@ async function atualizarStatusPagamento() {
   }
 
   try {
-    // Buscar registros com OS e que não estão pagos
     const { data: registros, error } = await supabaseClient
       .from('faturamento')
       .select('*')
@@ -5627,7 +5494,6 @@ async function atualizarStatusPagamento() {
         const osId = registro.omie_os_id;
         console.log(`🔍 Verificando pagamento da OS ${osId} - ${registro.unidade}`);
         
-        // Buscar movimentos financeiros da OS
         const movimentos = await buscarMovimentosFinanceiros(osId);
         
         if (!movimentos || movimentos.length === 0) {
@@ -5635,7 +5501,6 @@ async function atualizarStatusPagamento() {
           continue;
         }
         
-        // Para cada movimento, verificar se está pago
         for (const movimento of movimentos) {
           const detalhes = movimento.detalhes || {};
           const resumo = movimento.resumo || {};
@@ -5703,7 +5568,6 @@ async function atualizarStatusPagamento() {
     mostrarAlerta(mensagem, pagos > 0 ? 'success' : 'info');
     console.log(`📊 ${pagos} pagos, ${erros} erros`);
     
-    // Recarregar a tabela
     const mes = parseInt(document.getElementById('filterMonth').value) || 0;
     const ano = parseInt(document.getElementById('filterYear').value) || new Date().getFullYear();
     const unidade = document.getElementById('filterUnit').value.trim() || '';
@@ -5834,16 +5698,413 @@ async function atualizarStatusOSIndividual(idFaturamento) {
   }
 }
 
-// ========================= RECARREGAR TABELA =========================
-function recarregarTabela() {
-  console.log('🔄 Recarregando tabela...');
-  const mes = parseInt(document.getElementById('filterMonth')?.value) || 0;
-  const ano = parseInt(document.getElementById('filterYear')?.value) || new Date().getFullYear();
-  const unidade = document.getElementById('filterUnit')?.value?.trim() || '';
-  carregarRelatorio(mes, ano, unidade, statusFiltroAtual);
+// ================================================================
+// FILTROS POR COLUNA
+// ================================================================
+
+function aplicarFiltrosTabela() {
+    const buscaGlobal = document.getElementById('globalSearchInput')?.value?.toLowerCase().trim() || '';
+    
+    if (Object.keys(filtrosColuna).length === 0 && !buscaGlobal) {
+        dadosFiltrados = [...todosOsDados];
+    } else {
+        dadosFiltrados = todosOsDados.filter(row => {
+            for (const [coluna, valorFiltro] of Object.entries(filtrosColuna)) {
+                if (!valorFiltro) continue;
+                
+                let valorCelula = obterValorCelula(row, coluna);
+                if (!valorCelula.toLowerCase().includes(valorFiltro.toLowerCase())) {
+                    return false;
+                }
+            }
+            
+            if (buscaGlobal) {
+                const textoCompleto = obterTextoCompletoLinha(row);
+                if (!textoCompleto.toLowerCase().includes(buscaGlobal)) {
+                    return false;
+                }
+            }
+            
+            return true;
+        });
+    }
+    
+    if (colunaOrdenacao) {
+        dadosFiltrados = ordenarDados(dadosFiltrados, colunaOrdenacao, ordemOrdenacao);
+    }
+    
+    paginaAtual = 1;
+    renderizarPagina();
 }
 
-// ========================= EVENTOS DO DOMContentLoaded =========================
+function obterValorCelula(row, coluna) {
+    const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+                   'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+    
+    switch(coluna) {
+        case 'unidade': return row.unidade || '';
+        case 'holding': return window._mapaUnidades?.[row.unidade]?.holding || '';
+        case 'grupo': return window._mapaUnidades?.[row.unidade]?.grupo || '';
+        case 'mesano': return `${meses[row.mes-1]}/${row.ano}`;
+        case 'valor': return row.valor_total.toFixed(2);
+        case 'status_os': return obterStatusOS(row);
+        case 'status_pagamento': return obterStatusPagamento(row);
+        case 'vencimento': return row.data_vencimento ? new Date(row.data_vencimento + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
+        default: return '';
+    }
+}
+
+function obterTextoCompletoLinha(row) {
+    const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+                   'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+    return `${row.unidade} ${window._mapaUnidades?.[row.unidade]?.holding || ''} ${window._mapaUnidades?.[row.unidade]?.grupo || ''} ${meses[row.mes-1]}/${row.ano} ${row.valor_total.toFixed(2)} ${obterStatusOS(row)} ${obterStatusPagamento(row)}`;
+}
+
+function setFilterColuna(coluna, valor) {
+    if (valor && valor.trim()) {
+        filtrosColuna[coluna] = valor.trim();
+    } else {
+        delete filtrosColuna[coluna];
+    }
+    
+    document.querySelectorAll('thead th[data-filter]').forEach(th => {
+        const col = th.dataset.filter;
+        const indicator = th.querySelector('.filter-indicator');
+        if (indicator) {
+            indicator.style.display = filtrosColuna[col] ? 'inline' : 'none';
+        }
+    });
+    
+    aplicarFiltrosTabela();
+}
+
+function limparFiltrosTabela() {
+    filtrosColuna = {};
+    const buscaInput = document.getElementById('globalSearchInput');
+    if (buscaInput) buscaInput.value = '';
+    document.querySelectorAll('.filter-indicator').forEach(el => el.style.display = 'none');
+    dadosFiltrados = [...todosOsDados];
+    paginaAtual = 1;
+    renderizarPagina();
+}
+
+function handleColumnFilterClick(e) {
+    const th = e.currentTarget;
+    const coluna = th.dataset.filter;
+    if (!coluna) return;
+    
+    const primeiraLinha = document.querySelector('#resultsBody tr:not([style*="display: none"])');
+    if (!primeiraLinha) return;
+    
+    const cells = primeiraLinha.querySelectorAll('td');
+    const colIndex = Array.from(th.parentElement.children).indexOf(th);
+    if (colIndex >= cells.length) return;
+    
+    let valor = cells[colIndex]?.textContent?.trim() || '';
+    valor = valor.replace(/[✅❌⛔⚠️]/g, '').trim();
+    
+    if (filtrosColuna[coluna] === valor) {
+        setFilterColuna(coluna, '');
+        return;
+    }
+    
+    setFilterColuna(coluna, valor);
+}
+
+// ================================================================
+// BOLETOS - FUNÇÕES COMPLETAS
+// ================================================================
+
+function popularAnosBoletos() {
+    const select = document.getElementById('boletoFiltroAno');
+    if (!select) return;
+    const anoAtual = new Date().getFullYear();
+    select.innerHTML = '<option value="0">Todos</option>';
+    for (let y = anoAtual; y >= anoAtual - 5; y--) {
+        const option = document.createElement('option');
+        option.value = y;
+        option.textContent = y;
+        select.appendChild(option);
+    }
+    select.value = anoAtual;
+}
+
+async function carregarBoletos() {
+    try {
+        // Buscar TODOS os registros de faturamento que têm data de vencimento
+        const { data, error } = await supabaseClient
+            .from('faturamento')
+            .select('*')
+            .not('data_vencimento', 'is', null)  // Busca todos que têm data de vencimento
+            .order('data_vencimento', { ascending: true });
+
+        if (error) throw error;
+
+        dadosBoletos = data || [];
+        boletosFiltrados = [...dadosBoletos];
+        
+        console.log(`📋 ${dadosBoletos.length} boletos encontrados`);
+        
+        // Buscar mapa de unidades para mostrar Holding
+        if (dadosBoletos.length > 0) {
+            const unidades = [...new Set(dadosBoletos.map(item => item.unidade))];
+            const { data: precosData } = await supabaseClient
+                .from('precos')
+                .select('unidade, holding, grupo')
+                .in('unidade', unidades);
+            
+            const mapa = {};
+            if (precosData) {
+                precosData.forEach(item => {
+                    mapa[item.unidade] = {
+                        holding: item.holding || 'N/A',
+                        grupo: item.grupo || 'N/A'
+                    };
+                });
+            }
+            window._mapaUnidadesBoletos = mapa;
+        }
+        
+        aplicarFiltrosBoletos();
+        
+    } catch (err) {
+        console.error('Erro ao carregar boletos:', err);
+        mostrarAlerta('Erro ao carregar boletos: ' + err.message, 'danger');
+    }
+}
+
+function aplicarFiltrosBoletos() {
+    const statusFiltro = document.getElementById('boletoFiltroStatus')?.value || 'todos';
+    const mesFiltro = parseInt(document.getElementById('boletoFiltroMes')?.value) || 0;
+    const anoFiltro = parseInt(document.getElementById('boletoFiltroAno')?.value) || 0;
+    const unidadeFiltro = document.getElementById('boletoFiltroUnidade')?.value?.toLowerCase().trim() || '';
+
+    console.log(`🔍 Filtrando boletos - Status: ${statusFiltro}, Mês: ${mesFiltro}, Ano: ${anoFiltro}`);
+
+    boletosFiltrados = dadosBoletos.filter(row => {
+        // Filtro por status do boleto
+        if (statusFiltro !== 'todos') {
+            const status = obterStatusBoleto(row);
+            
+            if (statusFiltro === 'pago' && !row.pago) return false;
+            if (statusFiltro === 'vencido' && status.status !== 'Vencido') return false;
+            if (statusFiltro === 'a_vencer' && status.status !== 'A Vencer') return false;
+            if (statusFiltro === 'proximo' && status.status !== 'Próx. Venc.') return false;
+        }
+
+        // Filtro por mês
+        if (mesFiltro > 0 && row.mes !== mesFiltro) return false;
+
+        // Filtro por ano
+        if (anoFiltro > 0 && row.ano !== anoFiltro) return false;
+
+        // Filtro por unidade
+        if (unidadeFiltro && !row.unidade.toLowerCase().includes(unidadeFiltro)) return false;
+
+        return true;
+    });
+
+    console.log(`📋 ${boletosFiltrados.length} boletos após filtros`);
+
+    atualizarCardsBoletos();
+    renderizarTabelaBoletos();
+}
+
+function atualizarCardsBoletos() {
+    let pagos = 0, vencidos = 0, aVencer = 0, proximos = 0;
+    let valorPagos = 0, valorVencidos = 0, valorAVencer = 0, valorProximos = 0;
+
+    boletosFiltrados.forEach(row => {
+        const status = obterStatusBoleto(row);
+        const valor = row.valor_total || 0;
+
+        if (row.pago) {
+            pagos++;
+            valorPagos += valor;
+        } else if (status.status === 'Vencido') {
+            vencidos++;
+            valorVencidos += valor;
+        } else if (status.status === 'Próx. Venc.') {
+            proximos++;
+            valorProximos += valor;
+        } else if (status.status === 'A Vencer') {
+            aVencer++;
+            valorAVencer += valor;
+        }
+    });
+
+    const elPagos = document.getElementById('totalBoletosPagos');
+    const elPagosValor = document.getElementById('totalBoletosPagosValor');
+    const elVencidos = document.getElementById('totalBoletosVencidos');
+    const elVencidosValor = document.getElementById('totalBoletosVencidosValor');
+    const elAVencer = document.getElementById('totalBoletosAVencer');
+    const elAVencerValor = document.getElementById('totalBoletosAVencerValor');
+    const elProximos = document.getElementById('totalBoletosProximos');
+    const elProximosValor = document.getElementById('totalBoletosProximosValor');
+
+    if (elPagos) elPagos.textContent = pagos;
+    if (elPagosValor) elPagosValor.textContent = valorPagos.toFixed(2);
+    if (elVencidos) elVencidos.textContent = vencidos;
+    if (elVencidosValor) elVencidosValor.textContent = valorVencidos.toFixed(2);
+    if (elAVencer) elAVencer.textContent = aVencer;
+    if (elAVencerValor) elAVencerValor.textContent = valorAVencer.toFixed(2);
+    if (elProximos) elProximos.textContent = proximos;
+    if (elProximosValor) elProximosValor.textContent = valorProximos.toFixed(2);
+}
+
+function renderizarTabelaBoletos() {
+    const tbody = document.getElementById('boletosBody');
+    const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+                   'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+    if (boletosFiltrados.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-4">Nenhum boleto encontrado</td></tr>`;
+        return;
+    }
+
+    let html = '';
+    boletosFiltrados.forEach(row => {
+        const status = obterStatusBoleto(row);
+        const mapa = window._mapaUnidadesBoletos || {};
+        const holding = mapa[row.unidade]?.holding || 'N/A';
+        const mesNome = meses[row.mes - 1];
+        const dataVenc = row.data_vencimento ? new Date(row.data_vencimento + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
+        const dias = status.dias !== undefined ? status.dias : '—';
+
+        // Log para debug
+        console.log(`📌 ${row.unidade} - Status: ${status.status} - Venc: ${dataVenc}`);
+
+        html += `<tr>
+            <td><strong>${row.unidade}</strong></td>
+            <td><span class="badge bg-secondary">${holding}</span></td>
+            <td>${mesNome}/${row.ano}</td>
+            <td class="text-end">R$ ${row.valor_total.toFixed(2)}</td>
+            <td class="text-center">${dataVenc}</td>
+            <td class="text-center">
+                <span class="badge bg-${status.classe}">
+                    ${status.icone} ${status.status}
+                </span>
+            </td>
+            <td class="text-center">
+                ${typeof dias === 'number' ? (dias < 0 ? dias : `+${dias}`) : dias}
+            </td>
+            <td class="text-center">
+                <div class="btn-group btn-group-sm">
+                    <button class="btn btn-sm btn-outline-primary btn-detalhes-boleto" 
+                            data-id="${row.id}"
+                            data-unidade="${row.unidade}"
+                            data-mes="${row.mes}"
+                            data-ano="${row.ano}"
+                            title="Ver detalhes">
+                        <i class="fas fa-eye"></i>
+                    </button>
+                    ${!row.pago ? `
+                        <button class="btn btn-sm btn-outline-success btn-marcar-pago" 
+                                data-id="${row.id}"
+                                data-unidade="${row.unidade}"
+                                title="Marcar como pago">
+                            <i class="fas fa-check"></i>
+                        </button>
+                    ` : ''}
+                </div>
+            </td>
+        </tr>`;
+    });
+
+    tbody.innerHTML = html;
+
+    // Adicionar eventos
+    document.querySelectorAll('.btn-detalhes-boleto').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const id = parseInt(this.dataset.id);
+            const unidade = this.dataset.unidade;
+            const mes = parseInt(this.dataset.mes);
+            const ano = parseInt(this.dataset.ano);
+            const row = dadosBoletos.find(r => r.id === id);
+            if (row) {
+                mostrarDetalhes(id, unidade, mes, ano, row.detalhes || {});
+            }
+        });
+    });
+
+    document.querySelectorAll('.btn-marcar-pago').forEach(btn => {
+        btn.addEventListener('click', async function() {
+            const id = parseInt(this.dataset.id);
+            const unidade = this.dataset.unidade;
+            if (confirm(`Deseja marcar o boleto de "${unidade}" como PAGO?`)) {
+                await marcarBoletoPago(id);
+            }
+        });
+    });
+}
+
+async function marcarBoletoPago(id) {
+    try {
+        const hoje = new Date().toISOString().split('T')[0];
+        
+        const { error } = await supabaseClient
+            .from('faturamento')
+            .update({
+                pago: true,
+                status_boleto: 'pago',
+                data_pagamento: hoje
+            })
+            .eq('id', id);
+
+        if (error) throw error;
+
+        mostrarAlerta('✅ Boleto marcado como PAGO com sucesso!', 'success');
+        await carregarBoletos();
+        
+    } catch (err) {
+        console.error('Erro ao marcar boleto:', err);
+        mostrarAlerta('Erro ao marcar boleto: ' + err.message, 'danger');
+    }
+}
+
+function exportarBoletosExcel() {
+    if (boletosFiltrados.length === 0) {
+        mostrarAlerta('Nenhum boleto para exportar.', 'warning');
+        return;
+    }
+
+    const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+                   'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+    const mapa = window._mapaUnidadesBoletos || {};
+
+    const dados = boletosFiltrados.map(row => {
+        const status = obterStatusBoleto(row);
+        const holding = mapa[row.unidade]?.holding || 'N/A';
+        const dataVenc = row.data_vencimento ? new Date(row.data_vencimento + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
+        
+        return {
+            'Unidade': row.unidade,
+            'Holding': holding,
+            'Mês/Ano': `${meses[row.mes - 1]}/${row.ano}`,
+            'Valor (R$)': row.valor_total.toFixed(2),
+            'Vencimento': dataVenc,
+            'Status': status.status,
+            'Pago': row.pago ? 'Sim' : 'Não'
+        };
+    });
+
+    const ws = XLSX.utils.json_to_sheet(dados);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Boletos');
+    ws['!cols'] = [
+        { wch: 30 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, 
+        { wch: 15 }, { wch: 15 }, { wch: 10 }
+    ];
+    
+    const fileName = `boletos_${new Date().toISOString().slice(0,10)}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+    mostrarAlerta(`Arquivo "${fileName}" exportado com sucesso!`, 'success');
+}
+
+// ================================================================
+// EVENTOS DO DOMContentLoaded
+// ================================================================
+
 document.addEventListener('DOMContentLoaded', function () {
   const loginPage = document.getElementById('loginPage');
   const menuPage = document.getElementById('menuPage');
@@ -5923,6 +6184,9 @@ document.addEventListener('DOMContentLoaded', function () {
     
     carregarHoldingsParaFiltro();
     carregarGruposParaFiltro();
+    
+    // Popular anos do filtro de boletos
+    popularAnosBoletos();
   }
 
   // ========================= EVENTOS DO MENU =========================
@@ -6563,156 +6827,6 @@ document.addEventListener('DOMContentLoaded', function () {
     document.body.classList.remove('modal-open');
   };
 
-  // ================================================================
-// FILTROS POR COLUNA - NOVO RECURSO
-// ================================================================
-
-let filtrosColuna = {};
-
-// ===== FUNÇÃO PRINCIPAL: APLICAR FILTROS =====
-function aplicarFiltrosTabela() {
-    const buscaGlobal = document.getElementById('globalSearchInput')?.value?.toLowerCase().trim() || '';
-    
-    // Se não há filtros de coluna e não há busca global, usa todos os dados
-    if (Object.keys(filtrosColuna).length === 0 && !buscaGlobal) {
-        dadosFiltrados = [...todosOsDados];
-    } else {
-        // Aplica os filtros de coluna e busca global
-        dadosFiltrados = todosOsDados.filter(row => {
-            // 1. Filtros por coluna específica
-            for (const [coluna, valorFiltro] of Object.entries(filtrosColuna)) {
-                if (!valorFiltro) continue;
-                
-                let valorCelula = obterValorCelula(row, coluna);
-                if (!valorCelula.toLowerCase().includes(valorFiltro.toLowerCase())) {
-                    return false;
-                }
-            }
-            
-            // 2. Busca global (se houver texto digitado)
-            if (buscaGlobal) {
-                const textoCompleto = obterTextoCompletoLinha(row);
-                if (!textoCompleto.toLowerCase().includes(buscaGlobal)) {
-                    return false;
-                }
-            }
-            
-            return true;
-        });
-    }
-    
-    // 3. Aplica ordenação (se houver)
-    if (colunaOrdenacao) {
-        dadosFiltrados = ordenarDados(dadosFiltrados, colunaOrdenacao, ordemOrdenacao);
-    }
-    
-    // 4. Volta para a primeira página e renderiza
-    paginaAtual = 1;
-    renderizarPagina();
-}
-
-// Pega o valor de uma célula específica
-function obterValorCelula(row, coluna) {
-    const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
-                   'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
-    
-    switch(coluna) {
-        case 'unidade': return row.unidade || '';
-        case 'holding': return window._mapaUnidades?.[row.unidade]?.holding || '';
-        case 'grupo': return window._mapaUnidades?.[row.unidade]?.grupo || '';
-        case 'mesano': return `${meses[row.mes-1]}/${row.ano}`;
-        case 'valor': return row.valor_total.toFixed(2);
-        case 'status_os': return obterStatusOS(row);
-        case 'status_pagamento': return obterStatusPagamento(row);
-        case 'vencimento': return row.data_vencimento ? new Date(row.data_vencimento + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
-        default: return '';
-    }
-}
-
-function obterStatusOS(row) {
-    if (row.omie_status === 'criado') return 'OS Criada';
-    if (row.omie_status === 'faturado' || row.omie_status === 'aprovado') return 'Faturado';
-    if (row.omie_status === 'rejeitado') return 'Rejeitado';
-    if (row.omie_status === 'cancelado') return 'Cancelado';
-    if (row.omie_status === 'erro') return 'Erro';
-    return 'Pendente';
-}
-
-function obterStatusPagamento(row) {
-    if (row.pago) return 'Pago';
-    if (row.data_vencimento) {
-        const hoje = new Date();
-        const venc = new Date(row.data_vencimento + 'T00:00:00');
-        const diff = Math.ceil((venc - hoje) / (1000 * 60 * 60 * 24));
-        if (diff < 0) return 'Vencido';
-        if (diff <= 2) return 'Próx. venc.';
-    }
-    return 'Pendente';
-}
-
-function obterTextoCompletoLinha(row) {
-    const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
-                   'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
-    return `${row.unidade} ${window._mapaUnidades?.[row.unidade]?.holding || ''} ${window._mapaUnidades?.[row.unidade]?.grupo || ''} ${meses[row.mes-1]}/${row.ano} ${row.valor_total.toFixed(2)} ${obterStatusOS(row)} ${obterStatusPagamento(row)}`;
-}
-
-// Definir filtro de uma coluna
-function setFilterColuna(coluna, valor) {
-    if (valor && valor.trim()) {
-        filtrosColuna[coluna] = valor.trim();
-    } else {
-        delete filtrosColuna[coluna];
-    }
-    
-    // Atualiza indicadores visuais
-    document.querySelectorAll('thead th[data-filter]').forEach(th => {
-        const col = th.dataset.filter;
-        const indicator = th.querySelector('.filter-indicator');
-        if (indicator) {
-            indicator.style.display = filtrosColuna[col] ? 'inline' : 'none';
-        }
-    });
-    
-    aplicarFiltrosTabela();
-}
-
-// Limpar todos os filtros
-function limparFiltrosTabela() {
-    filtrosColuna = {};
-    document.getElementById('globalSearchInput').value = '';
-    document.querySelectorAll('.filter-indicator').forEach(el => el.style.display = 'none');
-    dadosFiltrados = [...todosOsDados];
-    paginaAtual = 1;
-    renderizarPagina();
-}
-
-// Clique no cabeçalho da coluna
-function handleColumnFilterClick(e) {
-    const th = e.currentTarget;
-    const coluna = th.dataset.filter;
-    if (!coluna) return;
-    
-    // Pega o valor da primeira linha da coluna
-    const primeiraLinha = document.querySelector('#resultsBody tr:not([style*="display: none"])');
-    if (!primeiraLinha) return;
-    
-    const cells = primeiraLinha.querySelectorAll('td');
-    const colIndex = Array.from(th.parentElement.children).indexOf(th);
-    if (colIndex >= cells.length) return;
-    
-    let valor = cells[colIndex]?.textContent?.trim() || '';
-    // Remove emojis/icons
-    valor = valor.replace(/[✅❌⛔⚠️]/g, '').trim();
-    
-    // Se já está filtrado, remove o filtro
-    if (filtrosColuna[coluna] === valor) {
-        setFilterColuna(coluna, '');
-        return;
-    }
-    
-    setFilterColuna(coluna, valor);
-}
-
   // ========================= DASHBOARD FILTROS =========================
   function popularAnosDashboard() {
     const select = document.getElementById('dashboardYear');
@@ -6753,22 +6867,22 @@ function handleColumnFilterClick(e) {
   }
 
   // ========================= ATUALIZAR STATUS NFS-e =========================
-document.getElementById('btnAtualizarStatusNFSe').addEventListener('click', async function() {
-  const btn = this;
-  const originalText = btn.innerHTML;
-  
-  btn.disabled = true;
-  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Atualizando NFS-e...';
-  
-  try {
-    await forcarAtualizarStatusNFSe();
-  } catch (err) {
-    mostrarAlerta('Erro ao atualizar: ' + err.message, 'danger');
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = originalText;
-  }
-});
+  document.getElementById('btnAtualizarStatusNFSe').addEventListener('click', async function() {
+    const btn = this;
+    const originalText = btn.innerHTML;
+    
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Atualizando NFS-e...';
+    
+    try {
+      await forcarAtualizarStatusNFSe();
+    } catch (err) {
+      mostrarAlerta('Erro ao atualizar: ' + err.message, 'danger');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = originalText;
+    }
+  });
 
   // ========================= EVENTO BOTÃO CRIAR OS EM LOTE =========================
   document.getElementById('btnCriarOSLote').addEventListener('click', abrirModalCriarOSLote);
@@ -6854,121 +6968,142 @@ document.getElementById('btnAtualizarStatusNFSe').addEventListener('click', asyn
     });
   }
 
-document.getElementById('btnResetarOSLote').addEventListener('click', function() {
-  const mes = parseInt(document.getElementById('filterMonth').value) || 0;
-  const ano = parseInt(document.getElementById('filterYear').value) || new Date().getFullYear();
-  const unidade = document.getElementById('filterUnit').value.trim() || '';
-  resetarOSLote(mes, ano, unidade);
-});
+  document.getElementById('btnResetarOSLote').addEventListener('click', function() {
+    const mes = parseInt(document.getElementById('filterMonth').value) || 0;
+    const ano = parseInt(document.getElementById('filterYear').value) || new Date().getFullYear();
+    const unidade = document.getElementById('filterUnit').value.trim() || '';
+    resetarOSLote(mes, ano, unidade);
+  });
 
-// ========================= ATUALIZAR PAGAMENTO =========================
-document.getElementById('btnAtualizarPagamento')?.addEventListener('click', async function() {
-  const btn = this;
-  const originalText = btn.innerHTML;
-  
-  btn.disabled = true;
-  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verificando pagamentos...';
-  
-  try {
-    await atualizarStatusPagamento();
-  } catch (err) {
-    mostrarAlerta('Erro ao atualizar: ' + err.message, 'danger');
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = originalText;
-  }
-});
+  // ========================= ATUALIZAR PAGAMENTO =========================
+  document.getElementById('btnAtualizarPagamento')?.addEventListener('click', async function() {
+    const btn = this;
+    const originalText = btn.innerHTML;
+    
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verificando pagamentos...';
+    
+    try {
+      await atualizarStatusPagamento();
+    } catch (err) {
+      mostrarAlerta('Erro ao atualizar: ' + err.message, 'danger');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = originalText;
+    }
+  });
 
-document.getElementById('btnBuscarPagamentos')?.addEventListener('click', async function() {
-  const btn = this;
-  const originalText = btn.innerHTML;
-  
-  btn.disabled = true;
-  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Buscando pagamentos...';
-  
-  try {
-    await buscarEAtualizarBoletosPagos();
-  } catch (err) {
-    mostrarAlerta('Erro ao buscar pagamentos: ' + err.message, 'danger');
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = originalText;
-  }
-});
+  document.getElementById('btnBuscarPagamentos')?.addEventListener('click', async function() {
+    const btn = this;
+    const originalText = btn.innerHTML;
+    
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Buscando pagamentos...';
+    
+    try {
+      await buscarEAtualizarBoletosPagos();
+    } catch (err) {
+      mostrarAlerta('Erro ao buscar pagamentos: ' + err.message, 'danger');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = originalText;
+    }
+  });
 
-// ===== BOTÃO BUSCAR PAGAMENTOS =====
-document.getElementById('btnBuscarPagamentos')?.addEventListener('click', async function() {
-  const btn = this;
-  const originalText = btn.innerHTML;
-  
-  btn.disabled = true;
-  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Buscando...';
-  
-  try {
-    await buscarEAtualizarBoletosPagos();
-  } catch (err) {
-    mostrarAlerta('Erro ao buscar pagamentos: ' + err.message, 'danger');
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = originalText;
-  }
-});
+  // ===== BOTÃO EXPORTAR EXCEL =====
+  document.getElementById('exportExcelBtn')?.addEventListener('click', function() {
+    const table = document.getElementById('resultsTable');
+    if (!table) return;
+    
+    const ws = XLSX.utils.table_to_sheet(table);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Faturamento');
+    
+    ws['!cols'] = [
+      { wch: 30 }, { wch: 15 }, { wch: 15 }, { wch: 15 },
+      { wch: 18 }, { wch: 15 }, { wch: 15 }, { wch: 15 },
+      { wch: 10 }
+    ];
+    
+    const fileName = `faturamento_${new Date().toISOString().slice(0,10)}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+    mostrarAlerta(`Arquivo "${fileName}" exportado com sucesso!`, 'success');
+  });
 
-// ===== BOTÃO EXPORTAR EXCEL =====
-document.getElementById('exportExcelBtn')?.addEventListener('click', function() {
-  const table = document.getElementById('resultsTable');
-  if (!table) return;
-  
-  const ws = XLSX.utils.table_to_sheet(table);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Faturamento');
-  
-  // Ajustar largura das colunas
-  ws['!cols'] = [
-    { wch: 30 }, // Unidade
-    { wch: 15 }, // Holding
-    { wch: 15 }, // Grupo
-    { wch: 15 }, // Mês/Ano
-    { wch: 18 }, // Valor Total
-    { wch: 15 }, // Status OS
-    { wch: 15 }, // Status Pagamento
-    { wch: 15 }, // Vencimento
-    { wch: 10 }  // Ações
-  ];
-  
-  const fileName = `faturamento_${new Date().toISOString().slice(0,10)}.xlsx`;
-  XLSX.writeFile(wb, fileName);
-  mostrarAlerta(`Arquivo "${fileName}" exportado com sucesso!`, 'success');
-});
+  document.getElementById('pageSizeSelect')?.addEventListener('change', function() {
+    registrosPorPagina = parseInt(this.value);
+    paginaAtual = 1;
+    renderizarPagina();
+  });
 
-// No DOMContentLoaded, adicione:
-document.getElementById('pageSizeSelect')?.addEventListener('change', function() {
-  registrosPorPagina = parseInt(this.value);
-  paginaAtual = 1;
-  renderizarPagina();
-});
-
-// ===== FILTROS POR COLUNA =====
-// Adiciona evento de clique nos cabeçalhos
-document.querySelectorAll('thead th[data-filter]').forEach(th => {
+  // ===== FILTROS POR COLUNA =====
+  document.querySelectorAll('thead th[data-filter]').forEach(th => {
     th.addEventListener('click', handleColumnFilterClick);
-});
+  });
 
-// Busca global com delay
-let buscaTimeout;
-document.getElementById('globalSearchInput')?.addEventListener('input', function() {
-    clearTimeout(buscaTimeout);
-    buscaTimeout = setTimeout(aplicarFiltrosTabela, 300);
-});
+  let buscaTimeout;
+  const buscaInput = document.getElementById('globalSearchInput');
+  if (buscaInput) {
+    buscaInput.addEventListener('input', function() {
+      clearTimeout(buscaTimeout);
+      buscaTimeout = setTimeout(aplicarFiltrosTabela, 300);
+    });
+  }
 
-// Botão limpar filtros
-document.getElementById('clearTableFiltersBtn')?.addEventListener('click', limparFiltrosTabela);
+  document.getElementById('clearTableFiltersBtn')?.addEventListener('click', limparFiltrosTabela);
 
-// ===== ORDENAÇÃO POR COLUNA =====
-// Adiciona evento de clique nos cabeçalhos
-document.querySelectorAll('thead th[data-sort]').forEach(th => {
+  // ===== ORDENAÇÃO POR COLUNA =====
+  document.querySelectorAll('thead th[data-sort]').forEach(th => {
     th.addEventListener('click', handleSortClick);
-});
+  });
+
+  // ===== FILTROS DE STATUS DO BOLETO =====
+  document.querySelectorAll('[data-boleto-status]').forEach(btn => {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('[data-boleto-status]').forEach(b => {
+        b.classList.remove('active');
+      });
+      this.classList.add('active');
+      
+      boletoStatusFiltro = this.dataset.boletoStatus;
+      
+      const mes = parseInt(document.getElementById('filterMonth').value) || 0;
+      const ano = parseInt(document.getElementById('filterYear').value) || new Date().getFullYear();
+      const unidade = document.getElementById('filterUnit').value.trim() || '';
+      carregarRelatorio(mes, ano, unidade, statusFiltroAtual);
+    });
+  });
+
+  // ===== BOLETOS - ABA =====
+  popularAnosBoletos();
+
+  document.getElementById('tab-boletos')?.addEventListener('shown.bs.tab', function() {
+    carregarBoletos();
+  });
+
+  document.getElementById('btnAplicarFiltrosBoletos')?.addEventListener('click', function() {
+    aplicarFiltrosBoletos();
+  });
+
+  document.getElementById('btnLimparFiltrosBoletos')?.addEventListener('click', function() {
+    document.getElementById('boletoFiltroStatus').value = 'todos';
+    document.getElementById('boletoFiltroMes').value = '0';
+    const anoAtual = new Date().getFullYear();
+    const anoSelect = document.getElementById('boletoFiltroAno');
+    if (anoSelect) anoSelect.value = anoAtual;
+    document.getElementById('boletoFiltroUnidade').value = '';
+    aplicarFiltrosBoletos();
+  });
+
+  document.getElementById('btnExportarBoletos')?.addEventListener('click', exportarBoletosExcel);
+
+  // Carregar boletos se a aba já estiver ativa
+  setTimeout(() => {
+    const boletoTab = document.getElementById('tab-boletos');
+    if (boletoTab && boletoTab.classList.contains('active')) {
+      carregarBoletos();
+    }
+  }, 500);
 
   // ========================= OUTROS =========================
   function popularAnos() {
@@ -7038,3 +7173,15 @@ document.querySelectorAll('thead th[data-sort]').forEach(th => {
   carregarGruposParaFiltro();
 
 });
+
+// Função auxiliar para resetar OS em lote (placeholder)
+async function resetarOSLote(mes, ano, unidade) {
+  console.log('Resetar OS em lote:', mes, ano, unidade);
+  mostrarAlerta('Função de resetar OS em lote em desenvolvimento.', 'info');
+}
+
+// Função auxiliar para atualizar nome da unidade (placeholder)
+async function atualizarNomeUnidadeProcessamento(oldName, newName) {
+  console.log('Atualizar nome:', oldName, '->', newName);
+  return { success: true, message: `Nome atualizado de "${oldName}" para "${newName}"` };
+}

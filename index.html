@@ -113,7 +113,6 @@
       min-height: 100vh;
       background: #f4f7fc;
     }
-    /* Navbar */
     .navbar-custom {
       background: linear-gradient(90deg, #213b7c 0%, #41bae8 100%);
       padding: 14px 0;
@@ -174,7 +173,6 @@
       border-color: #ffffff;
     }
 
-    /* Conteúdo */
     .dashboard-content {
       padding: 28px 24px 40px;
     }
@@ -364,16 +362,7 @@
       outline: none;
     }
 
-    /* Responsivo */
-    @media (max-width: 768px) {
-      .login-card { padding: 30px 20px; }
-      .dashboard-content { padding: 16px; }
-      .search-box { max-width: 100%; }
-      .navbar-custom .brand .brand-text .name { font-size: 1.1rem; }
-      .navbar-custom .brand .brand-text .slogan-nav { font-size: 0.5rem; }
-    }
-
-    /* ===== MENU PRINCIPAL ===== */
+    /* Menu Principal */
     .menu-wrapper {
       min-height: 80vh;
       display: flex;
@@ -466,66 +455,78 @@
 
     /* Responsivo */
     @media (max-width: 768px) {
+      .login-card { padding: 30px 20px; }
+      .dashboard-content { padding: 16px; }
+      .search-box { max-width: 100%; }
+      .navbar-custom .brand .brand-text .name { font-size: 1.1rem; }
+      .navbar-custom .brand .brand-text .slogan-nav { font-size: 0.5rem; }
       .menu-title { font-size: 2rem; }
       .menu-icon { font-size: 3rem; padding: 16px; }
       .menu-card-icon { width: 60px; height: 60px; font-size: 1.6rem; }
     }
+
     /* Estilos para as janelas do lote */
-#loteJanelasContainer .card {
-  transition: all 0.3s ease;
-  cursor: default;
-}
+    #loteJanelasContainer .card {
+      transition: all 0.3s ease;
+      cursor: default;
+    }
+    #loteJanelasContainer .card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    #loteJanelasContainer .card-header strong {
+      font-size: 0.8rem;
+    }
+    #criarOSLoteModal .modal-body::-webkit-scrollbar {
+      width: 6px;
+    }
+    #criarOSLoteModal .modal-body::-webkit-scrollbar-track {
+      background: #f1f1f1;
+      border-radius: 10px;
+    }
+    #criarOSLoteModal .modal-body::-webkit-scrollbar-thumb {
+      background: #213b7c;
+      border-radius: 10px;
+    }
+    #criarOSLoteModal .modal-body::-webkit-scrollbar-thumb:hover {
+      background: #152b5a;
+    }
+    #descricaoModalBody {
+      tab-size: 2;
+      line-height: 1.6;
+    }
+    #descricaoModalBody::-webkit-scrollbar {
+      width: 6px;
+    }
+    #descricaoModalBody::-webkit-scrollbar-track {
+      background: #f1f1f1;
+      border-radius: 10px;
+    }
+    #descricaoModalBody::-webkit-scrollbar-thumb {
+      background: #213b7c;
+      border-radius: 10px;
+    }
+    #descricaoModalBody::-webkit-scrollbar-thumb:hover {
+      background: #152b5a;
+    }
 
-#loteJanelasContainer .card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-}
-
-#loteJanelasContainer .card-header strong {
-  font-size: 0.8rem;
-}
-
-/* Scroll personalizado no modal */
-#criarOSLoteModal .modal-body::-webkit-scrollbar {
-  width: 6px;
-}
-
-#criarOSLoteModal .modal-body::-webkit-scrollbar-track {
-  background: #f1f1f1;
-  border-radius: 10px;
-}
-
-#criarOSLoteModal .modal-body::-webkit-scrollbar-thumb {
-  background: #213b7c;
-  border-radius: 10px;
-}
-
-#criarOSLoteModal .modal-body::-webkit-scrollbar-thumb:hover {
-  background: #152b5a;
-}
-/* Estilos para o modal de descrição */
-#descricaoModalBody {
-  tab-size: 2;
-  line-height: 1.6;
-}
-
-#descricaoModalBody::-webkit-scrollbar {
-  width: 6px;
-}
-
-#descricaoModalBody::-webkit-scrollbar-track {
-  background: #f1f1f1;
-  border-radius: 10px;
-}
-
-#descricaoModalBody::-webkit-scrollbar-thumb {
-  background: #213b7c;
-  border-radius: 10px;
-}
-
-#descricaoModalBody::-webkit-scrollbar-thumb:hover {
-  background: #152b5a;
-}
+    /* Cards de boletos */
+    .card-boleto {
+      border-radius: 16px;
+      padding: 16px 20px;
+      color: #fff;
+    }
+    .card-boleto h2 {
+      font-weight: 700;
+      margin: 0;
+    }
+    .card-boleto small {
+      opacity: 0.9;
+    }
+    .card-boleto .icon {
+      font-size: 2rem;
+      opacity: 0.6;
+    }
   </style>
 </head>
 <body>
@@ -659,286 +660,351 @@
         </li>
       </ul>
 
-
       <div class="tab-content">
 
-
-        <!-- ====== ABA RELATÓRIO / PROCESSAMENTO ====== -->
-<div class="tab-pane fade show active" id="relatorio" role="tabpanel">
-  
-  <!-- ===== FILTROS ===== -->
-  <div class="row g-3 align-items-end mb-4">
-    <div class="col-md-2">
-      <label for="filterMonth" class="form-label fw-semibold">Mês</label>
-      <select id="filterMonth" class="form-select">
-        <option value="0">Todos</option>
-        <option value="1">Janeiro</option><option value="2">Fevereiro</option>
-        <option value="3">Março</option><option value="4">Abril</option>
-        <option value="5">Maio</option><option value="6">Junho</option>
-        <option value="7">Julho</option><option value="8">Agosto</option>
-        <option value="9">Setembro</option><option value="10">Outubro</option>
-        <option value="11">Novembro</option><option value="12">Dezembro</option>
-      </select>
-    </div>
-    <div class="col-md-2">
-      <label for="filterYear" class="form-label fw-semibold">Ano</label>
-      <select id="filterYear" class="form-select"></select>
-    </div>
-    <div class="col-md-2">
-      <label for="filterHolding" class="form-label fw-semibold">Holding</label>
-      <input type="text" id="filterHolding" class="form-control" placeholder="Filtrar por holding..." list="holdingList" />
-      <datalist id="holdingList"></datalist>
-    </div>
-    <div class="col-md-2">
-      <label for="filterGrupo" class="form-label fw-semibold">Grupo</label>
-      <input type="text" id="filterGrupo" class="form-control" placeholder="Filtrar por grupo..." list="grupoList" />
-      <datalist id="grupoList"></datalist>
-    </div>
-    <div class="col-md-2">
-      <label for="filterUnit" class="form-label fw-semibold">Unidade</label>
-      <input type="text" id="filterUnit" class="form-control" placeholder="Filtrar por unidade..." />
-    </div>
-    <div class="col-md-2">
-      <div class="d-flex gap-2">
-        <button class="btn btn-primary-custom w-100" id="applyFiltersBtn"><i class="fas fa-filter me-1"></i> Aplicar</button>
-        <button class="btn btn-outline-secondary" id="clearFiltersBtn" title="Limpar filtros">
-          <i class="fas fa-times"></i>
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ===== BOTÕES DE AÇÃO (LINHA 1) ===== -->
-  <div class="row mb-3">
-    <div class="col-md-12">
-      <div class="d-flex flex-wrap gap-2">
-        <button class="btn btn-warning" id="btnFaturarLote" title="Faturar OS em lote">
-          <i class="fas fa-file-invoice-dollar"></i> Faturar em Lote
-        </button>
-        <button class="btn btn-primary" id="btnCriarOSLote" title="Criar OS em lote">
-          <i class="fas fa-layer-group"></i> Criar OS em Lote
-        </button>
-        <button class="btn btn-outline-warning" id="btnResetarOSLote" title="Resetar OS em lote">
-          <i class="fas fa-undo"></i> Resetar OS em Lote
-        </button>
-        <button class="btn btn-outline-danger" id="btnExcluirProcessamento" title="Excluir processamento">
-          <i class="fas fa-trash"></i> Excluir Processamento
-        </button>
-      </div>
-      <div id="faturarLoteStatus" class="mt-2"></div>
-    </div>
-  </div>
-
-  <!-- ===== BOTÕES DE ATUALIZAÇÃO (LINHA 2) ===== -->
-  <div class="row mb-3">
-    <div class="col-md-12">
-      <div class="d-flex flex-wrap gap-2">
-        <button class="btn btn-info" id="btnAtualizarStatusNFSe" title="Atualizar status da NFS-e">
-          <i class="fas fa-sync"></i> Atualizar Status NFS-e
-        </button>
-        <button class="btn btn-success" id="btnBuscarPagamentos" title="Buscar e atualizar boletos pagos por CNPJ">
-          <i class="fas fa-search-dollar"></i> Buscar Pagamentos
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ===== BOTÕES DE FILTRO POR STATUS (LINHA 3) ===== -->
-  <div class="row mb-3">
-    <div class="col-md-12">
-      <div class="btn-group" role="group" aria-label="Filtros de status">
-        <button type="button" class="btn btn-outline-secondary active" data-status="todos">Todos</button>
-        <button type="button" class="btn btn-outline-primary" data-status="pendentes">Pendentes</button>
-        <button type="button" class="btn btn-outline-primary" data-status="criado">OS Criada</button>
-        <button type="button" class="btn btn-outline-success" data-status="faturado">Faturado</button>
-        <button type="button" class="btn btn-outline-success" data-status="pago">Pago</button>
-        <button type="button" class="btn btn-outline-danger" data-status="rejeitado">Rejeitado</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ===== UPLOAD ===== -->
-  <div class="row g-3 mb-4">
-    <div class="col-md-6">
-      <div class="card-modern card">
-        <div class="card-body">
-          <h5 class="card-title"><i class="fas fa-file-upload text-success me-2"></i> Processar Exames</h5>
-          <p class="text-muted" style="font-size:0.9rem;">Envie a planilha <strong>upload.xlsx</strong> para calcular o faturamento.</p>
-          <div class="input-group">
-            <input type="file" id="uploadFileInput" class="form-control" accept=".xlsx" />
-            <button class="btn btn-soft-success" id="processUploadBtn"><i class="fas fa-calculator me-1"></i> Processar</button>
+        <!-- ============================================================ -->
+        <!-- ====== ABA PROCESSAMENTO ====== -->
+        <!-- ============================================================ -->
+        <div class="tab-pane fade show active" id="relatorio" role="tabpanel">
+          
+          <!-- Filtros -->
+          <div class="row g-3 align-items-end mb-4">
+            <div class="col-md-2">
+              <label for="filterMonth" class="form-label fw-semibold">Mês</label>
+              <select id="filterMonth" class="form-select">
+                <option value="0">Todos</option>
+                <option value="1">Janeiro</option><option value="2">Fevereiro</option>
+                <option value="3">Março</option><option value="4">Abril</option>
+                <option value="5">Maio</option><option value="6">Junho</option>
+                <option value="7">Julho</option><option value="8">Agosto</option>
+                <option value="9">Setembro</option><option value="10">Outubro</option>
+                <option value="11">Novembro</option><option value="12">Dezembro</option>
+              </select>
+            </div>
+            <div class="col-md-2">
+              <label for="filterYear" class="form-label fw-semibold">Ano</label>
+              <select id="filterYear" class="form-select"></select>
+            </div>
+            <div class="col-md-2">
+              <label for="filterHolding" class="form-label fw-semibold">Holding</label>
+              <input type="text" id="filterHolding" class="form-control" placeholder="Filtrar por holding..." list="holdingList" />
+              <datalist id="holdingList"></datalist>
+            </div>
+            <div class="col-md-2">
+              <label for="filterGrupo" class="form-label fw-semibold">Grupo</label>
+              <input type="text" id="filterGrupo" class="form-control" placeholder="Filtrar por grupo..." list="grupoList" />
+              <datalist id="grupoList"></datalist>
+            </div>
+            <div class="col-md-2">
+              <label for="filterUnit" class="form-label fw-semibold">Unidade</label>
+              <input type="text" id="filterUnit" class="form-control" placeholder="Filtrar por unidade..." />
+            </div>
+            <div class="col-md-2">
+              <div class="d-flex gap-2">
+                <button class="btn btn-primary-custom w-100" id="applyFiltersBtn"><i class="fas fa-filter me-1"></i> Aplicar</button>
+                <button class="btn btn-outline-secondary" id="clearFiltersBtn" title="Limpar filtros">
+                  <i class="fas fa-times"></i>
+                </button>
+              </div>
+            </div>
           </div>
-          <span id="uploadStatus" class="d-block mt-2 fw-semibold" style="font-size:0.9rem;"></span>
-          <div id="uploadFeedback" class="mt-2"></div>
-        </div>
-      </div>
-    </div>
-  </div>
 
-  <!-- ===== TABELA DE RESULTADOS ===== -->
-  <div class="card-modern card">
-    <div class="card-header d-flex justify-content-between align-items-center">
-      <span><i class="fas fa-chart-line me-2 text-primary"></i> Faturamento por Unidade</span>
-      <div class="d-flex gap-2">
-        <button class="btn btn-soft-primary btn-sm" id="exportCsvBtn"><i class="fas fa-file-csv me-1"></i> CSV</button>
-        <button class="btn btn-soft-success btn-sm" id="exportExcelBtn" title="Exportar para Excel"><i class="fas fa-file-excel me-1"></i> Excel</button>
-        <button class="btn btn-soft-secondary btn-sm" id="clearTableFiltersBtn" title="Limpar filtros da tabela">
-          <i class="fas fa-times"></i> Limpar Filtros
-        </button>
-      </div>
-    </div>
-    <div class="card-body p-0">
-      <div class="table-responsive">
-        <table class="table table-modern" id="resultsTable">
-          <thead>
-  <tr>
-    <th data-sort="unidade" style="cursor: pointer;">
-      Unidade <i class="fas fa-sort text-muted ms-1"></i>
-    </th>
-    <th data-sort="holding" style="cursor: pointer;">
-      Holding <i class="fas fa-sort text-muted ms-1"></i>
-    </th>
-    <th data-sort="grupo" style="cursor: pointer;">
-      Grupo <i class="fas fa-sort text-muted ms-1"></i>
-    </th>
-    <th data-sort="mesano" style="cursor: pointer;">
-      Mês/Ano <i class="fas fa-sort text-muted ms-1"></i>
-    </th>
-    <th data-sort="valor" style="cursor: pointer;" class="text-end">
-      Valor Total (R$) <i class="fas fa-sort text-muted ms-1"></i>
-    </th>
-    <th data-sort="status_os" style="cursor: pointer;" class="text-center">
-      Status OS <i class="fas fa-sort text-muted ms-1"></i>
-    </th>
-    <th data-sort="status_pagamento" style="cursor: pointer;" class="text-center">
-      Status Pagamento <i class="fas fa-sort text-muted ms-1"></i>
-    </th>
-    <th data-sort="vencimento" style="cursor: pointer;" class="text-center">
-      Vencimento <i class="fas fa-sort text-muted ms-1"></i>
-    </th>
-    <th class="text-center">Ações</th>
-  </tr>
-</thead>
-          <tbody id="resultsBody">
-            <tr><td colspan="9" class="text-center text-muted py-4">Nenhum registro encontrado</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-  <!-- ===== PAGINAÇÃO ===== -->
-<div class="row mt-3">
-  <div class="col-md-6">
-    <div class="d-flex align-items-center gap-2">
-      <span class="text-muted" style="font-size:0.9rem;">Mostrar</span>
-      <select id="pageSizeSelect" class="form-select form-select-sm" style="width: auto;">
-        <option value="10">10</option>
-        <option value="25" selected>25</option>
-        <option value="50">50</option>
-        <option value="100">100</option>
-        <option value="200">200</option>
-      </select>
-      <span class="text-muted" style="font-size:0.9rem;">registros por página</span>
-    </div>
-  </div>
-  <div class="col-md-6">
-    <nav aria-label="Paginação">
-      <ul class="pagination justify-content-end mb-0" id="paginationControls">
-        <li class="page-item" id="prevPageBtn">
-          <a class="page-link" href="#" aria-label="Anterior">
-            <span aria-hidden="true">&laquo;</span>
-          </a>
-        </li>
-        <li class="page-item active" id="page1"><a class="page-link" href="#" data-page="1">1</a></li>
-        <li class="page-item" id="nextPageBtn">
-          <a class="page-link" href="#" aria-label="Próxima">
-            <span aria-hidden="true">&raquo;</span>
-          </a>
-        </li>
-      </ul>
-    </nav>
-  </div>
-</div>
-<div id="paginationInfo" class="text-center text-muted small mt-2"></div>
-</div>
+          <!-- Status OS - Filtros -->
+          <div class="row mb-3">
+            <div class="col-md-12">
+              <label class="form-label fw-semibold">Status da OS</label>
+              <div class="btn-group" role="group">
+                <button type="button" class="btn btn-outline-secondary active" data-status="todos">Todos</button>
+                <button type="button" class="btn btn-outline-primary" data-status="pendentes">Pendentes</button>
+                <button type="button" class="btn btn-outline-primary" data-status="criado">OS Criada</button>
+                <button type="button" class="btn btn-outline-success" data-status="faturado">Faturado</button>
+                <button type="button" class="btn btn-outline-success" data-status="pago">Pago</button>
+                <button type="button" class="btn btn-outline-danger" data-status="rejeitado">Rejeitado</button>
+              </div>
+            </div>
+          </div>
 
-        <!-- ==================== MODAL CRIAR OS EM LOTE ==================== -->
-<div class="modal fade" id="criarOSLoteModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-xl modal-fullscreen-lg-down">
-    <div class="modal-content" style="max-height: 90vh;">
-      <div class="modal-header" style="background:#213b7c; color:#fff; border-radius:16px 16px 0 0;">
-        <h5 class="modal-title" style="color:#fff;">
-          <i class="fas fa-layer-group me-2"></i> Criar OS em Lote
-        </h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" id="fecharModalLote"></button>
-      </div>
-      <div class="modal-body" style="overflow-y: auto; max-height: 70vh; padding: 20px;">
-        <!-- Barra de progresso -->
-        <div id="loteProgressBar" class="progress mb-3" style="height: 25px; display: none;">
-          <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%;">0%</div>
-        </div>
-        
-        <!-- Status geral -->
-        <div id="loteStatusGeral" class="alert alert-info">
-          <i class="fas fa-info-circle"></i> 
-          Aguardando verificação das unidades...
-        </div>
-        
-        <!-- Container das janelas -->
-        <div id="loteJanelasContainer" class="row g-2">
-          <!-- As janelas serão geradas dinamicamente -->
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-        <button type="button" class="btn btn-success" id="btnCriarTodasOSLote" disabled>
-          <i class="fas fa-file-invoice"></i> Criar Todas OS
-        </button>
-      </div>
-    </div>
-  </div>
-</div>
+          <!-- Botões de Ação - Organizados -->
+          <div class="row mb-4">
+            <div class="col-md-12">
+              <div class="d-flex flex-wrap gap-2">
+                <button class="btn btn-primary" id="btnCriarOSLote" title="Criar OS em lote">
+                  <i class="fas fa-layer-group"></i> Criar OS em Lote
+                </button>
+                <button class="btn btn-warning" id="btnFaturarLote" title="Faturar OS em lote">
+                  <i class="fas fa-file-invoice-dollar"></i> Faturar em Lote
+                </button>
+                <button class="btn btn-outline-warning" id="btnResetarOSLote" title="Resetar OS em lote">
+                  <i class="fas fa-undo"></i> Resetar OS em Lote
+                </button>
+                <button class="btn btn-info" id="btnAtualizarStatusNFSe" title="Atualizar status da NFS-e">
+                  <i class="fas fa-sync"></i> Atualizar Status NFS-e
+                </button>
+                <button class="btn btn-success" id="btnBuscarPagamentos" title="Buscar e atualizar boletos pagos por CNPJ">
+                  <i class="fas fa-search-dollar"></i> Buscar Pagamentos
+                </button>
+                <button class="btn btn-outline-danger" id="btnExcluirProcessamento" title="Excluir processamento">
+                  <i class="fas fa-trash"></i> Excluir Processamento
+                </button>
+              </div>
+              <div id="faturarLoteStatus" class="mt-2"></div>
+            </div>
+          </div>
 
-<!-- ==================== MODAL DE DESCRIÇÃO DA OS ==================== -->
-<div class="modal fade" id="descricaoModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-lg">
-    <div class="modal-content">
-      <div class="modal-header" style="background:#213b7c; color:#fff; border-radius:16px 16px 0 0;">
-        <h5 class="modal-title" id="descricaoModalTitle" style="color:#fff;">
-          <i class="fas fa-file-alt me-2"></i> Descrição da OS
-        </h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <div class="alert alert-info" id="descricaoModalValor">
-          Valor Total: R$ 0,00
-        </div>
-        <pre id="descricaoModalBody" style="
-          font-family: 'Courier New', monospace;
-          font-size: 0.85rem;
-          background: #f8f9fa;
-          padding: 16px;
-          border-radius: 8px;
-          max-height: 400px;
-          overflow-y: auto;
-          white-space: pre-wrap;
-          word-wrap: break-word;
-          margin: 0;
-        "></pre>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
-        <button type="button" class="btn btn-primary" onclick="copiarDescricao()">
-          <i class="fas fa-copy me-1"></i> Copiar
-        </button>
-      </div>
-    </div>
-  </div>
-</div>
+          <!-- Upload -->
+          <div class="row g-3 mb-4">
+            <div class="col-md-6">
+              <div class="card-modern card">
+                <div class="card-body">
+                  <h5 class="card-title"><i class="fas fa-file-upload text-success me-2"></i> Processar Exames</h5>
+                  <p class="text-muted" style="font-size:0.9rem;">Envie a planilha <strong>upload.xlsx</strong> para calcular o faturamento.</p>
+                  <div class="input-group">
+                    <input type="file" id="uploadFileInput" class="form-control" accept=".xlsx" />
+                    <button class="btn btn-soft-success" id="processUploadBtn"><i class="fas fa-calculator me-1"></i> Processar</button>
+                  </div>
+                  <span id="uploadStatus" class="d-block mt-2 fw-semibold" style="font-size:0.9rem;"></span>
+                  <div id="uploadFeedback" class="mt-2"></div>
+                </div>
+              </div>
+            </div>
+          </div>
 
+          <!-- Tabela -->
+          <div class="card-modern card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+              <span><i class="fas fa-chart-line me-2 text-primary"></i> Faturamento por Unidade</span>
+              <div class="d-flex gap-2">
+                <button class="btn btn-soft-primary btn-sm" id="exportCsvBtn"><i class="fas fa-file-csv me-1"></i> CSV</button>
+                <button class="btn btn-soft-success btn-sm" id="exportExcelBtn" title="Exportar para Excel"><i class="fas fa-file-excel me-1"></i> Excel</button>
+              </div>
+            </div>
+            <div class="card-body p-0">
+              <div class="table-responsive">
+                <table class="table table-modern" id="resultsTable">
+                  <thead>
+                    <tr>
+                      <th data-sort="unidade" style="cursor: pointer;">
+                        Unidade <i class="fas fa-sort text-muted ms-1"></i>
+                      </th>
+                      <th data-sort="holding" style="cursor: pointer;">
+                        Holding <i class="fas fa-sort text-muted ms-1"></i>
+                      </th>
+                      <th data-sort="grupo" style="cursor: pointer;">
+                        Grupo <i class="fas fa-sort text-muted ms-1"></i>
+                      </th>
+                      <th data-sort="mesano" style="cursor: pointer;">
+                        Mês/Ano <i class="fas fa-sort text-muted ms-1"></i>
+                      </th>
+                      <th data-sort="valor" style="cursor: pointer;" class="text-end">
+                        Valor Total (R$) <i class="fas fa-sort text-muted ms-1"></i>
+                      </th>
+                      <th data-sort="status_os" style="cursor: pointer;" class="text-center">
+                        Status OS <i class="fas fa-sort text-muted ms-1"></i>
+                      </th>
+                      <th data-sort="status_pagamento" style="cursor: pointer;" class="text-center">
+                        Status Pagamento <i class="fas fa-sort text-muted ms-1"></i>
+                      </th>
+                      <th data-sort="vencimento" style="cursor: pointer;" class="text-center">
+                        Vencimento <i class="fas fa-sort text-muted ms-1"></i>
+                      </th>
+                      <th class="text-center">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody id="resultsBody">
+                    <tr><td colspan="9" class="text-center text-muted py-4">Nenhum registro encontrado</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Paginação -->
+          <div class="row mt-3">
+            <div class="col-md-6">
+              <div class="d-flex align-items-center gap-2">
+                <span class="text-muted" style="font-size:0.9rem;">Mostrar</span>
+                <select id="pageSizeSelect" class="form-select form-select-sm" style="width: auto;">
+                  <option value="10">10</option>
+                  <option value="25" selected>25</option>
+                  <option value="50">50</option>
+                  <option value="100">100</option>
+                  <option value="200">200</option>
+                </select>
+                <span class="text-muted" style="font-size:0.9rem;">registros por página</span>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <nav aria-label="Paginação">
+                <ul class="pagination justify-content-end mb-0" id="paginationControls">
+                  <li class="page-item" id="prevPageBtn">
+                    <a class="page-link" href="#" aria-label="Anterior">
+                      <span aria-hidden="true">&laquo;</span>
+                    </a>
+                  </li>
+                  <li class="page-item active" id="page1"><a class="page-link" href="#" data-page="1">1</a></li>
+                  <li class="page-item" id="nextPageBtn">
+                    <a class="page-link" href="#" aria-label="Próxima">
+                      <span aria-hidden="true">&raquo;</span>
+                    </a>
+                  </li>
+                </ul>
+              </nav>
+            </div>
+          </div>
+          <div id="paginationInfo" class="text-center text-muted small mt-2"></div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- ====== ABA BOLETOS ====== -->
+        <!-- ============================================================ -->
+        <div class="tab-pane fade" id="boletos" role="tabpanel">
+
+          <!-- Filtros -->
+          <div class="row g-3 align-items-end mb-4 mt-3">
+            <div class="col-md-3">
+              <label for="boletoFiltroStatus" class="form-label fw-semibold">Status do Boleto</label>
+              <select id="boletoFiltroStatus" class="form-select">
+                <option value="todos">Todos</option>
+                <option value="pago">✅ Pagos</option>
+                <option value="vencido">❌ Vencidos</option>
+                <option value="a_vencer">⏳ A Vencer</option>
+                <option value="proximo">⚠️ Próximos (5 dias)</option>
+              </select>
+            </div>
+            <div class="col-md-2">
+              <label for="boletoFiltroMes" class="form-label fw-semibold">Mês</label>
+              <select id="boletoFiltroMes" class="form-select">
+                <option value="0">Todos</option>
+                <option value="1">Janeiro</option><option value="2">Fevereiro</option>
+                <option value="3">Março</option><option value="4">Abril</option>
+                <option value="5">Maio</option><option value="6">Junho</option>
+                <option value="7">Julho</option><option value="8">Agosto</option>
+                <option value="9">Setembro</option><option value="10">Outubro</option>
+                <option value="11">Novembro</option><option value="12">Dezembro</option>
+              </select>
+            </div>
+            <div class="col-md-2">
+              <label for="boletoFiltroAno" class="form-label fw-semibold">Ano</label>
+              <select id="boletoFiltroAno" class="form-select"></select>
+            </div>
+            <div class="col-md-3">
+              <label for="boletoFiltroUnidade" class="form-label fw-semibold">Unidade</label>
+              <input type="text" id="boletoFiltroUnidade" class="form-control" placeholder="Filtrar por unidade..." />
+            </div>
+            <div class="col-md-2">
+              <div class="d-flex gap-2">
+                <button class="btn btn-primary-custom w-100" id="btnAplicarFiltrosBoletos">
+                  <i class="fas fa-filter me-1"></i> Aplicar
+                </button>
+                <button class="btn btn-outline-secondary" id="btnLimparFiltrosBoletos" title="Limpar filtros">
+                  <i class="fas fa-times"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Cards de resumo -->
+          <div class="row g-3 mb-4">
+            <div class="col-md-3">
+              <div class="card card-boleto bg-success">
+                <div class="d-flex justify-content-between align-items-center">
+                  <div>
+                    <h6 class="m-0">Pagos</h6>
+                    <h2 id="totalBoletosPagos">0</h2>
+                    <small>R$ <span id="totalBoletosPagosValor">0,00</span></small>
+                  </div>
+                  <i class="fas fa-check-circle icon"></i>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="card card-boleto bg-danger">
+                <div class="d-flex justify-content-between align-items-center">
+                  <div>
+                    <h6 class="m-0">Vencidos</h6>
+                    <h2 id="totalBoletosVencidos">0</h2>
+                    <small>R$ <span id="totalBoletosVencidosValor">0,00</span></small>
+                  </div>
+                  <i class="fas fa-times-circle icon"></i>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="card card-boleto bg-info">
+                <div class="d-flex justify-content-between align-items-center">
+                  <div>
+                    <h6 class="m-0">A Vencer</h6>
+                    <h2 id="totalBoletosAVencer">0</h2>
+                    <small>R$ <span id="totalBoletosAVencerValor">0,00</span></small>
+                  </div>
+                  <i class="fas fa-clock icon"></i>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="card card-boleto bg-warning">
+                <div class="d-flex justify-content-between align-items-center">
+                  <div>
+                    <h6 class="m-0">Próx. Venc.</h6>
+                    <h2 id="totalBoletosProximos">0</h2>
+                    <small>R$ <span id="totalBoletosProximosValor">0,00</span></small>
+                  </div>
+                  <i class="fas fa-exclamation-triangle icon"></i>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tabela de Boletos -->
+          <div class="card-modern card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+              <span><i class="fas fa-barcode me-2 text-primary"></i> Lista de Boletos</span>
+              <button class="btn btn-soft-success btn-sm" id="btnExportarBoletos">
+                <i class="fas fa-file-excel me-1"></i> Exportar Excel
+              </button>
+            </div>
+            <div class="card-body p-0">
+              <div class="table-responsive">
+                <table class="table table-modern" id="boletosTable">
+                  <thead>
+                    <tr>
+                      <th data-sort="unidade" style="cursor: pointer;">
+                        Unidade <i class="fas fa-sort text-muted ms-1"></i>
+                      </th>
+                      <th data-sort="holding" style="cursor: pointer;">
+                        Holding <i class="fas fa-sort text-muted ms-1"></i>
+                      </th>
+                      <th data-sort="mesano" style="cursor: pointer;">
+                        Mês/Ano <i class="fas fa-sort text-muted ms-1"></i>
+                      </th>
+                      <th data-sort="valor" style="cursor: pointer;" class="text-end">
+                        Valor (R$) <i class="fas fa-sort text-muted ms-1"></i>
+                      </th>
+                      <th data-sort="vencimento" style="cursor: pointer;" class="text-center">
+                        Vencimento <i class="fas fa-sort text-muted ms-1"></i>
+                      </th>
+                      <th data-sort="status" style="cursor: pointer;" class="text-center">
+                        Status <i class="fas fa-sort text-muted ms-1"></i>
+                      </th>
+                      <th data-sort="dias" style="cursor: pointer;" class="text-center">
+                        Dias <i class="fas fa-sort text-muted ms-1"></i>
+                      </th>
+                      <th class="text-center">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody id="boletosBody">
+                    <tr><td colspan="8" class="text-center text-muted py-4">Nenhum boleto encontrado</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ============================================================ -->
         <!-- ====== ABA DASHBOARD ====== -->
+        <!-- ============================================================ -->
         <div class="tab-pane fade" id="dashboard" role="tabpanel">
-          <!-- Filtros específicos do Dashboard -->
           <div class="row g-3 align-items-end mb-4 mt-3">
             <div class="col-md-4">
               <label for="dashboardMonth" class="form-label fw-semibold">Mês</label>
@@ -961,7 +1027,6 @@
             </div>
           </div>
 
-          <!-- Cards de resumo -->
           <div class="row g-3 mb-4">
             <div class="col-md-3">
               <div class="card text-white bg-primary h-100">
@@ -997,7 +1062,6 @@
             </div>
           </div>
 
-          <!-- Exame Clínico vs Complementares -->
           <div class="row g-3 mb-4">
             <div class="col-md-6">
               <div class="card h-100">
@@ -1023,7 +1087,6 @@
             </div>
           </div>
 
-          <!-- Gráficos -->
           <div class="row g-3 mb-4">
             <div class="col-md-4">
               <div class="card h-100">
@@ -1057,7 +1120,6 @@
             </div>
           </div>
 
-          <!-- Comparativo visual -->
           <div class="row mb-4">
             <div class="col-md-12">
               <div class="card">
@@ -1101,9 +1163,10 @@
           </div>
         </div>
 
-        <!-- ====== ABA CADASTRO DE PREÇOS ====== -->
+        <!-- ============================================================ -->
+        <!-- ====== ABA CADASTRO ====== -->
+        <!-- ============================================================ -->
         <div class="tab-pane fade" id="cadastro" role="tabpanel">
-          <!-- Cards de atualização de vidas -->
           <div class="row mt-4">
             <div class="col-md-6">
               <div class="card h-100">
@@ -1148,11 +1211,9 @@
                   <div id="holdingUpdateStatus" class="mt-2 fw-semibold small"></div>
                 </div>
               </div>
-              
             </div>
           </div>
 
-          <!-- Título e botões de ação -->
           <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4 mt-4">
             <h5 class="fw-bold mb-0"><i class="fas fa-dollar-sign text-success me-2"></i> Preços por Unidade</h5>
             <div class="d-flex flex-wrap gap-3 align-items-center">
@@ -1167,7 +1228,6 @@
             </div>
           </div>
 
-          <!-- Tabela de preços -->
           <div class="card-modern card">
             <div class="card-body p-0">
               <div class="table-responsive">
@@ -1192,11 +1252,67 @@
             </div>
           </div>
         </div>
+
+      </div><!-- /.tab-content -->
+    </div><!-- /.dashboard-content -->
+  </div><!-- /.dashboard-wrapper -->
+
+  <!-- ==================== MODAIS ==================== -->
+
+  <!-- Modal Criar OS em Lote -->
+  <div class="modal fade" id="criarOSLoteModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-fullscreen-lg-down">
+      <div class="modal-content" style="max-height: 90vh;">
+        <div class="modal-header" style="background:#213b7c; color:#fff; border-radius:16px 16px 0 0;">
+          <h5 class="modal-title" style="color:#fff;">
+            <i class="fas fa-layer-group me-2"></i> Criar OS em Lote
+          </h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" id="fecharModalLote"></button>
+        </div>
+        <div class="modal-body" style="overflow-y: auto; max-height: 70vh; padding: 20px;">
+          <div id="loteProgressBar" class="progress mb-3" style="height: 25px; display: none;">
+            <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%;">0%</div>
+          </div>
+          <div id="loteStatusGeral" class="alert alert-info">
+            <i class="fas fa-info-circle"></i> Aguardando verificação das unidades...
+          </div>
+          <div id="loteJanelasContainer" class="row g-2"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="button" class="btn btn-success" id="btnCriarTodasOSLote" disabled>
+            <i class="fas fa-file-invoice"></i> Criar Todas OS
+          </button>
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- ==================== MODAL CRIAR OS ==================== -->
+  <!-- Modal Descrição OS -->
+  <div class="modal fade" id="descricaoModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header" style="background:#213b7c; color:#fff; border-radius:16px 16px 0 0;">
+          <h5 class="modal-title" id="descricaoModalTitle" style="color:#fff;">
+            <i class="fas fa-file-alt me-2"></i> Descrição da OS
+          </h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="alert alert-info" id="descricaoModalValor">Valor Total: R$ 0,00</div>
+          <pre id="descricaoModalBody" style="font-family: 'Courier New', monospace; font-size: 0.85rem; background: #f8f9fa; padding: 16px; border-radius: 8px; max-height: 400px; overflow-y: auto; white-space: pre-wrap; word-wrap: break-word; margin: 0;"></pre>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+          <button type="button" class="btn btn-primary" onclick="copiarDescricao()">
+            <i class="fas fa-copy me-1"></i> Copiar
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Criar OS -->
   <div class="modal fade" id="criarOsModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-xl">
       <div class="modal-content">
@@ -1209,7 +1325,6 @@
         <div class="modal-body">
           <form id="criarOsForm">
             <input type="hidden" id="osFaturamentoId" />
-
             <div class="row g-3">
               <div class="col-md-6">
                 <label class="fw-semibold">Unidade</label>
@@ -1224,12 +1339,10 @@
                 <input type="text" id="osValorTotal" class="form-control" readonly />
               </div>
             </div>
-
             <div class="mt-3">
               <label class="fw-semibold">Descrição</label>
               <textarea id="osDescricao" class="form-control" rows="8" readonly style="font-family: monospace;"></textarea>
             </div>
-
             <div class="mt-3">
               <div class="form-check">
                 <input class="form-check-input" type="checkbox" id="osEnviarBoleto" checked disabled />
@@ -1244,7 +1357,6 @@
                 </label>
               </div>
             </div>
-
             <div id="osStatusMessage" class="mt-3"></div>
           </form>
         </div>
@@ -1258,7 +1370,7 @@
     </div>
   </div>
 
-  <!-- ==================== MODAL DE DETALHES ==================== -->
+  <!-- Modal Detalhes -->
   <div class="modal fade" id="detalhesModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-md">
       <div class="modal-content">
@@ -1266,9 +1378,7 @@
           <h5 class="modal-title" id="detalhesModalLabel" style="color:#fff;">Detalhes</h5>
           <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
         </div>
-        <div class="modal-body" id="detalhesModalBody">
-          <!-- Conteúdo preenchido via JS -->
-        </div>
+        <div class="modal-body" id="detalhesModalBody"></div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
         </div>
@@ -1276,7 +1386,7 @@
     </div>
   </div>
 
-  <!-- ==================== MODAL DE PREÇOS ==================== -->
+  <!-- Modal Preços -->
   <div class="modal fade" id="precoModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-xl">
       <div class="modal-content">
