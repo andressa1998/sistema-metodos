@@ -11,6 +11,9 @@ let clientesCache = null;
 let ultimaBuscaClientes = 0;
 const CACHE_TTL = 120000;
 
+// Controle de carregamento da aba boletos
+let boletosCarregados = false;
+
 // ========================= MAPEAMENTO DE EXAMES =========================
 const EXAME_MAP = {
   'Avaliação Clínica Ocupacional (Anamnese e Exame físico)': 'exame_clinico',
@@ -3774,7 +3777,7 @@ async function carregarRelatorio(mes = 0, ano = 0, filtroUnidade = '', status = 
         return;
       }
       atualizarDashboards([]);
-      atualizarCardsBoletosComDados([]);
+      atualizarCardsBoletos([]);
       const tbody = document.getElementById('resultsBody');
       tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted py-4">Nenhum registro encontrado</td></tr>`;
       const pagInfo = document.getElementById('paginationInfo');
@@ -3839,7 +3842,7 @@ async function carregarRelatorio(mes = 0, ano = 0, filtroUnidade = '', status = 
   }
 
   atualizarDashboards(dadosFiltradosPorBoleto);
-  atualizarCardsBoletosComDados(dadosFiltradosPorBoleto);
+  atualizarCardsBoletos(dadosFiltradosPorBoleto);
 
   todosOsDados = dadosFiltradosPorBoleto || [];
   dadosFiltrados = todosOsDados;
@@ -3867,54 +3870,9 @@ async function carregarRelatorio(mes = 0, ano = 0, filtroUnidade = '', status = 
   await renderizarPagina(mapaUnidades);
 }
 
-// ===== ATUALIZAR CARDS DE BOLETOS =====
-function atualizarCardsBoletosComDados(dados) {
-    let pagos = 0, vencidos = 0, aVencer = 0, proximos = 0;
-    let valorPagos = 0, valorVencidos = 0, valorAVencer = 0, valorProximos = 0;
-
-    dados.forEach(row => {
-        const status = obterStatusBoleto(row);
-        const valor = row.valor_total || 0;
-
-        if (row.pago) {
-            pagos++;
-            valorPagos += valor;
-        } else if (status.status === 'Vencido') {
-            vencidos++;
-            valorVencidos += valor;
-        } else if (status.status === 'Próx. Venc.') {
-            proximos++;
-            valorProximos += valor;
-        } else if (status.status === 'A Vencer') {
-            aVencer++;
-            valorAVencer += valor;
-        }
-    });
-
-    const elPagos = document.getElementById('totalBoletosPagos');
-    const elPagosValor = document.getElementById('totalBoletosPagosValor');
-    const elVencidos = document.getElementById('totalBoletosVencidos');
-    const elVencidosValor = document.getElementById('totalBoletosVencidosValor');
-    const elAVencer = document.getElementById('totalBoletosAVencer');
-    const elAVencerValor = document.getElementById('totalBoletosAVencerValor');
-    const elProximos = document.getElementById('totalBoletosProximos');
-    const elProximosValor = document.getElementById('totalBoletosProximosValor');
-
-    if (elPagos) elPagos.textContent = pagos;
-    if (elPagosValor) elPagosValor.textContent = valorPagos.toFixed(2);
-    if (elVencidos) elVencidos.textContent = vencidos;
-    if (elVencidosValor) elVencidosValor.textContent = valorVencidos.toFixed(2);
-    if (elAVencer) elAVencer.textContent = aVencer;
-    if (elAVencerValor) elAVencerValor.textContent = valorAVencer.toFixed(2);
-    if (elProximos) elProximos.textContent = proximos;
-    if (elProximosValor) elProximosValor.textContent = valorProximos.toFixed(2);
-}
-
 function obterStatusBoleto(row) {
-    // Se já está marcado como pago
     if (row.pago) return { status: 'Pago', classe: 'success', icone: '✅' };
     
-    // Se não tem data de vencimento, considera como "Sem data"
     if (!row.data_vencimento) {
         return { status: 'Sem data', classe: 'secondary', icone: '❓' };
     }
@@ -3924,8 +3882,6 @@ function obterStatusBoleto(row) {
     
     const venc = new Date(row.data_vencimento + 'T00:00:00');
     const diff = Math.ceil((venc - hoje) / (1000 * 60 * 60 * 24));
-    
-    console.log(`📅 ${row.unidade} - Venc: ${row.data_vencimento} - Diff: ${diff} dias`);
     
     if (diff < 0) {
         return { status: 'Vencido', classe: 'danger', icone: '❌', dias: diff };
@@ -5923,13 +5879,59 @@ function handleColumnFilterClick(e) {
     setFilterColuna(coluna, valor);
 }
 
-// ================================================================
-// BOLETOS - FUNÇÕES COMPLETAS
-// ================================================================
-
 function popularAnosBoletos() {
     const select = document.getElementById('boletoFiltroAno');
     if (!select) return;
+    
+    // 🔥 BUSCAR ANOS DISPONÍVEIS NO BANCO DE DADOS
+    supabaseClient
+        .from('faturamento')
+        .select('ano')
+        .then(({ data, error }) => {
+            if (error) {
+                console.error('Erro ao buscar anos:', error);
+                // Fallback: usar anos fixos
+                preencherAnosFixos(select);
+                return;
+            }
+            
+            // Extrair anos únicos
+            const anos = [...new Set(data.map(item => item.ano).filter(Boolean))].sort((a, b) => b - a);
+            
+            console.log('📋 Anos encontrados no banco:', anos);
+            
+            if (anos.length === 0) {
+                preencherAnosFixos(select);
+                return;
+            }
+            
+            // Preencher select
+            select.innerHTML = '<option value="0">Todos</option>';
+            anos.forEach(ano => {
+                const option = document.createElement('option');
+                option.value = ano;
+                option.textContent = ano;
+                select.appendChild(option);
+            });
+            
+            // 🔥 SELECIONAR O ANO MAIS RECENTE OU "TODOS"
+            const anoAtual = new Date().getFullYear();
+            if (anos.includes(anoAtual)) {
+                select.value = anoAtual;
+            } else {
+                select.value = '0'; // Todos
+            }
+            
+            console.log('✅ Anos disponíveis:', anos);
+            console.log('📌 Ano selecionado:', select.value);
+        })
+        .catch(err => {
+            console.error('Erro ao popular anos:', err);
+            preencherAnosFixos(select);
+        });
+}
+
+function preencherAnosFixos(select) {
     const anoAtual = new Date().getFullYear();
     select.innerHTML = '<option value="0">Todos</option>';
     for (let y = anoAtual; y >= anoAtual - 5; y--) {
@@ -5942,12 +5944,14 @@ function popularAnosBoletos() {
 }
 
 async function carregarBoletos() {
+    console.log('🔄 Carregando boletos (apenas faturados)...');
+    
     try {
-        // Buscar TODOS os registros de faturamento que têm data de vencimento
+        // 🔥 BUSCAR APENAS REGISTROS FATURADOS (os que têm boletos)
         const { data, error } = await supabaseClient
             .from('faturamento')
             .select('*')
-            .not('data_vencimento', 'is', null)  // Busca todos que têm data de vencimento
+            .eq('omie_status', 'faturado')
             .order('data_vencimento', { ascending: true });
 
         if (error) throw error;
@@ -5955,9 +5959,9 @@ async function carregarBoletos() {
         dadosBoletos = data || [];
         boletosFiltrados = [...dadosBoletos];
         
-        console.log(`📋 ${dadosBoletos.length} boletos encontrados`);
-        
-        // Buscar mapa de unidades para mostrar Holding
+        console.log(`📋 ${dadosBoletos.length} boletos faturados carregados`);
+
+        // Buscar holdings
         if (dadosBoletos.length > 0) {
             const unidades = [...new Set(dadosBoletos.map(item => item.unidade))];
             const { data: precosData } = await supabaseClient
@@ -5976,8 +5980,9 @@ async function carregarBoletos() {
             }
             window._mapaUnidadesBoletos = mapa;
         }
-        
-        aplicarFiltrosBoletos();
+
+        atualizarCardsBoletos();
+        renderizarTabelaBoletos();
         
     } catch (err) {
         console.error('Erro ao carregar boletos:', err);
@@ -5985,48 +5990,160 @@ async function carregarBoletos() {
     }
 }
 
+function popularAnosBoletosComDados() {
+    const select = document.getElementById('boletoFiltroAno');
+    if (!select) return;
+    
+    // Buscar anos disponíveis nos dados
+    const anos = [...new Set(dadosBoletos.map(item => item.ano).filter(Boolean))].sort((a, b) => b - a);
+    
+    // Se não houver anos, usar o ano atual
+    if (anos.length === 0) {
+        anos.push(new Date().getFullYear());
+    }
+    
+    // Guardar valor selecionado atual
+    const valorAtual = select.value;
+    
+    select.innerHTML = '<option value="0">Todos</option>';
+    anos.forEach(ano => {
+        const option = document.createElement('option');
+        option.value = ano;
+        option.textContent = ano;
+        select.appendChild(option);
+    });
+    
+    // Restaurar seleção se ainda for válida
+    if (valorAtual && anos.includes(parseInt(valorAtual))) {
+        select.value = valorAtual;
+    } else {
+        select.value = '0'; // Todos por padrão
+    }
+    
+    console.log('📋 Anos disponíveis para filtro:', anos);
+}
+
 function aplicarFiltrosBoletos() {
+    console.log('🔍 Aplicando filtros nos boletos...');
+    
     const statusFiltro = document.getElementById('boletoFiltroStatus')?.value || 'todos';
     const mesFiltro = parseInt(document.getElementById('boletoFiltroMes')?.value) || 0;
     const anoFiltro = parseInt(document.getElementById('boletoFiltroAno')?.value) || 0;
     const unidadeFiltro = document.getElementById('boletoFiltroUnidade')?.value?.toLowerCase().trim() || '';
 
-    console.log(`🔍 Filtrando boletos - Status: ${statusFiltro}, Mês: ${mesFiltro}, Ano: ${anoFiltro}`);
+    console.log(`   Status: ${statusFiltro}, Mês: ${mesFiltro}, Ano: ${anoFiltro}`);
 
+    // 🔥 FILTRAR IGUAL A ABA PROCESSAMENTO
     boletosFiltrados = dadosBoletos.filter(row => {
-        // Filtro por status do boleto
         if (statusFiltro !== 'todos') {
             const status = obterStatusBoleto(row);
-            
             if (statusFiltro === 'pago' && !row.pago) return false;
             if (statusFiltro === 'vencido' && status.status !== 'Vencido') return false;
             if (statusFiltro === 'a_vencer' && status.status !== 'A Vencer') return false;
             if (statusFiltro === 'proximo' && status.status !== 'Próx. Venc.') return false;
         }
-
-        // Filtro por mês
         if (mesFiltro > 0 && row.mes !== mesFiltro) return false;
-
-        // Filtro por ano
         if (anoFiltro > 0 && row.ano !== anoFiltro) return false;
-
-        // Filtro por unidade
         if (unidadeFiltro && !row.unidade.toLowerCase().includes(unidadeFiltro)) return false;
-
         return true;
     });
 
     console.log(`📋 ${boletosFiltrados.length} boletos após filtros`);
 
+    // 🔥 ATUALIZAR TUDO
     atualizarCardsBoletos();
     renderizarTabelaBoletos();
 }
 
+function mostrarMesesDisponiveis() {
+    const meses = {};
+    dadosBoletos.forEach(row => {
+        const key = `${String(row.mes).padStart(2, '0')}/${row.ano}`;
+        meses[key] = (meses[key] || 0) + 1;
+        if (!meses[key + '_detalhes']) {
+            meses[key + '_detalhes'] = [];
+        }
+        meses[key + '_detalhes'].push(row.unidade);
+    });
+    
+    console.log('📊 MESES/ANOS DISPONÍVEIS:');
+    Object.keys(meses)
+        .filter(k => !k.includes('_detalhes'))
+        .sort()
+        .forEach(key => {
+            const qtd = meses[key];
+            console.log(`   ${key}: ${qtd} registros`);
+            if (qtd <= 5) {
+                const detalhes = meses[key + '_detalhes'] || [];
+                detalhes.forEach(u => console.log(`      - ${u}`));
+            }
+        });
+    
+    return meses;
+}
+
+async function recarregarBoletosCompleto() {
+    console.log('🔄 RECARREGANDO BOLETOS COMPLETO...');
+    
+    // Buscar TODOS os dados
+    const { data, error } = await supabaseClient
+        .from('faturamento')
+        .select('*');
+
+    if (error) {
+        console.error('❌ Erro:', error);
+        return;
+    }
+
+    dadosBoletos = data || [];
+    boletosFiltrados = [...dadosBoletos];
+    
+    console.log(`📋 ${dadosBoletos.length} boletos carregados`);
+    
+    // Mostrar distribuição por mês/ano
+    const meses = {};
+    dadosBoletos.forEach(row => {
+        const key = `${String(row.mes).padStart(2, '0')}/${row.ano}`;
+        if (!meses[key]) meses[key] = { total: 0, pagos: 0 };
+        meses[key].total++;
+        if (row.pago) meses[key].pagos++;
+    });
+    console.log('📊 Distribuição por mês/ano:');
+    Object.keys(meses).sort().forEach(key => {
+        console.log(`   ${key}: ${meses[key].total} registros (${meses[key].pagos} pagos)`);
+    });
+    
+    // Mostrar quantos estão pagos
+    const pagos = dadosBoletos.filter(r => r.pago === true);
+    console.log(`✅ Pagos: ${pagos.length}`);
+    pagos.forEach(r => {
+        console.log(`   ${r.unidade} - ${r.data_vencimento || 'SEM DATA'} - ${r.mes}/${r.ano}`);
+    });
+    
+    // 🔥 FORÇAR O FILTRO PARA "TODOS"
+    document.getElementById('boletoFiltroStatus').value = 'todos';
+    document.getElementById('boletoFiltroMes').value = '0';
+    document.getElementById('boletoFiltroAno').value = '0';
+    document.getElementById('boletoFiltroUnidade').value = '';
+    
+    // Popular anos
+    popularAnosBoletosComDados();
+    
+    // Atualizar UI
+    aplicarFiltrosBoletos();
+    
+    console.log('✅ Recarregamento completo!');
+}
+
 function atualizarCardsBoletos() {
+    console.log('📊 Atualizando cards de boletos...');
+    
+    const dados = dadosBoletos || [];
+    
     let pagos = 0, vencidos = 0, aVencer = 0, proximos = 0;
     let valorPagos = 0, valorVencidos = 0, valorAVencer = 0, valorProximos = 0;
 
-    boletosFiltrados.forEach(row => {
+    dados.forEach(row => {
         const status = obterStatusBoleto(row);
         const valor = row.valor_total || 0;
 
@@ -6045,61 +6162,81 @@ function atualizarCardsBoletos() {
         }
     });
 
-    const elPagos = document.getElementById('totalBoletosPagos');
-    const elPagosValor = document.getElementById('totalBoletosPagosValor');
-    const elVencidos = document.getElementById('totalBoletosVencidos');
-    const elVencidosValor = document.getElementById('totalBoletosVencidosValor');
-    const elAVencer = document.getElementById('totalBoletosAVencer');
-    const elAVencerValor = document.getElementById('totalBoletosAVencerValor');
-    const elProximos = document.getElementById('totalBoletosProximos');
-    const elProximosValor = document.getElementById('totalBoletosProximosValor');
+    console.log(`✅ Pagos: ${pagos} (R$ ${valorPagos.toFixed(2)})`);
+    console.log(`❌ Vencidos: ${vencidos} (R$ ${valorVencidos.toFixed(2)})`);
+    console.log(`⏳ A Vencer: ${aVencer} (R$ ${valorAVencer.toFixed(2)})`);
+    console.log(`⚠️ Próx.: ${proximos} (R$ ${valorProximos.toFixed(2)})`);
 
-    if (elPagos) elPagos.textContent = pagos;
-    if (elPagosValor) elPagosValor.textContent = valorPagos.toFixed(2);
-    if (elVencidos) elVencidos.textContent = vencidos;
-    if (elVencidosValor) elVencidosValor.textContent = valorVencidos.toFixed(2);
-    if (elAVencer) elAVencer.textContent = aVencer;
-    if (elAVencerValor) elAVencerValor.textContent = valorAVencer.toFixed(2);
-    if (elProximos) elProximos.textContent = proximos;
-    if (elProximosValor) elProximosValor.textContent = valorProximos.toFixed(2);
+    const elementos = {
+        'totalBoletosPagos': pagos,
+        'totalBoletosPagosValor': valorPagos.toFixed(2),
+        'totalBoletosVencidos': vencidos,
+        'totalBoletosVencidosValor': valorVencidos.toFixed(2),
+        'totalBoletosAVencer': aVencer,
+        'totalBoletosAVencerValor': valorAVencer.toFixed(2),
+        'totalBoletosProximos': proximos,
+        'totalBoletosProximosValor': valorProximos.toFixed(2)
+    };
+
+    Object.keys(elementos).forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = elementos[id];
+    });
 }
 
 function renderizarTabelaBoletos() {
+    console.log('📋 Renderizando tabela de boletos...');
+    
     const tbody = document.getElementById('boletosBody');
     const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
                    'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 
-    if (boletosFiltrados.length === 0) {
+    // 🔥 USAR boletosFiltrados (igual a aba Processamento)
+    const dados = boletosFiltrados || [];
+    
+    console.log(`📋 ${dados.length} registros para exibir`);
+
+    if (dados.length === 0) {
         tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-4">Nenhum boleto encontrado</td></tr>`;
         return;
     }
 
     let html = '';
-    boletosFiltrados.forEach(row => {
+    dados.forEach(row => {
         const status = obterStatusBoleto(row);
         const mapa = window._mapaUnidadesBoletos || {};
         const holding = mapa[row.unidade]?.holding || 'N/A';
-        const mesNome = meses[row.mes - 1];
+        const mesNome = meses[row.mes - 1] || row.mes;
         const dataVenc = row.data_vencimento ? new Date(row.data_vencimento + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
-        const dias = status.dias !== undefined ? status.dias : '—';
+        
+        // 🔥 CALCULAR DIAS IGUAL A ABA PROCESSAMENTO
+        let diasDisplay = '—';
+        if (row.data_vencimento && !row.pago) {
+            const hoje = new Date();
+            hoje.setHours(0, 0, 0, 0);
+            const venc = new Date(row.data_vencimento + 'T00:00:00');
+            const diff = Math.ceil((venc - hoje) / (1000 * 60 * 60 * 24));
+            diasDisplay = diff < 0 ? `${diff} dias` : `+${diff} dias`;
+        }
 
-        // Log para debug
-        console.log(`📌 ${row.unidade} - Status: ${status.status} - Venc: ${dataVenc}`);
+        // 🔥 COR DA LINHA IGUAL A ABA PROCESSAMENTO
+        let rowClass = '';
+        let statusIcon = status.icone || '';
+        let statusText = status.status || 'Desconhecido';
+        let statusClass = status.classe || 'secondary';
 
-        html += `<tr>
+        html += `<tr class="${rowClass}">
             <td><strong>${row.unidade}</strong></td>
             <td><span class="badge bg-secondary">${holding}</span></td>
             <td>${mesNome}/${row.ano}</td>
             <td class="text-end">R$ ${row.valor_total.toFixed(2)}</td>
             <td class="text-center">${dataVenc}</td>
             <td class="text-center">
-                <span class="badge bg-${status.classe}">
-                    ${status.icone} ${status.status}
+                <span class="badge bg-${statusClass}">
+                    ${statusIcon} ${statusText}
                 </span>
             </td>
-            <td class="text-center">
-                ${typeof dias === 'number' ? (dias < 0 ? dias : `+${dias}`) : dias}
-            </td>
+            <td class="text-center">${diasDisplay}</td>
             <td class="text-center">
                 <div class="btn-group btn-group-sm">
                     <button class="btn btn-sm btn-outline-primary btn-detalhes-boleto" 
@@ -6117,7 +6254,11 @@ function renderizarTabelaBoletos() {
                                 title="Marcar como pago">
                             <i class="fas fa-check"></i>
                         </button>
-                    ` : ''}
+                    ` : `
+                        <button class="btn btn-sm btn-success" disabled>
+                            <i class="fas fa-check-circle"></i> Pago
+                        </button>
+                    `}
                 </div>
             </td>
         </tr>`;
@@ -6125,7 +6266,7 @@ function renderizarTabelaBoletos() {
 
     tbody.innerHTML = html;
 
-    // Adicionar eventos
+    // 🔥 ADICIONAR EVENTOS (IGUAL A ABA PROCESSAMENTO)
     document.querySelectorAll('.btn-detalhes-boleto').forEach(btn => {
         btn.addEventListener('click', function() {
             const id = parseInt(this.dataset.id);
@@ -6147,6 +6288,67 @@ function renderizarTabelaBoletos() {
                 await marcarBoletoPago(id);
             }
         });
+    });
+}
+
+// Handlers separados
+function handleDetalhesBoleto() {
+    const id = parseInt(this.dataset.id);
+    const unidade = this.dataset.unidade;
+    const mes = parseInt(this.dataset.mes);
+    const ano = parseInt(this.dataset.ano);
+    const row = dadosBoletos.find(r => r.id === id);
+    if (row) {
+        mostrarDetalhes(id, unidade, mes, ano, row.detalhes || {});
+    }
+}
+
+async function handleMarcarPago() {
+    const id = parseInt(this.dataset.id);
+    const unidade = this.dataset.unidade;
+    if (confirm(`Deseja marcar o boleto de "${unidade}" como PAGO?`)) {
+        await marcarBoletoPago(id);
+    }
+}
+
+// ========================= DEBUG - VERIFICAR DADOS DOS BOLETOS =========================
+function debugBoletos() {
+    console.log('🔍 === DEBUG BOLETOS ===');
+    console.log(`Total de boletos: ${dadosBoletos.length}`);
+    
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    
+    let pagos = 0, vencidos = 0, aVencer = 0, proximos = 0, semData = 0;
+    
+    dadosBoletos.forEach(row => {
+        if (!row.data_vencimento) { 
+            semData++; 
+            return; 
+        }
+        if (row.pago) { 
+            pagos++; 
+            return; 
+        }
+        const venc = new Date(row.data_vencimento + 'T00:00:00');
+        const diff = Math.ceil((venc - hoje) / (1000 * 60 * 60 * 24));
+        if (diff < 0) vencidos++;
+        else if (diff <= 5) proximos++;
+        else aVencer++;
+    });
+    
+    console.log(`📊 Distribuição:`);
+    console.log(`   Pagos: ${pagos}`);
+    console.log(`   Vencidos: ${vencidos}`);
+    console.log(`   A Vencer: ${aVencer}`);
+    console.log(`   Próx. Venc.: ${proximos}`);
+    console.log(`   Sem data: ${semData}`);
+    
+    // Mostrar alguns exemplos
+    console.log('📋 Exemplos de boletos (primeiros 5):');
+    dadosBoletos.slice(0, 5).forEach(row => {
+        const status = obterStatusBoleto(row);
+        console.log(`   ${row.unidade} - ${row.data_vencimento} - ${status.status} - Pago: ${row.pago}`);
     });
 }
 
@@ -6211,6 +6413,323 @@ function exportarBoletosExcel() {
     const fileName = `boletos_${new Date().toISOString().slice(0,10)}.xlsx`;
     XLSX.writeFile(wb, fileName);
     mostrarAlerta(`Arquivo "${fileName}" exportado com sucesso!`, 'success');
+}
+
+async function buscarPagamentosEAtualizarBoletos() {
+    console.log('🔄 Buscando pagamentos de boletos faturados...');
+    
+    if (!confirm('Deseja buscar e atualizar os boletos pagos?')) {
+        return;
+    }
+
+    try {
+        // 🔥 BUSCAR APENAS REGISTROS FATURADOS E NÃO PAGOS
+        const { data: registros, error } = await supabaseClient
+            .from('faturamento')
+            .select('*')
+            .eq('omie_status', 'faturado')
+            .eq('pago', false);
+        
+        if (error) throw error;
+        
+        if (registros.length === 0) {
+            mostrarAlerta('✅ Nenhum boleto faturado pendente para verificar.', 'info');
+            await carregarBoletos();
+            return;
+        }
+        
+        console.log(`📋 ${registros.length} boletos faturados NÃO PAGOS para verificar`);
+        mostrarAlerta(`⏳ Verificando ${registros.length} boletos...`, 'info');
+        
+        let pagos = 0;
+        let erros = 0;
+        let naoEncontrados = 0;
+        let detalhesAtualizacao = [];
+        
+        // 🔥 BUSCAR MOVIMENTOS APENAS DOS CLIENTES QUE TEM BOLETOS PENDENTES
+        // Primeiro, pegar todos os CNPJs dos registros pendentes
+        const unidadesComCNPJ = [];
+        for (const registro of registros) {
+            const { data: unidadeData } = await supabaseClient
+                .from('precos')
+                .select('cnpj')
+                .eq('unidade', registro.unidade)
+                .single();
+            
+            if (unidadeData && unidadeData.cnpj) {
+                unidadesComCNPJ.push({
+                    unidade: registro.unidade,
+                    cnpj: unidadeData.cnpj.replace(/\D/g, ''),
+                    registro: registro
+                });
+            }
+        }
+        
+        console.log(`📋 ${unidadesComCNPJ.length} unidades com CNPJ para consultar`);
+        
+        // 🔥 PARA CADA CNPJ, BUSCAR MOVIMENTOS ESPECÍFICOS (NÃO VARRER TUDO)
+        for (const item of unidadesComCNPJ) {
+            try {
+                console.log(`🔍 Verificando ${item.unidade} (CNPJ: ${item.cnpj})`);
+                
+                // Buscar movimentos APENAS para este CNPJ (1 página apenas)
+                const payload = {
+                    endpoint: 'financas/mf',
+                    call: 'ListarMovimentos',
+                    param: {
+                        nPagina: 1,
+                        nRegPorPagina: 100,
+                        cCPFCNPJCliente: item.cnpj
+                    }
+                };
+                
+                const response = await fetchOmieProxy(payload);
+                const data = await response.json();
+                
+                if (data.fault) {
+                    console.error(`   ❌ Erro na OMIE:`, data.fault.faultstring);
+                    erros++;
+                    continue;
+                }
+                
+                const movimentos = data.movimentos || [];
+                
+                // Verificar se algum movimento está pago
+                const pagosEncontrados = movimentos.filter(m => {
+                    const detalhes = m.detalhes || {};
+                    const status = (detalhes.cStatus || '').toUpperCase();
+                    const resumo = m.resumo || {};
+                    const liquidado = (resumo.cLiquidado || '').toUpperCase();
+                    
+                    return status === 'RECEBIDO' || 
+                           status === 'LIQUIDADO' || 
+                           status === 'PAGO' ||
+                           liquidado === 'S' ||
+                           parseFloat(resumo.nValAberto || 0) === 0;
+                });
+                
+                if (pagosEncontrados.length === 0) {
+                    console.log(`   ⏳ Nenhum boleto pago encontrado`);
+                    naoEncontrados++;
+                    continue;
+                }
+                
+                // Pegar o mais recente
+                pagosEncontrados.sort((a, b) => {
+                    const dataA = a.detalhes?.dDtPagamento || '';
+                    const dataB = b.detalhes?.dDtPagamento || '';
+                    return dataB.localeCompare(dataA);
+                });
+                
+                const primeiroPago = pagosEncontrados[0];
+                const detalhes = primeiroPago.detalhes || {};
+                const resumo = primeiroPago.resumo || {};
+                
+                const valorPago = resumo.nValPago || detalhes.nValorTitulo || 0;
+                const dataPagamento = detalhes.dDtPagamento || '';
+                const status = detalhes.cStatus || 'PAGO';
+                
+                console.log(`   ✅ BOLETO PAGO! Status: ${status} | Valor: R$ ${valorPago}`);
+                
+                // Atualizar no banco
+                const updateData = {
+                    pago: true,
+                    status_boleto: 'pago'
+                };
+                
+                if (valorPago > 0) {
+                    updateData.valor_pago = parseFloat(valorPago);
+                }
+                
+                if (dataPagamento) {
+                    const partes = dataPagamento.split('/');
+                    if (partes.length === 3) {
+                        updateData.data_pagamento = `${partes[2]}-${partes[1].padStart(2, '0')}-${partes[0].padStart(2, '0')}`;
+                    }
+                }
+                
+                const { error: updateError } = await supabaseClient
+                    .from('faturamento')
+                    .update(updateData)
+                    .eq('id', item.registro.id);
+                
+                if (updateError) {
+                    console.error(`   ❌ Erro ao atualizar:`, updateError);
+                    erros++;
+                } else {
+                    pagos++;
+                    detalhesAtualizacao.push(`${item.unidade}: PAGO (R$ ${valorPago})`);
+                    console.log(`   ✅ Registro ${item.registro.id} atualizado!`);
+                }
+                
+                await new Promise(resolve => setTimeout(resolve, 200));
+                
+            } catch (err) {
+                console.error(`❌ Erro ao processar ${item.unidade}:`, err.message);
+                erros++;
+            }
+        }
+        
+        // Mostrar resultado
+        let mensagem = `✅ ${pagos} boletos marcados como PAGOS!`;
+        if (naoEncontrados > 0) {
+            mensagem += `\n\n⏳ ${naoEncontrados} boletos sem pagamento encontrado.`;
+        }
+        if (detalhesAtualizacao.length > 0) {
+            mensagem += '\n\n' + detalhesAtualizacao.join('\n');
+        }
+        if (erros > 0) {
+            mensagem += `\n\n❌ ${erros} erros encontrados.`;
+        }
+        
+        mostrarAlerta(mensagem, pagos > 0 ? 'success' : 'info');
+        console.log(`📊 ${pagos} pagos, ${naoEncontrados} não encontrados, ${erros} erros`);
+        
+        // 🔥 RECARREGAR ABA BOLETOS
+        await carregarBoletos();
+        
+        return { pagos, naoEncontrados, erros, detalhes: detalhesAtualizacao };
+        
+    } catch (err) {
+        console.error('❌ Erro ao buscar pagamentos:', err);
+        mostrarAlerta('Erro ao buscar pagamentos: ' + err.message, 'danger');
+        return { pagos: 0, erros: 1 };
+    }
+}
+
+// ========================= ATUALIZAR STATUS DE TODAS AS OS =========================
+async function atualizarStatusTodasOS() {
+    console.log('🔄 Atualizando status de TODAS as OS...');
+    
+    if (!confirm('Deseja atualizar o status de TODAS as OS na OMIE?')) {
+        return;
+    }
+
+    try {
+        const { data: registros, error } = await supabaseClient
+            .from('faturamento')
+            .select('*')
+            .not('omie_os_id', 'is', null);
+        
+        if (error) throw error;
+        
+        if (registros.length === 0) {
+            mostrarAlerta('Nenhuma OS encontrada.', 'info');
+            return;
+        }
+        
+        console.log(`📋 ${registros.length} OS para verificar`);
+        mostrarAlerta(`⏳ Verificando ${registros.length} OS...`, 'info');
+        
+        let atualizados = 0;
+        let erros = 0;
+        let detalhesAtualizacao = [];
+        
+        for (const registro of registros) {
+            try {
+                const osId = registro.omie_os_id;
+                console.log(`🔍 Verificando OS ${osId} - ${registro.unidade}`);
+                
+                const statusOS = await consultarStatusOSCompleto(osId);
+                
+                if (!statusOS) {
+                    console.log(`   ⚠️ Não foi possível consultar status da OS ${osId}`);
+                    erros++;
+                    continue;
+                }
+                
+                console.log(`   Etapa: ${statusOS.etapa} | Status NFSe: ${statusOS.statusNFSe}`);
+                
+                let novoStatus = null;
+                let notaEmitida = false;
+                let boletoEnviado = false;
+                let notaNumero = null;
+                let notaValor = null;
+                let notaStatus = null;
+                let notaDataEmissao = null;
+                
+                if (statusOS.statusNFSe === 'R' || statusOS.etapa === '80') {
+                    novoStatus = 'rejeitado';
+                    notaStatus = 'rejeitado';
+                    console.log(`   ❌ REJEITADA!`);
+                } 
+                else if (statusOS.statusNFSe === 'C' || statusOS.etapa === '70') {
+                    novoStatus = 'cancelado';
+                    notaStatus = 'cancelado';
+                    console.log(`   ⛔ CANCELADA!`);
+                }
+                else if (statusOS.statusNFSe === 'F' || statusOS.statusNFSe === 'A' || statusOS.etapa === '60') {
+                    novoStatus = 'faturado';
+                    notaEmitida = true;
+                    boletoEnviado = true;
+                    notaStatus = 'faturado';
+                    notaNumero = statusOS.numeroNFSe || null;
+                    notaValor = statusOS.valorNFSe || null;
+                    notaDataEmissao = statusOS.dataEmissao || null;
+                    console.log(`   ✅ FATURADA!`);
+                }
+                else if (statusOS.etapa === '50') {
+                    novoStatus = 'criado';
+                    console.log(`   ⏳ PRONTA PARA FATURAR (Etapa 50)`);
+                }
+                else {
+                    novoStatus = 'criado';
+                    console.log(`   ⏳ Status desconhecido: ${statusOS.etapa} - mantendo como criado`);
+                }
+                
+                if (novoStatus && novoStatus !== registro.omie_status) {
+                    console.log(`   🔄 Atualizando status: ${registro.omie_status} → ${novoStatus}`);
+                    
+                    await supabaseClient
+                        .from('faturamento')
+                        .update({
+                            omie_status: novoStatus,
+                            nota_emitida: notaEmitida,
+                            boleto_enviado: boletoEnviado,
+                            nota_numero: notaNumero,
+                            nota_valor: notaValor,
+                            nota_status: notaStatus,
+                            nota_data_emissao: notaDataEmissao
+                        })
+                        .eq('id', registro.id);
+                    
+                    atualizados++;
+                    detalhesAtualizacao.push(`${registro.unidade}: ${novoStatus} (Etapa ${statusOS.etapa})`);
+                } else {
+                    console.log(`   ✅ Status já atualizado: ${registro.omie_status}`);
+                }
+                
+                await new Promise(resolve => setTimeout(resolve, 200));
+                
+            } catch (err) {
+                console.error(`❌ Erro ao processar OS ${registro.omie_os_id}:`, err.message);
+                erros++;
+            }
+        }
+        
+        let mensagem = `✅ ${atualizados} OS atualizadas!`;
+        if (detalhesAtualizacao.length > 0) {
+            mensagem += '\n\n' + detalhesAtualizacao.join('\n');
+        }
+        if (erros > 0) {
+            mensagem += `\n\n❌ ${erros} erros encontrados.`;
+        }
+        
+        mostrarAlerta(mensagem, atualizados > 0 ? 'success' : 'info');
+        console.log(`📊 ${atualizados} OS atualizadas, ${erros} erros`);
+        
+        const mesFiltro = parseInt(document.getElementById('filterMonth')?.value) || 0;
+        const anoFiltro = parseInt(document.getElementById('filterYear')?.value) || new Date().getFullYear();
+        const unidadeFiltro = document.getElementById('filterUnit')?.value?.trim() || '';
+        await carregarRelatorio(mesFiltro, anoFiltro, unidadeFiltro, statusFiltroAtual);
+        
+        return { atualizados, erros, detalhes: detalhesAtualizacao };
+        
+    } catch (err) {
+        console.error('❌ Erro ao atualizar status:', err);
+        mostrarAlerta('Erro ao atualizar status: ' + err.message, 'danger');
+        return { atualizados: 0, erros: 1 };
+    }
 }
 
 // ================================================================
@@ -7113,14 +7632,14 @@ document.addEventListener('DOMContentLoaded', function () {
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Buscando pagamentos...';
     
     try {
-      await buscarEAtualizarBoletosPagos();
+        await buscarPagamentosEAtualizarBoletos();
     } catch (err) {
-      mostrarAlerta('Erro ao buscar pagamentos: ' + err.message, 'danger');
+        mostrarAlerta('Erro ao buscar pagamentos: ' + err.message, 'danger');
     } finally {
-      btn.disabled = false;
-      btn.innerHTML = originalText;
+        btn.disabled = false;
+        btn.innerHTML = originalText;
     }
-  });
+});
 
   // ===== BOTÃO EXPORTAR EXCEL =====
   document.getElementById('exportExcelBtn')?.addEventListener('click', function() {
@@ -7187,11 +7706,18 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 
   // ===== BOLETOS - ABA =====
-  popularAnosBoletos();
-
-  document.getElementById('tab-boletos')?.addEventListener('shown.bs.tab', function() {
+document.getElementById('tab-boletos')?.addEventListener('shown.bs.tab', function() {
+    console.log('📋 Aba Boletos ativada');
     carregarBoletos();
-  });
+});
+
+// Carregar se já estiver ativa
+setTimeout(() => {
+    const boletoTab = document.getElementById('tab-boletos');
+    if (boletoTab && boletoTab.classList.contains('active')) {
+        carregarBoletos();
+    }
+}, 500);
 
   document.getElementById('btnAplicarFiltrosBoletos')?.addEventListener('click', function() {
     aplicarFiltrosBoletos();
@@ -7216,6 +7742,24 @@ document.addEventListener('DOMContentLoaded', function () {
       carregarBoletos();
     }
   }, 500);
+
+  // ===== BOTÃO BUSCAR PAGAMENTOS NA ABA BOLETOS =====
+document.getElementById('btnBuscarPagamentosBoletos')?.addEventListener('click', async function() {
+    const btn = this;
+    const originalText = btn.innerHTML;
+    
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Buscando...';
+    
+    try {
+        await buscarPagamentosEAtualizarBoletos();
+    } catch (err) {
+        mostrarAlerta('Erro ao buscar pagamentos: ' + err.message, 'danger');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+    }
+});
 
 
   // ========================= OUTROS =========================
