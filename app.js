@@ -7721,7 +7721,7 @@ async function processarLoteESocial() {
 }
 
 // ============================================================
-// PROCESSAR PLANILHA E-SOCIAL (COM VISUALIZAÇÃO)
+// PROCESSAR PLANILHA E-SOCIAL (VERSÃO COMPLETA CORRIGIDA)
 // ============================================================
 
 async function processarPlanilhaESocial() {
@@ -7745,7 +7745,6 @@ async function processarPlanilhaESocial() {
     progressBar.textContent = '0%';
 
     try {
-        // Ler a planilha
         const data = await fileInput.files[0].arrayBuffer();
         const workbook = XLSX.read(data, { 
             type: 'array',
@@ -7763,7 +7762,6 @@ async function processarPlanilhaESocial() {
             header: 1
         });
 
-        // Filtrar linhas vazias
         const rows = jsonData.filter(row => row.some(cell => cell !== '' && cell !== undefined && cell !== null));
 
         if (rows.length === 0) {
@@ -7813,7 +7811,6 @@ async function processarPlanilhaESocial() {
                     if (h.includes('tipo')) headerMap.tipo = idx;
                 });
 
-                // Verificar se encontrou as colunas essenciais
                 const essenciais = ['funcionario', 'cpf', 'unidade'];
                 const encontradas = essenciais.filter(k => headerMap[k] !== -1);
                 
@@ -7845,7 +7842,6 @@ async function processarPlanilhaESocial() {
         // Extrair dados
         const dataRows = rows.slice(headerRowIndex + 1);
         
-        // 🔥 AGRUPAR POR UNIDADE
         const grupos = {};
         const erros = [];
         const duplicados = new Set();
@@ -7867,19 +7863,25 @@ async function processarPlanilhaESocial() {
             const dataExame = headerMap.dataExame !== -1 ? String(row[headerMap.dataExame] || '').trim() : '';
             const tipo = headerMap.tipo !== -1 ? String(row[headerMap.tipo] || '').trim() : 'Admissional';
 
+            // 🔥 IGNORAR DADOS INCOMPLETOS - não adicionar ao array de erros
             if (!nome || !cpf || !unidade) {
-                erros.push({ linha: i + 1, motivo: 'Dados incompletos', nome, cpf, unidade });
-                continue;
+                continue;  // Pular silenciosamente
             }
 
             const chave = `${cpf}-${unidade}`;
             if (duplicados.has(chave)) {
-                erros.push({ linha: i + 1, motivo: 'CPF duplicado para mesma unidade', nome, cpf, unidade });
+                // 🔥 ADICIONAR APENAS ERROS DE CPF DUPLICADO
+                erros.push({ 
+                    linha: i + 2, 
+                    motivo: 'CPF duplicado para mesma unidade', 
+                    nome, 
+                    cpf, 
+                    unidade 
+                });
                 continue;
             }
             duplicados.add(chave);
 
-            // Buscar CNPJ e Holding da unidade
             const infoUnidade = await buscarInfoUnidade(unidade);
 
             if (!grupos[unidade]) {
@@ -7897,7 +7899,7 @@ async function processarPlanilhaESocial() {
                 cpf,
                 dataExame,
                 tipo,
-                linha: i + 1
+                linha: i + 2
             });
 
             const percentual = 20 + ((i + 1) / dataRows.length * 30);
@@ -7908,13 +7910,10 @@ async function processarPlanilhaESocial() {
         progressBar.style.width = '50%';
         progressBar.textContent = '50%';
 
-        // 🔥 RENDERIZAR VISUALIZAÇÃO AGRUPADA
+        // 🔥 RENDERIZAR VISUALIZAÇÃO COM FILTRO DE ERROS
         const visualizacaoHtml = renderizarVisualizacaoAgrupada(grupos, erros);
-
-        // Mostrar na tela
         feedbackEl.innerHTML = visualizacaoHtml;
 
-        // Verificar se há funcionários para processar
         const totalFuncionarios = Object.values(grupos).reduce((acc, g) => acc + g.funcionarios.length, 0);
         
         if (totalFuncionarios === 0) {
@@ -7923,11 +7922,27 @@ async function processarPlanilhaESocial() {
             return;
         }
 
+        // Verificar se há grupos com CNPJ
+        const gruposComCnpj = Object.values(grupos).filter(g => g.cnpj);
+        
+        if (gruposComCnpj.length === 0) {
+            statusEl.innerHTML = '<span class="text-warning">⚠️ Nenhuma unidade com CNPJ válido.</span>';
+            progressEl.style.display = 'none';
+            
+            // Adicionar botão fechar nos alerts
+            document.querySelectorAll('#uploadESocialFeedback .alert .btn-close').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    this.closest('.alert').remove();
+                });
+            });
+            return;
+        }
+
         statusEl.innerHTML = `
             <span class="text-success">✅ ${Object.keys(grupos).length} unidades e ${totalFuncionarios} funcionários encontrados!</span>
         `;
 
-        // 🔥 BOTÃO PARA CONFIRMAR E PROCESSAR
+        // 🔥 BOTÃO PROCESSAR
         const btnProcessar = document.createElement('button');
         btnProcessar.className = 'btn btn-success mt-3';
         btnProcessar.innerHTML = `<i class="fas fa-play me-1"></i> Processar ${totalFuncionarios} funcionários`;
@@ -7941,6 +7956,13 @@ async function processarPlanilhaESocial() {
         
         feedbackEl.appendChild(btnProcessar);
 
+        // 🔥 ADICIONAR FUNCIONALIDADE DE FECHAR NOS ALERTS
+        document.querySelectorAll('#uploadESocialFeedback .alert .btn-close').forEach(btn => {
+            btn.addEventListener('click', function() {
+                this.closest('.alert').remove();
+            });
+        });
+
         progressEl.style.display = 'none';
 
     } catch (error) {
@@ -7952,20 +7974,25 @@ async function processarPlanilhaESocial() {
 }
 
 // ============================================================
-// RENDERIZAR VISUALIZAÇÃO AGRUPADA
+// RENDERIZAR VISUALIZAÇÃO AGRUPADA (COM BOTÃO FECHAR)
 // ============================================================
 
 function renderizarVisualizacaoAgrupada(grupos, erros) {
     let html = '';
 
-    // Se houver erros, mostrar
-    if (erros && erros.length > 0) {
+    // 🔥 FILTRAR APENAS ERROS DE CPF DUPLICADO (ignorar dados incompletos)
+    const errosFiltrados = erros.filter(e => e.motivo === 'CPF duplicado para mesma unidade');
+
+    // Se houver erros de CPF duplicado, mostrar com botão fechar
+    if (errosFiltrados && errosFiltrados.length > 0) {
         html += `
-            <div class="alert alert-danger">
-                <strong>❌ Erros encontrados:</strong>
+            <div class="alert alert-danger alert-dismissible fade show" role="alert" style="border-radius: 12px;">
+                <strong>⚠️ CPF duplicado encontrado:</strong>
                 <ul class="mb-0 mt-1">
-                    ${erros.map(e => `<li>Linha ${e.linha}: ${e.motivo} - ${e.nome} (${e.cpf})</li>`).join('')}
+                    ${errosFiltrados.map(e => `<li>Linha ${e.linha}: ${e.nome} (${e.cpf}) - ${e.unidade}</li>`).join('')}
                 </ul>
+                <small class="d-block mt-1">Corrija os CPFs duplicados na planilha e tente novamente.</small>
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar" style="position: absolute; right: 16px; top: 16px;"></button>
             </div>
         `;
     }
@@ -7981,12 +8008,13 @@ function renderizarVisualizacaoAgrupada(grupos, erros) {
     const semCnpj = gruposOrdenados.filter(g => !g.cnpj);
     if (semCnpj.length > 0) {
         html += `
-            <div class="alert alert-warning">
+            <div class="alert alert-warning alert-dismissible fade show" role="alert" style="border-radius: 12px;">
                 <strong>⚠️ Unidades sem CNPJ cadastrado:</strong>
                 <ul class="mb-0 mt-1">
                     ${semCnpj.map(g => `<li>${g.unidade} - ${g.funcionarios.length} funcionário(s)</li>`).join('')}
                 </ul>
                 <small class="d-block mt-1">Cadastre as unidades na aba "Cadastro de Unidades" antes de processar.</small>
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar" style="position: absolute; right: 16px; top: 16px;"></button>
             </div>
         `;
     }
@@ -7995,11 +8023,17 @@ function renderizarVisualizacaoAgrupada(grupos, erros) {
     const gruposComCnpj = gruposOrdenados.filter(g => g.cnpj);
 
     if (gruposComCnpj.length === 0) {
-        html += `
-            <div class="alert alert-warning">
-                ⚠️ Nenhuma unidade com CNPJ válido encontrada.
-            </div>
-        `;
+        // Se não houver grupos com CNPJ, mostrar mensagem
+        const totalFuncionarios = gruposOrdenados.reduce((acc, g) => acc + g.funcionarios.length, 0);
+        if (totalFuncionarios > 0) {
+            html += `
+                <div class="alert alert-info alert-dismissible fade show" role="alert" style="border-radius: 12px;">
+                    ⚠️ Nenhuma unidade com CNPJ válido encontrada. 
+                    ${semCnpj.length > 0 ? `Encontradas ${semCnpj.length} unidades sem CNPJ.` : ''}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar" style="position: absolute; right: 16px; top: 16px;"></button>
+                </div>
+            `;
+        }
         return html;
     }
 
@@ -8043,7 +8077,6 @@ function renderizarVisualizacaoAgrupada(grupos, erros) {
                         <span class="badge bg-success" style="font-size: 0.8rem; padding: 6px 12px;">
                             <i class="fas fa-building me-1"></i> ${grupo.cnpj || 'SEM CNPJ'}
                         </span>
-                        ${grupo.cnpj ? '' : '<span class="badge bg-danger ms-1">⚠️ SEM CNPJ</span>'}
                     </div>
                 </div>
                 

@@ -176,3 +176,22 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 module.exports = { app, logger };
+
+// No server.js, adicionar:
+
+const { iniciarProcessadorReal } = require('./src/modules/processadorReal');
+
+// Iniciar servidor
+app.listen(PORT, async () => {
+    logger.info(`🚀 Servidor e-Social rodando na porta ${PORT}`);
+    logger.info(`🌍 Ambiente: ${process.env.NODE_ENV || 'development'}`);
+    logger.info(`🔐 e-Social Ambiente: ${process.env.ESOCIAL_AMBIENTE || 'homologacao'}`);
+    
+    try {
+        // Iniciar processador REAL
+        await iniciarProcessadorReal();
+        logger.info('✅ Processador e-Social REAL iniciado com sucesso');
+    } catch (error) {
+        logger.error('❌ Erro ao iniciar processador REAL:', error);
+    }
+});
