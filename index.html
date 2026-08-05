@@ -527,6 +527,72 @@
       font-size: 2rem;
       opacity: 0.6;
     }
+    /* Upload E-Social */
+#uploadESocialProgress .progress {
+    height: 25px;
+    border-radius: 12px;
+    background: #f1f5f9;
+}
+#uploadESocialProgress .progress-bar {
+    border-radius: 12px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    background: linear-gradient(90deg, #213b7c, #41bae8);
+}
+#uploadESocialFeedback .alert {
+    border-radius: 12px;
+    font-size: 0.9rem;
+}
+#uploadESocialFeedback .alert ul {
+    padding-left: 20px;
+    margin-bottom: 0;
+}
+#uploadESocialFeedback .alert ul li {
+    padding: 2px 0;
+}
+/* Visualização agrupada E-Social */
+#uploadESocialFeedback .card-modern {
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+    margin-top: 16px;
+}
+
+#uploadESocialFeedback .card-modern .card-header {
+    padding: 16px 20px;
+    font-size: 1rem;
+}
+
+#uploadESocialFeedback .table th {
+    font-weight: 600;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #475569;
+    padding: 8px 12px;
+    border: none;
+}
+
+#uploadESocialFeedback .table td {
+    padding: 8px 12px;
+    vertical-align: middle;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+#uploadESocialFeedback .table tr:hover td {
+    background: #f8fafc;
+}
+
+#uploadESocialFeedback .badge {
+    font-weight: 600;
+    padding: 4px 12px;
+}
+
+#uploadESocialFeedback .btn-success {
+    border-radius: 30px;
+    padding: 10px 30px;
+    font-weight: 600;
+}
   </style>
 </head>
 <body>
@@ -594,17 +660,17 @@
             </div>
           </div>
           <div class="col-md-5 col-lg-4">
-            <div class="card menu-card" data-target="esocial">
-              <div class="card-body text-center">
-                <div class="menu-card-icon" style="background: #e1f5fe; color: #41bae8;">
-                  <i class="fas fa-upload"></i>
-                </div>
-                <h5 class="card-title">E-Social</h5>
-                <p class="card-text">Automatize o envio de eventos e-Social para seus colaboradores.</p>
-                <span class="badge bg-secondary">Em breve</span>
-              </div>
+    <div class="card menu-card" data-target="esocial">
+        <div class="card-body text-center">
+            <div class="menu-card-icon" style="background: #e1f5fe; color: #41bae8;">
+                <i class="fas fa-cloud-upload-alt"></i>
             </div>
-          </div>
+            <h5 class="card-title">E-Social</h5>
+            <p class="card-text">Automatize o envio de eventos e-Social para seus colaboradores.</p>
+            <span class="badge bg-primary-custom">Acessar</span>
+        </div>
+    </div>
+</div>
         </div>
       </div>
     </div>
@@ -1199,67 +1265,72 @@
                 </div>
               </div>
             </div>
-            <div class="col-md-6">
-              <div class="card h-100">
+
+            <!-- Atualizar Valor por Vida (Holding) -->
+        <div class="col-md-6">
+            <div class="card h-100">
                 <div class="card-header" style="background:#f59e0b; color:#fff;">
-                  <i class="fas fa-edit me-2"></i> Atualizar Valor por Vida (Holding)
+                    <i class="fas fa-edit me-2"></i> Atualizar Valor por Vida (Holding)
                 </div>
                 <div class="card-body">
-                  <p class="text-muted">Selecione uma holding e defina o novo valor de <strong>Vidas (R$ por vida)</strong> para todas as unidades dessa holding.</p>
-                  <div class="d-flex gap-2 mb-2">
-                    <select id="holdingSelect" class="form-select flex-grow-1">
-                      <option value="">Carregando holdings...</option>
-                    </select>
-                    <button class="btn btn-outline-primary btn-sm" id="btnRecarregarHoldings" title="Recarregar lista de holdings">
-                      <i class="fas fa-sync"></i>
-                    </button>
-                  </div>
-                  <div class="input-group">
-                    <span class="input-group-text">R$</span>
-                    <input type="number" step="0.01" id="novoValorVidas" class="form-control" placeholder="Novo valor por vida" />
-                    <button class="btn btn-warning" id="atualizarVidasHoldingBtn">
-                      <i class="fas fa-sync me-1"></i> Atualizar
-                    </button>
-                  </div>
-                  <div id="holdingUpdateStatus" class="mt-2 fw-semibold small"></div>
+                    <p class="text-muted">Selecione uma holding e defina o novo valor de <strong>Vidas (R$ por vida)</strong> para todas as unidades dessa holding.</p>
+                    <div class="d-flex gap-2 mb-2">
+                        <select id="holdingSelect" class="form-select flex-grow-1">
+                            <option value="">Carregando holdings...</option>
+                        </select>
+                        <button class="btn btn-outline-primary btn-sm" id="btnRecarregarHoldings" title="Recarregar lista de holdings">
+                            <i class="fas fa-sync"></i>
+                        </button>
+                    </div>
+                    <div class="input-group">
+                        <span class="input-group-text">R$</span>
+                        <input type="number" step="0.01" id="novoValorVidas" class="form-control" placeholder="Novo valor por vida" />
+                        <button class="btn btn-warning" id="atualizarVidasHoldingBtn">
+                            <i class="fas fa-sync me-1"></i> Atualizar
+                        </button>
+                    </div>
+                    <div id="holdingUpdateStatus" class="mt-2 fw-semibold small"></div>
                 </div>
-              </div>
             </div>
-          </div>
+        </div>
+    </div>
 
-          <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4 mt-4">
-            <h5 class="fw-bold mb-0"><i class="fas fa-dollar-sign text-success me-2"></i> Preços por Unidade</h5>
-            <div class="d-flex flex-wrap gap-3 align-items-center">
-              <div class="search-box">
+          <!-- Tabela de Preços -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4 mt-4">
+        <h5 class="fw-bold mb-0"><i class="fas fa-dollar-sign text-success me-2"></i> Preços por Unidade</h5>
+        <div class="d-flex flex-wrap gap-3 align-items-center">
+            <div class="search-box">
                 <i class="fas fa-search"></i>
                 <input type="text" id="searchPreco" class="form-control" placeholder="Buscar por grupo, holding ou unidade..." />
-              </div>
-              <button class="btn btn-soft-success" id="exportPrecosBtn" title="Exportar todos os preços para Excel">
-                <i class="fas fa-file-excel"></i> Exportar XLSX
-              </button>
-              <button class="btn btn-primary-custom" id="btnNovoPreco"><i class="fas fa-plus me-1"></i> Novo Preço</button>
             </div>
-          </div>
+            <button class="btn btn-soft-success" id="exportPrecosBtn" title="Exportar todos os preços para Excel">
+                <i class="fas fa-file-excel"></i> Exportar XLSX
+            </button>
+            <button class="btn btn-primary-custom" id="btnNovoPreco"><i class="fas fa-plus me-1"></i> Novo Preço</button>
+        </div>
+    </div>
 
-          <div class="card-modern card">
-            <div class="card-body p-0">
-              <div class="table-responsive">
+    <div class="card-modern card">
+        <div class="card-body p-0">
+            <div class="table-responsive">
                 <table class="table table-modern" id="precosTable">
-                  <thead>
-                    <tr>
-                      <th>Grupo</th>
-                      <th>Holding</th>
-                      <th>Unidade</th>
-                      <th>Razão Social</th>
-                      <th class="text-end">Exame Clínico</th>
-                      <th class="text-end">Mensalidade</th>
-                      <th class="text-end">Vidas</th>
-                      <th class="text-center">Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody id="precosBody">
-                    <tr><td colspan="8" class="text-center text-muted py-4">Carregando...</td></tr>
-                  </tbody>
+                    <thead>
+                        <tr>
+                            <th>Grupo</th>
+                            <th>Holding</th>
+                            <th>Unidade</th>
+                            <th>Razão Social</th>
+                            <th>CNPJ</th>
+                            <th class="text-end">Exame Clínico</th>
+                            <th class="text-end">Mensalidade</th>
+                            <th class="text-end">Vidas (R$)</th>
+                            <th class="text-end">Qtd Vidas</th>
+                            <th class="text-center">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="precosBody">
+                        <tr><td colspan="10" class="text-center text-muted py-4">Carregando...</td></tr>
+                    </tbody>
                 </table>
               </div>
             </div>
@@ -1564,6 +1635,475 @@
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
           <button type="button" class="btn btn-primary-custom" id="savePrecoBtn"><i class="fas fa-save me-1"></i> Salvar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+    <!-- ============================================================ -->
+  <!-- ==================== PÁGINA E-SOCIAL ======================== -->
+  <!-- ============================================================ -->
+
+  <div id="esocialPage" class="hidden dashboard-wrapper">
+    <!-- Navbar -->
+    <nav class="navbar-custom">
+      <div class="container-fluid d-flex justify-content-between align-items-center">
+        <a class="brand" href="#">
+          <i class="fas fa-heartbeat"></i>
+          <div class="brand-text">
+            <span class="name">MÉTODOS</span>
+            <span class="slogan-nav">ESPECIALISTA EM CUIDAR DE QUEM TRABALHA</span>
+          </div>
+        </a>
+        <div class="user-info">
+          <button class="btn btn-outline-light btn-sm me-2" id="btnVoltarMenuESocial" title="Voltar ao menu principal">
+            <i class="fas fa-arrow-left"></i> Voltar
+          </button>
+          <span class="user-email" id="userEmailESocial"></span>
+          <button class="btn btn-logout" id="logoutBtnESocial"><i class="fas fa-sign-out-alt me-1"></i> Sair</button>
+        </div>
+      </div>
+    </nav>
+
+    <div class="dashboard-content container-fluid">
+      <!-- Alertas -->
+      <div id="alertAreaESocial" class="mb-3"></div>
+
+      <!-- Header -->
+      <div class="d-flex flex-wrap justify-content-between align-items-center mb-4">
+        <div>
+          <h4 class="fw-bold mb-0">
+            <i class="fas fa-cloud-upload-alt text-primary me-2"></i>
+            e-Social
+            <span class="badge bg-primary ms-2" id="esocialStatusBadge">Conectando...</span>
+          </h4>
+          <small class="text-muted">Automação completa de envio de eventos e-Social</small>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+          <button class="btn btn-outline-primary btn-sm" id="btnSyncSOC">
+            <i class="fas fa-sync me-1"></i> Sincronizar SOC
+          </button>
+          <button class="btn btn-primary btn-sm" id="btnNovoEvento">
+            <i class="fas fa-plus me-1"></i> Novo Evento
+          </button>
+          <button class="btn btn-success btn-sm" id="btnProcessarLote">
+            <i class="fas fa-play me-1"></i> Processar Lote
+          </button>
+        </div>
+      </div>
+
+      <!-- Cards de Resumo -->
+      <div class="row g-3 mb-4">
+        <div class="col-md-3">
+          <div class="card h-100">
+            <div class="card-body">
+              <div class="d-flex justify-content-between align-items-center">
+                <div>
+                  <h6 class="text-muted mb-1">Total Eventos</h6>
+                  <h3 class="mb-0" id="totalEventos">0</h3>
+                </div>
+                <div class="bg-primary bg-opacity-10 p-3 rounded-circle">
+                  <i class="fas fa-file-alt text-primary"></i>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="card h-100">
+            <div class="card-body">
+              <div class="d-flex justify-content-between align-items-center">
+                <div>
+                  <h6 class="text-muted mb-1">Sucessos</h6>
+                  <h3 class="mb-0 text-success" id="eventosSucesso">0</h3>
+                </div>
+                <div class="bg-success bg-opacity-10 p-3 rounded-circle">
+                  <i class="fas fa-check-circle text-success"></i>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="card h-100">
+            <div class="card-body">
+              <div class="d-flex justify-content-between align-items-center">
+                <div>
+                  <h6 class="text-muted mb-1">Pendentes</h6>
+                  <h3 class="mb-0 text-warning" id="eventosPendentes">0</h3>
+                </div>
+                <div class="bg-warning bg-opacity-10 p-3 rounded-circle">
+                  <i class="fas fa-clock text-warning"></i>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="card h-100">
+            <div class="card-body">
+              <div class="d-flex justify-content-between align-items-center">
+                <div>
+                  <h6 class="text-muted mb-1">Erros</h6>
+                  <h3 class="mb-0 text-danger" id="eventosErro">0</h3>
+                </div>
+                <div class="bg-danger bg-opacity-10 p-3 rounded-circle">
+                  <i class="fas fa-times-circle text-danger"></i>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ====== UPLOAD PLANILHA E-SOCIAL ====== -->
+<div class="row g-3 mb-4">
+    <div class="col-md-12">
+        <div class="card-modern card">
+            <div class="card-header">
+                <i class="fas fa-file-upload text-success me-2"></i> 
+                Importar Planilha e-Social
+                <span class="badge bg-info ms-2">S-2200 | S-2240</span>
+            </div>
+            <div class="card-body">
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Arquivo Excel (.xlsx)</label>
+                        <input type="file" id="uploadESocialFileInput" class="form-control" accept=".xlsx" />
+                        <small class="text-muted">Planilha com colunas: Empresa, Unidade, Funcionário, CPF, Data do Exame, Tipo</small>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label fw-semibold">Tipo de Evento</label>
+                        <select id="uploadESocialTipo" class="form-select">
+                            <option value="S-2200">S-2200 - Admissão</option>
+                            <option value="S-2240">S-2240 - Condições Ambientais</option>
+                            <option value="ambos">Ambos (S-2200 + S-2240)</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label fw-semibold">Ambiente</label>
+                        <select id="uploadESocialAmbiente" class="form-select">
+                            <option value="homologacao">Homologação</option>
+                            <option value="producao">Produção</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <button class="btn btn-primary-custom w-100" id="btnProcessarESocialPlanilha">
+                            <i class="fas fa-play me-1"></i> Processar
+                        </button>
+                    </div>
+                </div>
+                <div id="uploadESocialStatus" class="mt-3 fw-semibold small"></div>
+                <div id="uploadESocialFeedback" class="mt-2"></div>
+                <div id="uploadESocialProgress" class="mt-2" style="display: none;">
+                    <div class="progress">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%;">0%</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+      <!-- Filtros -->
+      <div class="row g-3 align-items-end mb-4">
+        <div class="col-md-3">
+          <label class="form-label fw-semibold">Tipo de Evento</label>
+          <select id="filtroTipoEvento" class="form-select">
+            <option value="">Todos</option>
+            <option value="S-1000">S-1000 - Empregador</option>
+            <option value="S-1200">S-1200 - Remuneração</option>
+            <option value="S-2200">S-2200 - Admissão</option>
+            <option value="S-2300">S-2300 - TSV</option>
+            <option value="S-2400">S-2400 - Desligamento</option>
+            <option value="S-3000">S-3000 - Exclusão</option>
+            <option value="S-5001">S-5001 - Folha</option>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label fw-semibold">Status</label>
+          <select id="filtroStatusEvento" class="form-select">
+            <option value="">Todos</option>
+            <option value="pendente">Pendente</option>
+            <option value="processando">Processando</option>
+            <option value="sucesso">Sucesso</option>
+            <option value="erro">Erro</option>
+            <option value="cancelado">Cancelado</option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label fw-semibold">Empresa</label>
+          <select id="filtroEmpresaEvento" class="form-select">
+            <option value="">Todas</option>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label fw-semibold">Data Início</label>
+          <input type="date" id="filtroDataInicio" class="form-control" />
+        </div>
+        <div class="col-md-2">
+          <label class="form-label fw-semibold">Data Fim</label>
+          <input type="date" id="filtroDataFim" class="form-control" />
+        </div>
+        <div class="col-md-12">
+          <div class="d-flex gap-2">
+            <button class="btn btn-primary-custom" id="btnAplicarFiltrosEventos">
+              <i class="fas fa-filter me-1"></i> Aplicar
+            </button>
+            <button class="btn btn-outline-secondary" id="btnLimparFiltrosEventos">
+              <i class="fas fa-times me-1"></i> Limpar
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tabela de Eventos -->
+      <div class="card-modern card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span><i class="fas fa-list me-2 text-primary"></i> Eventos e-Social</span>
+          <span class="text-muted small" id="totalEventosTexto">0 eventos</span>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-modern" id="eventosTable">
+              <thead>
+                <tr>
+                  <th>Código</th>
+                  <th>Tipo</th>
+                  <th>Empresa</th>
+                  <th>Funcionário</th>
+                  <th>Status</th>
+                  <th>Período</th>
+                  <th>Recibo</th>
+                  <th>Criado em</th>
+                  <th class="text-center">Ações</th>
+                </tr>
+              </thead>
+              <tbody id="eventosBody">
+                <tr>
+                  <td colspan="9" class="text-center text-muted py-4">
+                    <i class="fas fa-spinner fa-spin me-2"></i> Carregando eventos...
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Paginação -->
+      <div class="row mt-3">
+        <div class="col-md-6">
+          <div class="d-flex align-items-center gap-2">
+            <span class="text-muted" style="font-size:0.9rem;">Mostrar</span>
+            <select id="pageSizeEventos" class="form-select form-select-sm" style="width: auto;">
+              <option value="10">10</option>
+              <option value="25" selected>25</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+            </select>
+            <span class="text-muted" style="font-size:0.9rem;">registros por página</span>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <nav aria-label="Paginação Eventos">
+            <ul class="pagination justify-content-end mb-0" id="paginacaoEventos">
+              <li class="page-item" id="prevPageEventos">
+                <a class="page-link" href="#" aria-label="Anterior">
+                  <span aria-hidden="true">&laquo;</span>
+                </a>
+              </li>
+              <li class="page-item active"><a class="page-link" href="#" data-page="1">1</a></li>
+              <li class="page-item" id="nextPageEventos">
+                <a class="page-link" href="#" aria-label="Próxima">
+                  <span aria-hidden="true">&raquo;</span>
+                </a>
+              </li>
+            </ul>
+          </nav>
+        </div>
+      </div>
+      <div id="paginacaoInfoEventos" class="text-center text-muted small mt-2"></div>
+
+      <!-- Certificado -->
+      <div class="card-modern card mt-4">
+        <div class="card-header">
+          <i class="fas fa-lock me-2 text-primary"></i> Certificado Digital
+        </div>
+        <div class="card-body">
+          <div class="row g-3 align-items-center">
+            <div class="col-md-8">
+              <div class="d-flex align-items-center gap-3">
+                <div class="bg-success bg-opacity-10 p-3 rounded-circle">
+                  <i class="fas fa-certificate text-success"></i>
+                </div>
+                <div>
+                  <h6 class="mb-0" id="certificadoNome">Nenhum certificado ativo</h6>
+                  <small class="text-muted" id="certificadoValidade">Validade: --</small>
+                  <br>
+                  <span class="badge bg-secondary" id="certificadoStatus">Inativo</span>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-4 text-end">
+              <button class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#certificadoModal">
+                <i class="fas fa-upload me-1"></i> Upload Certificado
+              </button>
+              <button class="btn btn-outline-success btn-sm" id="btnTestarCertificado">
+                <i class="fas fa-check me-1"></i> Testar
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+    <!-- ============================================================ -->
+  <!-- ==================== MODAIS E-SOCIAL ======================== -->
+  <!-- ============================================================ -->
+
+  <!-- Modal Novo Evento -->
+  <div class="modal fade" id="novoEventoModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+      <div class="modal-content">
+        <div class="modal-header" style="background:#213b7c; color:#fff; border-radius:24px 24px 0 0;">
+          <h5 class="modal-title" style="color:#fff;">
+            <i class="fas fa-plus-circle me-2"></i> Novo Evento e-Social
+          </h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <form id="novoEventoForm">
+            <div class="row g-3">
+              <div class="col-md-4">
+                <label class="form-label fw-semibold">Tipo de Evento *</label>
+                <select id="eventoTipo" class="form-select" required>
+                  <option value="">Selecione...</option>
+                  <option value="S-1000">S-1000 - Informações do Empregador</option>
+                  <option value="S-1200">S-1200 - Remuneração</option>
+                  <option value="S-2200">S-2200 - Admissão</option>
+                  <option value="S-2300">S-2300 - TSV - Início</option>
+                  <option value="S-2400">S-2400 - Desligamento</option>
+                  <option value="S-3000">S-3000 - Exclusão</option>
+                  <option value="S-5001">S-5001 - Folha</option>
+                </select>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label fw-semibold">Empresa *</label>
+                <select id="eventoEmpresa" class="form-select" required>
+                  <option value="">Selecione...</option>
+                </select>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label fw-semibold">Funcionário</label>
+                <select id="eventoFuncionario" class="form-select">
+                  <option value="">Selecione (opcional)...</option>
+                </select>
+              </div>
+            </div>
+            <div class="row g-3 mt-2">
+              <div class="col-md-6">
+                <label class="form-label fw-semibold">Período de Apuração</label>
+                <input type="month" id="eventoPeriodo" class="form-control" />
+              </div>
+              <div class="col-md-6">
+                <label class="form-label fw-semibold">Data do Evento</label>
+                <input type="date" id="eventoData" class="form-control" />
+              </div>
+            </div>
+            <div id="eventoDadosDinamicos" class="mt-3"></div>
+            <div class="mt-3">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="eventoEnviarImediato" checked />
+                <label class="form-check-label" for="eventoEnviarImediato">
+                  Enviar imediatamente após criar
+                </label>
+              </div>
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="button" class="btn btn-primary-custom" id="btnSalvarEvento">
+            <i class="fas fa-save me-1"></i> Criar Evento
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Certificado -->
+  <div class="modal fade" id="certificadoModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header" style="background:#213b7c; color:#fff; border-radius:24px 24px 0 0;">
+          <h5 class="modal-title" style="color:#fff;">
+            <i class="fas fa-upload me-2"></i> Upload de Certificado
+          </h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <form id="certificadoForm">
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Nome do Certificado *</label>
+              <input type="text" id="certificadoNomeInput" class="form-control" placeholder="Ex: Certificado Empresa XYZ" required />
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-semibold">CNPJ/CPF *</label>
+              <input type="text" id="certificadoCnpj" class="form-control" placeholder="00.000.000/0000-00" required />
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Arquivo .pfx ou .p12 *</label>
+              <input type="file" id="certificadoArquivo" class="form-control" accept=".pfx,.p12" required />
+              <small class="text-muted">Arquivo do certificado digital (formato PKCS#12)</small>
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Senha *</label>
+              <input type="password" id="certificadoSenha" class="form-control" placeholder="Senha do certificado" required />
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="certificadoAtivo" checked />
+              <label class="form-check-label" for="certificadoAtivo">
+                Ativar este certificado imediatamente
+              </label>
+            </div>
+            <div id="certificadoStatusUpload" class="mt-3"></div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="button" class="btn btn-primary-custom" id="btnUploadCertificado">
+            <i class="fas fa-upload me-1"></i> Enviar
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Detalhes do Evento -->
+  <div class="modal fade" id="detalhesEventoModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header" style="background:#213b7c; color:#fff; border-radius:24px 24px 0 0;">
+          <h5 class="modal-title" style="color:#fff;">
+            <i class="fas fa-info-circle me-2"></i> Detalhes do Evento
+          </h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div id="detalhesEventoConteudo">
+            <div class="text-center py-4">
+              <i class="fas fa-spinner fa-spin fa-2x text-primary"></i>
+              <p class="mt-2">Carregando...</p>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+          <button type="button" class="btn btn-outline-primary" id="btnCopiarXML">
+            <i class="fas fa-copy me-1"></i> Copiar XML
+          </button>
         </div>
       </div>
     </div>

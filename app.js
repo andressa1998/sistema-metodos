@@ -1057,7 +1057,6 @@ async function processarUpload(file) {
   console.log(`   Unidades não encontradas: ${unidadesNaoEncontradas.length} - ${unidadesNaoEncontradas.join(', ')}`);
   console.log(`   Valor total: R$ ${totalGeral.toFixed(2)}`);
 
-  // ✅ ADICIONE AQUI:
   const anoFiltro = parseInt(document.getElementById('dashboardYear')?.value) || new Date().getFullYear();
   await carregarGraficos(anoFiltro);
   await carregarCards(0, anoFiltro);
@@ -1075,8 +1074,6 @@ async function processarUpload(file) {
       atualizadas: unidadesAtualizadas,
       novas: unidadesNovas
     }
-
-    
   };
 }
 
@@ -1569,10 +1566,8 @@ function processarDadosPorMes(dados, ano) {
     dados.forEach(row => {
         const mesIndex = row.mes - 1;
         if (mesIndex >= 0 && mesIndex < 12) {
-            // 🔥 SOMA DIRETAMENTE
             totalPorMes[mesIndex] += row.valor_total || 0;
             
-            // Processar detalhes
             if (row.detalhes) {
                 for (let [nome, info] of Object.entries(row.detalhes)) {
                     let qtd = (typeof info === 'object' && info.quantidade !== undefined) ? info.quantidade : info;
@@ -1602,7 +1597,6 @@ function processarDadosPorMes(dados, ano) {
 function renderizarGraficos(dados, ano) {
     console.log(`📊 Renderizando gráficos com ${dados?.length || 0} registros`);
     
-    // 🔥 VERIFICAR DISTRIBUIÇÃO POR MÊS/ANO
     const mesesCount = {};
     dados?.forEach(row => {
         const key = `${row.mes}/${row.ano}`;
@@ -4738,7 +4732,6 @@ async function atualizarDashboardAposUpload() {
     await carregarCards(mes, ano);
     await carregarGraficos(ano);
     
-    // Também atualiza a tabela de processamento
     const mesFiltro = parseInt(document.getElementById('filterMonth')?.value) || 0;
     const anoFiltro = parseInt(document.getElementById('filterYear')?.value) || new Date().getFullYear();
     const unidadeFiltro = document.getElementById('filterUnit')?.value?.trim() || '';
@@ -4841,7 +4834,6 @@ async function carregarCards(mes = 0, ano = 0) {
 async function carregarGraficos(ano = 0) {
     console.log(`🔄 Carregando gráficos para o ano: ${ano}`);
     
-    // 🔥 BUSCAR TODOS OS REGISTROS SEM LIMITE
     let allData = [];
     let page = 1;
     const pageSize = 1000;
@@ -4880,7 +4872,6 @@ async function carregarGraficos(ano = 0) {
     
     console.log(`📊 TOTAL: ${allData.length} registros encontrados para o ano ${ano}`);
     
-    // 🔥 VERIFICAR SE TEM JANEIRO
     const janData = allData?.filter(row => row.mes === 1) || [];
     console.log(`📅 Janeiro: ${janData.length} registros`);
     if (janData.length > 0) {
@@ -4913,41 +4904,43 @@ async function carregarPrecos() {
 }
 
 function renderizarTabelaPrecos(dados) {
-  const tbody = document.getElementById('precosBody');
-  if (!dados || dados.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-4">Nenhum registro encontrado</td></tr>`;
-    return;
-  }
-  let html = '';
-  dados.forEach(row => {
-    html += `<tr>
-      <td>${row.grupo || ''}</td>
-      <td>${row.holding || ''}</td>
-      <td><strong>${row.unidade}</strong></td>
-      <td>${row.cnpj || ''}</td>
-      <td class="text-end">${row.exame_clinico ? 'R$ ' + row.exame_clinico.toFixed(2) : ''}</td>
-      <td class="text-end">${row.mensalidade ? 'R$ ' + row.mensalidade.toFixed(2) : ''}</td>
-      <td class="text-end">${row.vidas || ''}</td>
-      <td class="text-center">
-        <button class="btn btn-sm btn-soft-primary btn-edit" data-id="${row.id}"><i class="fas fa-edit"></i></button>
-        <button class="btn btn-sm btn-soft-danger btn-delete" data-id="${row.id}"><i class="fas fa-trash"></i></button>
-      </td>
-    </tr>`;
-  });
-  tbody.innerHTML = html;
+    const tbody = document.getElementById('precosBody');
+    if (!dados || dados.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="10" class="text-center text-muted py-4">Nenhum registro encontrado</td></tr>`;
+        return;
+    }
+    let html = '';
+    dados.forEach(row => {
+        html += `<tr>
+            <td>${row.grupo || ''}</td>
+            <td>${row.holding || ''}</td>
+            <td><strong>${row.unidade}</strong></td>
+            <td>${row.razao_social || ''}</td>
+            <td>${row.cnpj || ''}</td>
+            <td class="text-end">${row.exame_clinico ? 'R$ ' + row.exame_clinico.toFixed(2) : ''}</td>
+            <td class="text-end">${row.mensalidade ? 'R$ ' + row.mensalidade.toFixed(2) : ''}</td>
+            <td class="text-end">${row.vidas ? 'R$ ' + row.vidas.toFixed(2) : ''}</td>
+            <td class="text-end">${row.qtd_vidas || 0}</td>
+            <td class="text-center">
+                <button class="btn btn-sm btn-soft-primary btn-edit" data-id="${row.id}"><i class="fas fa-edit"></i></button>
+                <button class="btn btn-sm btn-soft-danger btn-delete" data-id="${row.id}"><i class="fas fa-trash"></i></button>
+            </td>
+        </tr>`;
+    });
+    tbody.innerHTML = html;
 
-  document.querySelectorAll('.btn-edit').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const id = parseInt(btn.dataset.id);
-      editarPreco(id);
+    document.querySelectorAll('.btn-edit').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const id = parseInt(btn.dataset.id);
+            editarPreco(id);
+        });
     });
-  });
-  document.querySelectorAll('.btn-delete').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const id = parseInt(btn.dataset.id);
-      if (confirm('Deseja realmente excluir este registro?')) excluirPreco(id);
+    document.querySelectorAll('.btn-delete').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const id = parseInt(btn.dataset.id);
+            if (confirm('Deseja realmente excluir este registro?')) excluirPreco(id);
+        });
     });
-  });
 }
 
 async function salvarPreco(dados) {
@@ -5883,19 +5876,16 @@ function popularAnosBoletos() {
     const select = document.getElementById('boletoFiltroAno');
     if (!select) return;
     
-    // 🔥 BUSCAR ANOS DISPONÍVEIS NO BANCO DE DADOS
     supabaseClient
         .from('faturamento')
         .select('ano')
         .then(({ data, error }) => {
             if (error) {
                 console.error('Erro ao buscar anos:', error);
-                // Fallback: usar anos fixos
                 preencherAnosFixos(select);
                 return;
             }
             
-            // Extrair anos únicos
             const anos = [...new Set(data.map(item => item.ano).filter(Boolean))].sort((a, b) => b - a);
             
             console.log('📋 Anos encontrados no banco:', anos);
@@ -5905,7 +5895,6 @@ function popularAnosBoletos() {
                 return;
             }
             
-            // Preencher select
             select.innerHTML = '<option value="0">Todos</option>';
             anos.forEach(ano => {
                 const option = document.createElement('option');
@@ -5914,12 +5903,11 @@ function popularAnosBoletos() {
                 select.appendChild(option);
             });
             
-            // 🔥 SELECIONAR O ANO MAIS RECENTE OU "TODOS"
             const anoAtual = new Date().getFullYear();
             if (anos.includes(anoAtual)) {
                 select.value = anoAtual;
             } else {
-                select.value = '0'; // Todos
+                select.value = '0';
             }
             
             console.log('✅ Anos disponíveis:', anos);
@@ -5947,7 +5935,6 @@ async function carregarBoletos() {
     console.log('🔄 Carregando boletos (apenas faturados)...');
     
     try {
-        // 🔥 BUSCAR APENAS REGISTROS FATURADOS (os que têm boletos)
         const { data, error } = await supabaseClient
             .from('faturamento')
             .select('*')
@@ -5961,7 +5948,6 @@ async function carregarBoletos() {
         
         console.log(`📋 ${dadosBoletos.length} boletos faturados carregados`);
 
-        // Buscar holdings
         if (dadosBoletos.length > 0) {
             const unidades = [...new Set(dadosBoletos.map(item => item.unidade))];
             const { data: precosData } = await supabaseClient
@@ -5994,15 +5980,12 @@ function popularAnosBoletosComDados() {
     const select = document.getElementById('boletoFiltroAno');
     if (!select) return;
     
-    // Buscar anos disponíveis nos dados
     const anos = [...new Set(dadosBoletos.map(item => item.ano).filter(Boolean))].sort((a, b) => b - a);
     
-    // Se não houver anos, usar o ano atual
     if (anos.length === 0) {
         anos.push(new Date().getFullYear());
     }
     
-    // Guardar valor selecionado atual
     const valorAtual = select.value;
     
     select.innerHTML = '<option value="0">Todos</option>';
@@ -6013,11 +5996,10 @@ function popularAnosBoletosComDados() {
         select.appendChild(option);
     });
     
-    // Restaurar seleção se ainda for válida
     if (valorAtual && anos.includes(parseInt(valorAtual))) {
         select.value = valorAtual;
     } else {
-        select.value = '0'; // Todos por padrão
+        select.value = '0';
     }
     
     console.log('📋 Anos disponíveis para filtro:', anos);
@@ -6033,7 +6015,6 @@ function aplicarFiltrosBoletos() {
 
     console.log(`   Status: ${statusFiltro}, Mês: ${mesFiltro}, Ano: ${anoFiltro}`);
 
-    // 🔥 FILTRAR IGUAL A ABA PROCESSAMENTO
     boletosFiltrados = dadosBoletos.filter(row => {
         if (statusFiltro !== 'todos') {
             const status = obterStatusBoleto(row);
@@ -6050,7 +6031,6 @@ function aplicarFiltrosBoletos() {
 
     console.log(`📋 ${boletosFiltrados.length} boletos após filtros`);
 
-    // 🔥 ATUALIZAR TUDO
     atualizarCardsBoletos();
     renderizarTabelaBoletos();
 }
@@ -6085,7 +6065,6 @@ function mostrarMesesDisponiveis() {
 async function recarregarBoletosCompleto() {
     console.log('🔄 RECARREGANDO BOLETOS COMPLETO...');
     
-    // Buscar TODOS os dados
     const { data, error } = await supabaseClient
         .from('faturamento')
         .select('*');
@@ -6100,7 +6079,6 @@ async function recarregarBoletosCompleto() {
     
     console.log(`📋 ${dadosBoletos.length} boletos carregados`);
     
-    // Mostrar distribuição por mês/ano
     const meses = {};
     dadosBoletos.forEach(row => {
         const key = `${String(row.mes).padStart(2, '0')}/${row.ano}`;
@@ -6113,23 +6091,19 @@ async function recarregarBoletosCompleto() {
         console.log(`   ${key}: ${meses[key].total} registros (${meses[key].pagos} pagos)`);
     });
     
-    // Mostrar quantos estão pagos
     const pagos = dadosBoletos.filter(r => r.pago === true);
     console.log(`✅ Pagos: ${pagos.length}`);
     pagos.forEach(r => {
         console.log(`   ${r.unidade} - ${r.data_vencimento || 'SEM DATA'} - ${r.mes}/${r.ano}`);
     });
     
-    // 🔥 FORÇAR O FILTRO PARA "TODOS"
     document.getElementById('boletoFiltroStatus').value = 'todos';
     document.getElementById('boletoFiltroMes').value = '0';
     document.getElementById('boletoFiltroAno').value = '0';
     document.getElementById('boletoFiltroUnidade').value = '';
     
-    // Popular anos
     popularAnosBoletosComDados();
     
-    // Atualizar UI
     aplicarFiltrosBoletos();
     
     console.log('✅ Recarregamento completo!');
@@ -6191,7 +6165,6 @@ function renderizarTabelaBoletos() {
     const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
                    'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 
-    // 🔥 USAR boletosFiltrados (igual a aba Processamento)
     const dados = boletosFiltrados || [];
     
     console.log(`📋 ${dados.length} registros para exibir`);
@@ -6209,7 +6182,6 @@ function renderizarTabelaBoletos() {
         const mesNome = meses[row.mes - 1] || row.mes;
         const dataVenc = row.data_vencimento ? new Date(row.data_vencimento + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
         
-        // 🔥 CALCULAR DIAS IGUAL A ABA PROCESSAMENTO
         let diasDisplay = '—';
         if (row.data_vencimento && !row.pago) {
             const hoje = new Date();
@@ -6219,7 +6191,6 @@ function renderizarTabelaBoletos() {
             diasDisplay = diff < 0 ? `${diff} dias` : `+${diff} dias`;
         }
 
-        // 🔥 COR DA LINHA IGUAL A ABA PROCESSAMENTO
         let rowClass = '';
         let statusIcon = status.icone || '';
         let statusText = status.status || 'Desconhecido';
@@ -6266,7 +6237,6 @@ function renderizarTabelaBoletos() {
 
     tbody.innerHTML = html;
 
-    // 🔥 ADICIONAR EVENTOS (IGUAL A ABA PROCESSAMENTO)
     document.querySelectorAll('.btn-detalhes-boleto').forEach(btn => {
         btn.addEventListener('click', function() {
             const id = parseInt(this.dataset.id);
@@ -6291,7 +6261,6 @@ function renderizarTabelaBoletos() {
     });
 }
 
-// Handlers separados
 function handleDetalhesBoleto() {
     const id = parseInt(this.dataset.id);
     const unidade = this.dataset.unidade;
@@ -6311,7 +6280,6 @@ async function handleMarcarPago() {
     }
 }
 
-// ========================= DEBUG - VERIFICAR DADOS DOS BOLETOS =========================
 function debugBoletos() {
     console.log('🔍 === DEBUG BOLETOS ===');
     console.log(`Total de boletos: ${dadosBoletos.length}`);
@@ -6344,7 +6312,6 @@ function debugBoletos() {
     console.log(`   Próx. Venc.: ${proximos}`);
     console.log(`   Sem data: ${semData}`);
     
-    // Mostrar alguns exemplos
     console.log('📋 Exemplos de boletos (primeiros 5):');
     dadosBoletos.slice(0, 5).forEach(row => {
         const status = obterStatusBoleto(row);
@@ -6423,7 +6390,6 @@ async function buscarPagamentosEAtualizarBoletos() {
     }
 
     try {
-        // 🔥 BUSCAR APENAS REGISTROS FATURADOS E NÃO PAGOS
         const { data: registros, error } = await supabaseClient
             .from('faturamento')
             .select('*')
@@ -6446,8 +6412,6 @@ async function buscarPagamentosEAtualizarBoletos() {
         let naoEncontrados = 0;
         let detalhesAtualizacao = [];
         
-        // 🔥 BUSCAR MOVIMENTOS APENAS DOS CLIENTES QUE TEM BOLETOS PENDENTES
-        // Primeiro, pegar todos os CNPJs dos registros pendentes
         const unidadesComCNPJ = [];
         for (const registro of registros) {
             const { data: unidadeData } = await supabaseClient
@@ -6467,12 +6431,10 @@ async function buscarPagamentosEAtualizarBoletos() {
         
         console.log(`📋 ${unidadesComCNPJ.length} unidades com CNPJ para consultar`);
         
-        // 🔥 PARA CADA CNPJ, BUSCAR MOVIMENTOS ESPECÍFICOS (NÃO VARRER TUDO)
         for (const item of unidadesComCNPJ) {
             try {
                 console.log(`🔍 Verificando ${item.unidade} (CNPJ: ${item.cnpj})`);
                 
-                // Buscar movimentos APENAS para este CNPJ (1 página apenas)
                 const payload = {
                     endpoint: 'financas/mf',
                     call: 'ListarMovimentos',
@@ -6494,7 +6456,6 @@ async function buscarPagamentosEAtualizarBoletos() {
                 
                 const movimentos = data.movimentos || [];
                 
-                // Verificar se algum movimento está pago
                 const pagosEncontrados = movimentos.filter(m => {
                     const detalhes = m.detalhes || {};
                     const status = (detalhes.cStatus || '').toUpperCase();
@@ -6514,7 +6475,6 @@ async function buscarPagamentosEAtualizarBoletos() {
                     continue;
                 }
                 
-                // Pegar o mais recente
                 pagosEncontrados.sort((a, b) => {
                     const dataA = a.detalhes?.dDtPagamento || '';
                     const dataB = b.detalhes?.dDtPagamento || '';
@@ -6531,7 +6491,6 @@ async function buscarPagamentosEAtualizarBoletos() {
                 
                 console.log(`   ✅ BOLETO PAGO! Status: ${status} | Valor: R$ ${valorPago}`);
                 
-                // Atualizar no banco
                 const updateData = {
                     pago: true,
                     status_boleto: 'pago'
@@ -6570,7 +6529,6 @@ async function buscarPagamentosEAtualizarBoletos() {
             }
         }
         
-        // Mostrar resultado
         let mensagem = `✅ ${pagos} boletos marcados como PAGOS!`;
         if (naoEncontrados > 0) {
             mensagem += `\n\n⏳ ${naoEncontrados} boletos sem pagamento encontrado.`;
@@ -6585,7 +6543,6 @@ async function buscarPagamentosEAtualizarBoletos() {
         mostrarAlerta(mensagem, pagos > 0 ? 'success' : 'info');
         console.log(`📊 ${pagos} pagos, ${naoEncontrados} não encontrados, ${erros} erros`);
         
-        // 🔥 RECARREGAR ABA BOLETOS
         await carregarBoletos();
         
         return { pagos, naoEncontrados, erros, detalhes: detalhesAtualizacao };
@@ -6732,6 +6689,1756 @@ async function atualizarStatusTodasOS() {
     }
 }
 
+// ============================================================
+// ================ E-SOCIAL - FUNÇÕES ========================
+// ============================================================
+
+const ESOCIAL_API_URL = 'http://localhost:3002/api';
+let eventosData = [];
+let paginaAtualEventos = 1;
+let registrosPorPaginaEventos = 25;
+
+// ============================================================
+// MOSTRAR PÁGINA E-SOCIAL
+// ============================================================
+
+function mostrarPaginaESocial(user) {
+    console.log('📱 Abrindo página E-Social...');
+    
+    document.getElementById('loginPage').classList.add('hidden');
+    document.getElementById('menuPage').classList.add('hidden');
+    document.getElementById('dashboardPage').classList.add('hidden');
+    
+    const esocialPage = document.getElementById('esocialPage');
+    if (esocialPage) {
+        esocialPage.classList.remove('hidden');
+    } else {
+        console.error('❌ Elemento esocialPage não encontrado!');
+        return;
+    }
+    
+    if (user && user.email) {
+        document.getElementById('userEmailESocial').textContent = user.email;
+    }
+    
+    initESocial();
+}
+
+// ============================================================
+// INICIAR E-SOCIAL
+// ============================================================
+
+// ============================================================
+// INICIAR E-SOCIAL
+// ============================================================
+
+function initESocial() {
+    console.log('🚀 Inicializando módulo e-Social...');
+    
+    // ============================================================
+    // CARREGAR DADOS INICIAIS
+    // ============================================================
+    
+    carregarEmpresasESocial();
+    carregarEventosESocial();
+    carregarEstatisticasESocial();
+    carregarCertificadoAtivoESocial();
+    
+    // ============================================================
+    // FILTROS
+    // ============================================================
+    
+    document.getElementById('btnAplicarFiltrosEventos')?.addEventListener('click', aplicarFiltrosESocial);
+    document.getElementById('btnLimparFiltrosEventos')?.addEventListener('click', limparFiltrosESocial);
+    
+    // ============================================================
+    // NOVO EVENTO
+    // ============================================================
+    
+    document.getElementById('btnNovoEvento')?.addEventListener('click', abrirModalNovoEventoESocial);
+    document.getElementById('btnSalvarEvento')?.addEventListener('click', salvarEventoESocial);
+    document.getElementById('eventoTipo')?.addEventListener('change', carregarCamposDinamicosESocial);
+    document.getElementById('eventoEmpresa')?.addEventListener('change', carregarFuncionariosESocial);
+    
+    // ============================================================
+    // CERTIFICADO
+    // ============================================================
+    
+    document.getElementById('btnUploadCertificado')?.addEventListener('click', uploadCertificadoESocial);
+    document.getElementById('btnTestarCertificado')?.addEventListener('click', testarCertificadoESocial);
+    
+    // ============================================================
+    // AÇÕES EM MASSA
+    // ============================================================
+    
+    document.getElementById('btnSyncSOC')?.addEventListener('click', sincronizarSOCESocial);
+    document.getElementById('btnProcessarLote')?.addEventListener('click', processarLoteESocial);
+    document.getElementById('btnCopiarXML')?.addEventListener('click', copiarXMLEsocial);
+    
+    // ============================================================
+    // 🔥 UPLOAD PLANILHA E-SOCIAL (NOVO)
+    // ============================================================
+    
+    document.getElementById('btnProcessarESocialPlanilha')?.addEventListener('click', processarPlanilhaESocial);
+    
+    // ============================================================
+    // NAVEGAÇÃO - VOLTAR E LOGOUT
+    // ============================================================
+    
+    document.getElementById('btnVoltarMenuESocial')?.addEventListener('click', function() {
+        supabaseClient.auth.getUser().then(({ data }) => {
+            if (data.user) {
+                mostrarMenu(data.user);
+            } else {
+                mostrarPaginaLogin();
+            }
+        });
+    });
+
+    document.getElementById('logoutBtnESocial')?.addEventListener('click', function() {
+        supabaseClient.auth.signOut();
+        mostrarPaginaLogin();
+    });
+    
+    console.log('✅ Módulo e-Social inicializado');
+}
+
+// ============================================================
+// CARREGAR EMPRESAS
+// ============================================================
+
+async function carregarEmpresasESocial() {
+    try {
+        const token = localStorage.getItem('token') || (await supabaseClient.auth.getSession()).data.session?.access_token;
+        if (!token) return [];
+        
+        const response = await fetch(`${ESOCIAL_API_URL}/esocial/empresas`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (!response.ok) throw new Error('Erro ao carregar empresas');
+        
+        const empresas = await response.json();
+        
+        const selectFiltro = document.getElementById('filtroEmpresaEvento');
+        if (selectFiltro) {
+            selectFiltro.innerHTML = '<option value="">Todas</option>';
+            empresas.forEach(emp => {
+                selectFiltro.innerHTML += `<option value="${emp.id}">${emp.unidade}</option>`;
+            });
+        }
+        
+        const selectModal = document.getElementById('eventoEmpresa');
+        if (selectModal) {
+            selectModal.innerHTML = '<option value="">Selecione...</option>';
+            empresas.forEach(emp => {
+                selectModal.innerHTML += `<option value="${emp.id}">${emp.unidade}</option>`;
+            });
+        }
+        
+        return empresas;
+    } catch (error) {
+        console.error('❌ Erro ao carregar empresas eSocial:', error);
+        return [];
+    }
+}
+
+// ============================================================
+// CARREGAR FUNCIONÁRIOS
+// ============================================================
+
+async function carregarFuncionariosESocial() {
+    const empresaId = document.getElementById('eventoEmpresa')?.value;
+    const select = document.getElementById('eventoFuncionario');
+    
+    if (!empresaId) {
+        select.innerHTML = '<option value="">Selecione (opcional)...</option>';
+        return;
+    }
+    
+    try {
+        const token = localStorage.getItem('token') || (await supabaseClient.auth.getSession()).data.session?.access_token;
+        if (!token) return;
+        
+        const response = await fetch(`${ESOCIAL_API_URL}/esocial/funcionarios?empresa_id=${empresaId}&ativo=true`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (!response.ok) throw new Error('Erro ao carregar funcionários');
+        
+        const funcionarios = await response.json();
+        
+        select.innerHTML = '<option value="">Selecione (opcional)...</option>';
+        funcionarios.forEach(func => {
+            select.innerHTML += `<option value="${func.id}">${func.nome} (${func.cpf})</option>`;
+        });
+    } catch (error) {
+        console.error('❌ Erro ao carregar funcionários eSocial:', error);
+    }
+}
+
+// ============================================================
+// CARREGAR EVENTOS
+// ============================================================
+
+async function carregarEventosESocial(filtros = {}) {
+    try {
+        const token = localStorage.getItem('token') || (await supabaseClient.auth.getSession()).data.session?.access_token;
+        if (!token) return [];
+        
+        const params = new URLSearchParams();
+        if (filtros.tipo) params.append('tipo_evento', filtros.tipo);
+        if (filtros.status) params.append('status', filtros.status);
+        if (filtros.empresa) params.append('empresa_id', filtros.empresa);
+        if (filtros.data_inicio) params.append('data_inicio', filtros.data_inicio);
+        if (filtros.data_fim) params.append('data_fim', filtros.data_fim);
+        params.append('limit', '200');
+        
+        const response = await fetch(`${ESOCIAL_API_URL}/esocial/eventos?${params}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (!response.ok) throw new Error('Erro ao carregar eventos');
+        
+        eventosData = await response.json();
+        renderizarTabelaEventosESocial();
+        return eventosData;
+    } catch (error) {
+        console.error('❌ Erro ao carregar eventos eSocial:', error);
+        return [];
+    }
+}
+
+// ============================================================
+// CARREGAR ESTATÍSTICAS
+// ============================================================
+
+async function carregarEstatisticasESocial() {
+    try {
+        const token = localStorage.getItem('token') || (await supabaseClient.auth.getSession()).data.session?.access_token;
+        if (!token) return null;
+        
+        const response = await fetch(`${ESOCIAL_API_URL}/esocial/eventos/stats`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (!response.ok) throw new Error('Erro ao carregar estatísticas');
+        
+        const stats = await response.json();
+        
+        document.getElementById('totalEventos').textContent = stats.total || 0;
+        
+        const statusMap = {};
+        stats.status.forEach(s => {
+            statusMap[s.status] = s.total;
+        });
+        
+        document.getElementById('eventosSucesso').textContent = statusMap['sucesso'] || 0;
+        document.getElementById('eventosPendentes').textContent = (statusMap['pendente'] || 0) + (statusMap['processando'] || 0);
+        document.getElementById('eventosErro').textContent = statusMap['erro'] || 0;
+        document.getElementById('totalEventosTexto').textContent = `${stats.total || 0} eventos`;
+        
+        return stats;
+    } catch (error) {
+        console.error('❌ Erro ao carregar estatísticas eSocial:', error);
+        return null;
+    }
+}
+
+// ============================================================
+// CARREGAR CERTIFICADO ATIVO
+// ============================================================
+
+async function carregarCertificadoAtivoESocial() {
+    try {
+        const token = localStorage.getItem('token') || (await supabaseClient.auth.getSession()).data.session?.access_token;
+        if (!token) return [];
+        
+        const response = await fetch(`${ESOCIAL_API_URL}/esocial/certificados`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (!response.ok) throw new Error('Erro ao carregar certificados');
+        
+        const certificados = await response.json();
+        const ativo = certificados.find(c => c.ativo);
+        
+        if (ativo) {
+            const validade = new Date(ativo.data_validade);
+            const hoje = new Date();
+            const diasRestantes = Math.ceil((validade - hoje) / (1000 * 60 * 60 * 24));
+            
+            document.getElementById('certificadoNome').textContent = ativo.nome;
+            document.getElementById('certificadoValidade').textContent = `Validade: ${validade.toLocaleDateString('pt-BR')} (${diasRestantes} dias)`;
+            
+            const statusEl = document.getElementById('certificadoStatus');
+            if (diasRestantes > 30) {
+                statusEl.className = 'badge bg-success';
+                statusEl.textContent = '✅ Válido';
+            } else if (diasRestantes > 7) {
+                statusEl.className = 'badge bg-warning';
+                statusEl.textContent = '⚠️ Próximo ao vencimento';
+            } else {
+                statusEl.className = 'badge bg-danger';
+                statusEl.textContent = '❌ Expirando em breve';
+            }
+            
+            document.getElementById('esocialStatusBadge').className = 'badge bg-success';
+            document.getElementById('esocialStatusBadge').textContent = '✅ Conectado';
+        } else {
+            document.getElementById('certificadoNome').textContent = 'Nenhum certificado ativo';
+            document.getElementById('certificadoValidade').textContent = 'Validade: --';
+            document.getElementById('certificadoStatus').className = 'badge bg-danger';
+            document.getElementById('certificadoStatus').textContent = '❌ Inativo';
+            document.getElementById('esocialStatusBadge').className = 'badge bg-danger';
+            document.getElementById('esocialStatusBadge').textContent = '❌ Sem certificado';
+        }
+        
+        return certificados;
+    } catch (error) {
+        console.error('❌ Erro ao carregar certificados eSocial:', error);
+        return [];
+    }
+}
+
+// ============================================================
+// RENDERIZAR TABELA DE EVENTOS
+// ============================================================
+
+function renderizarTabelaEventosESocial() {
+    const tbody = document.getElementById('eventosBody');
+    
+    if (!eventosData || eventosData.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="9" class="text-center text-muted py-4">
+                    <i class="fas fa-inbox me-2"></i> Nenhum evento encontrado
+                </td>
+            </tr>
+        `;
+        return;
+    }
+    
+    const statusMap = {
+        'pendente': { class: 'warning', icon: 'fa-clock', text: 'Pendente' },
+        'processando': { class: 'info', icon: 'fa-spinner fa-spin', text: 'Processando' },
+        'sucesso': { class: 'success', icon: 'fa-check-circle', text: 'Sucesso' },
+        'erro': { class: 'danger', icon: 'fa-times-circle', text: 'Erro' },
+        'cancelado': { class: 'secondary', icon: 'fa-ban', text: 'Cancelado' }
+    };
+    
+    let html = '';
+    eventosData.forEach(evento => {
+        const status = statusMap[evento.status] || statusMap['pendente'];
+        const dataCriacao = new Date(evento.created_at).toLocaleString('pt-BR');
+        const dataEvento = evento.data_evento ? new Date(evento.data_evento).toLocaleDateString('pt-BR') : '—';
+        const periodo = evento.periodo_apuracao || dataEvento;
+        
+        html += `<tr>
+            <td><code class="small">${evento.codigo_evento || evento.id}</code></td>
+            <td><span class="badge bg-primary">${evento.tipo_evento}</span></td>
+            <td>${evento.empresa_nome || evento.empresa_id}</td>
+            <td>${evento.funcionario_nome || '—'}</td>
+            <td>
+                <span class="badge bg-${status.class}">
+                    <i class="fas ${status.icon}"></i> ${status.text}
+                </span>
+            </td>
+            <td>${periodo}</td>
+            <td>${evento.numero_recibo ? `<code class="small">${evento.numero_recibo}</code>` : '—'}</td>
+            <td>${dataCriacao}</td>
+            <td class="text-center">
+                <div class="btn-group btn-group-sm">
+                    <button class="btn btn-outline-primary btn-detalhes-evento" data-id="${evento.id}">
+                        <i class="fas fa-eye"></i>
+                    </button>
+                    ${evento.status === 'pendente' || evento.status === 'erro' ? `
+                        <button class="btn btn-outline-success btn-enviar-evento" data-id="${evento.id}">
+                            <i class="fas fa-play"></i>
+                        </button>
+                    ` : ''}
+                    ${evento.status === 'sucesso' || evento.status === 'processando' ? `
+                        <button class="btn btn-outline-danger btn-cancelar-evento" data-id="${evento.id}">
+                            <i class="fas fa-ban"></i>
+                        </button>
+                    ` : ''}
+                    <button class="btn btn-outline-info btn-ver-xml" data-id="${evento.id}">
+                        <i class="fas fa-code"></i>
+                    </button>
+                </div>
+            </td>
+        </tr>`;
+    });
+    
+    tbody.innerHTML = html;
+    
+    const totalPaginas = Math.ceil(eventosData.length / registrosPorPaginaEventos);
+    atualizarPaginacaoESocial(totalPaginas);
+    
+    document.querySelectorAll('.btn-detalhes-evento').forEach(btn => {
+        btn.addEventListener('click', () => verDetalhesEventoESocial(btn.dataset.id));
+    });
+    
+    document.querySelectorAll('.btn-enviar-evento').forEach(btn => {
+        btn.addEventListener('click', () => enviarEventoESocial(btn.dataset.id));
+    });
+    
+    document.querySelectorAll('.btn-cancelar-evento').forEach(btn => {
+        btn.addEventListener('click', () => cancelarEventoESocial(btn.dataset.id));
+    });
+    
+    document.querySelectorAll('.btn-ver-xml').forEach(btn => {
+        btn.addEventListener('click', () => verXMLEsocial(btn.dataset.id));
+    });
+}
+
+// ============================================================
+// ATUALIZAR PAGINAÇÃO
+// ============================================================
+
+function atualizarPaginacaoESocial(totalPaginas) {
+    const container = document.getElementById('paginacaoEventos');
+    const prevBtn = document.getElementById('prevPageEventos');
+    const nextBtn = document.getElementById('nextPageEventos');
+    
+    const items = container.querySelectorAll('.page-item:not(#prevPageEventos):not(#nextPageEventos)');
+    items.forEach(el => el.remove());
+    
+    prevBtn.className = `page-item ${paginaAtualEventos <= 1 ? 'disabled' : ''}`;
+    nextBtn.className = `page-item ${paginaAtualEventos >= totalPaginas ? 'disabled' : ''}`;
+    
+    prevBtn.querySelector('a').onclick = (e) => {
+        e.preventDefault();
+        if (paginaAtualEventos > 1) {
+            paginaAtualEventos--;
+            renderizarTabelaEventosESocial();
+        }
+    };
+    
+    nextBtn.querySelector('a').onclick = (e) => {
+        e.preventDefault();
+        if (paginaAtualEventos < totalPaginas) {
+            paginaAtualEventos++;
+            renderizarTabelaEventosESocial();
+        }
+    };
+    
+    let startPage = Math.max(1, paginaAtualEventos - 4);
+    let endPage = Math.min(totalPaginas, startPage + 9);
+    
+    if (endPage - startPage < 9) {
+        startPage = Math.max(1, endPage - 9);
+    }
+    
+    for (let i = startPage; i <= endPage; i++) {
+        const li = document.createElement('li');
+        li.className = `page-item ${i === paginaAtualEventos ? 'active' : ''}`;
+        li.innerHTML = `<a class="page-link" href="#" data-page="${i}">${i}</a>`;
+        container.insertBefore(li, nextBtn);
+        
+        li.querySelector('a').addEventListener('click', function(e) {
+            e.preventDefault();
+            paginaAtualEventos = parseInt(this.dataset.page);
+            renderizarTabelaEventosESocial();
+        });
+    }
+    
+    const info = document.getElementById('paginacaoInfoEventos');
+    const inicio = (paginaAtualEventos - 1) * registrosPorPaginaEventos + 1;
+    const fim = Math.min(paginaAtualEventos * registrosPorPaginaEventos, eventosData.length);
+    info.textContent = `Mostrando ${inicio} a ${fim} de ${eventosData.length} eventos`;
+}
+
+// ============================================================
+// FILTROS E-SOCIAL
+// ============================================================
+
+function aplicarFiltrosESocial() {
+    const filtros = {
+        tipo: document.getElementById('filtroTipoEvento')?.value || '',
+        status: document.getElementById('filtroStatusEvento')?.value || '',
+        empresa: document.getElementById('filtroEmpresaEvento')?.value || '',
+        data_inicio: document.getElementById('filtroDataInicio')?.value || '',
+        data_fim: document.getElementById('filtroDataFim')?.value || ''
+    };
+    paginaAtualEventos = 1;
+    carregarEventosESocial(filtros);
+}
+
+function limparFiltrosESocial() {
+    document.getElementById('filtroTipoEvento').value = '';
+    document.getElementById('filtroStatusEvento').value = '';
+    document.getElementById('filtroEmpresaEvento').value = '';
+    document.getElementById('filtroDataInicio').value = '';
+    document.getElementById('filtroDataFim').value = '';
+    paginaAtualEventos = 1;
+    carregarEventosESocial();
+}
+
+// ============================================================
+// MODAL NOVO EVENTO
+// ============================================================
+
+function abrirModalNovoEventoESocial() {
+    document.getElementById('novoEventoForm').reset();
+    document.getElementById('eventoDadosDinamicos').innerHTML = '';
+    document.getElementById('eventoData').value = new Date().toISOString().split('T')[0];
+    document.getElementById('eventoPeriodo').value = new Date().toISOString().slice(0, 7);
+    carregarEmpresasESocial();
+    const modal = new bootstrap.Modal(document.getElementById('novoEventoModal'));
+    modal.show();
+}
+
+function carregarCamposDinamicosESocial() {
+    const tipo = document.getElementById('eventoTipo')?.value;
+    const container = document.getElementById('eventoDadosDinamicos');
+    
+    if (!tipo) {
+        container.innerHTML = '';
+        return;
+    }
+    
+    let html = '<hr><h6 class="fw-bold">Dados do Evento</h6><div class="row g-3">';
+    
+    switch (tipo) {
+        case 'S-1200':
+            html += `
+                <div class="col-md-4">
+                    <label class="form-label">Código da Demanda</label>
+                    <input type="text" id="eventoCodDemanda" class="form-control" value="0001" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Apurar IR</label>
+                    <select id="eventoApurarIR" class="form-select">
+                        <option value="1">Sim</option>
+                        <option value="0">Não</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Apurar FGTS</label>
+                    <select id="eventoApurarFGTS" class="form-select">
+                        <option value="1">Sim</option>
+                        <option value="0">Não</option>
+                    </select>
+                </div>
+                <div class="col-12">
+                    <label class="form-label">Remunerações (JSON)</label>
+                    <textarea id="eventoRemuneracoes" class="form-control" rows="3" placeholder='[{"codigo": "0100", "valor": 1500.00}]'></textarea>
+                </div>
+            `;
+            break;
+        case 'S-2200':
+            html += `
+                <div class="col-md-4">
+                    <label class="form-label">Matrícula</label>
+                    <input type="text" id="eventoMatricula" class="form-control" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Data Admissão</label>
+                    <input type="date" id="eventoDataAdmissao" class="form-control" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Salário Base</label>
+                    <input type="number" step="0.01" id="eventoSalario" class="form-control" />
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Cargo</label>
+                    <input type="text" id="eventoCargo" class="form-control" />
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">CBO</label>
+                    <input type="text" id="eventoCBO" class="form-control" placeholder="Código CBO" />
+                </div>
+            `;
+            break;
+        case 'S-2400':
+            html += `
+                <div class="col-md-6">
+                    <label class="form-label">Data Desligamento</label>
+                    <input type="date" id="eventoDataDesligamento" class="form-control" />
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Motivo Desligamento</label>
+                    <select id="eventoMotivoDesligamento" class="form-select">
+                        <option value="10">Rescisão sem justa causa</option>
+                        <option value="11">Rescisão com justa causa</option>
+                        <option value="12">Pedido de demissão</option>
+                        <option value="13">Término de contrato</option>
+                        <option value="14">Aposentadoria</option>
+                    </select>
+                </div>
+            `;
+            break;
+        default:
+            html = '<div class="alert alert-info">Nenhum dado adicional necessário para este tipo de evento.</div>';
+            break;
+    }
+    
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+async function salvarEventoESocial() {
+    try {
+        const tipo = document.getElementById('eventoTipo').value;
+        const empresa_id = document.getElementById('eventoEmpresa').value;
+        const funcionario_id = document.getElementById('eventoFuncionario').value;
+        const periodo_apuracao = document.getElementById('eventoPeriodo').value;
+        const data_evento = document.getElementById('eventoData').value;
+        const enviarImediato = document.getElementById('eventoEnviarImediato').checked;
+        
+        if (!tipo || !empresa_id) {
+            mostrarAlerta('Preencha o tipo de evento e a empresa.', 'warning');
+            return;
+        }
+        
+        const dados_evento = {};
+        
+        switch (tipo) {
+            case 'S-1200':
+                dados_evento.codigo_demanda = document.getElementById('eventoCodDemanda')?.value || '0001';
+                dados_evento.apurar_ir = document.getElementById('eventoApurarIR')?.value === '1';
+                dados_evento.apurar_fgts = document.getElementById('eventoApurarFGTS')?.value === '1';
+                dados_evento.remuneracao = [];
+                try {
+                    const remunText = document.getElementById('eventoRemuneracoes')?.value;
+                    if (remunText) {
+                        dados_evento.remuneracao = JSON.parse(remunText);
+                    }
+                } catch (e) {
+                    mostrarAlerta('Formato de remunerações inválido.', 'warning');
+                    return;
+                }
+                break;
+            case 'S-2200':
+                dados_evento.matricula = document.getElementById('eventoMatricula')?.value || '';
+                dados_evento.data_admissao = document.getElementById('eventoDataAdmissao')?.value || data_evento;
+                dados_evento.salario_base = parseFloat(document.getElementById('eventoSalario')?.value) || 0;
+                dados_evento.cargo = document.getElementById('eventoCargo')?.value || '';
+                dados_evento.codigo_cbo = document.getElementById('eventoCBO')?.value || '';
+                break;
+            case 'S-2400':
+                dados_evento.data_desligamento = document.getElementById('eventoDataDesligamento')?.value || data_evento;
+                dados_evento.motivo_desligamento = document.getElementById('eventoMotivoDesligamento')?.value || '10';
+                break;
+        }
+        
+        dados_evento.ambiente = 'homologacao';
+        dados_evento.periodo_apuracao = periodo_apuracao;
+        dados_evento.data_evento = data_evento;
+        
+        const token = localStorage.getItem('token') || (await supabaseClient.auth.getSession()).data.session?.access_token;
+        
+        const response = await fetch(`${ESOCIAL_API_URL}/esocial/eventos`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+                empresa_id,
+                funcionario_id: funcionario_id || null,
+                tipo_evento: tipo,
+                dados_evento,
+                data_evento,
+                periodo_apuracao
+            })
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.message || 'Erro ao criar evento');
+        }
+        
+        const evento = await response.json();
+        
+        mostrarAlerta(`✅ Evento ${evento.codigo_evento} criado com sucesso!`, 'success');
+        
+        bootstrap.Modal.getInstance(document.getElementById('novoEventoModal')).hide();
+        carregarEventosESocial();
+        carregarEstatisticasESocial();
+        
+    } catch (error) {
+        console.error('❌ Erro ao salvar evento:', error);
+        mostrarAlerta('Erro ao salvar evento: ' + error.message, 'danger');
+    }
+}
+
+// ============================================================
+// AÇÕES DOS EVENTOS
+// ============================================================
+
+async function enviarEventoESocial(id) {
+    if (!confirm('Deseja enviar este evento para o eSocial?')) return;
+    
+    try {
+        const token = localStorage.getItem('token') || (await supabaseClient.auth.getSession()).data.session?.access_token;
+        
+        const response = await fetch(`${ESOCIAL_API_URL}/esocial/eventos/${id}/enviar`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.message || 'Erro ao enviar evento');
+        }
+        
+        mostrarAlerta('✅ Evento adicionado à fila de envio!', 'success');
+        setTimeout(() => {
+            carregarEventosESocial();
+            carregarEstatisticasESocial();
+        }, 1000);
+        
+    } catch (error) {
+        console.error('❌ Erro ao enviar evento:', error);
+        mostrarAlerta('Erro ao enviar evento: ' + error.message, 'danger');
+    }
+}
+
+async function cancelarEventoESocial(id) {
+    if (!confirm('Deseja cancelar este evento no eSocial?')) return;
+    
+    try {
+        const token = localStorage.getItem('token') || (await supabaseClient.auth.getSession()).data.session?.access_token;
+        
+        const response = await fetch(`${ESOCIAL_API_URL}/esocial/eventos/${id}/cancelar`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.message || 'Erro ao cancelar evento');
+        }
+        
+        mostrarAlerta('✅ Evento adicionado à fila de cancelamento!', 'success');
+        setTimeout(() => {
+            carregarEventosESocial();
+            carregarEstatisticasESocial();
+        }, 1000);
+        
+    } catch (error) {
+        console.error('❌ Erro ao cancelar evento:', error);
+        mostrarAlerta('Erro ao cancelar evento: ' + error.message, 'danger');
+    }
+}
+
+async function verDetalhesEventoESocial(id) {
+    try {
+        const token = localStorage.getItem('token') || (await supabaseClient.auth.getSession()).data.session?.access_token;
+        
+        const response = await fetch(`${ESOCIAL_API_URL}/esocial/eventos/${id}/status`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (!response.ok) throw new Error('Erro ao carregar detalhes');
+        
+        const data = await response.json();
+        const container = document.getElementById('detalhesEventoConteudo');
+        
+        let html = `
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <div class="card bg-light">
+                        <div class="card-body">
+                            <h6 class="fw-bold">Informações Gerais</h6>
+                            <table class="table table-sm table-borderless">
+                                <tr><td><strong>Código:</strong></td><td>${data.evento.codigo_evento || data.evento.id}</td></tr>
+                                <tr><td><strong>Tipo:</strong></td><td>${data.evento.tipo_evento}</td></tr>
+                                <tr><td><strong>Status:</strong></td><td><span class="badge bg-${data.evento.status === 'sucesso' ? 'success' : data.evento.status === 'erro' ? 'danger' : 'warning'}">${data.evento.status}</span></td></tr>
+                                <tr><td><strong>Empresa:</strong></td><td>${data.evento.empresa_nome}</td></tr>
+                                <tr><td><strong>Funcionário:</strong></td><td>${data.evento.funcionario_nome || '—'}</td></tr>
+                                <tr><td><strong>Período:</strong></td><td>${data.evento.periodo_apuracao || '—'}</td></tr>
+                                <tr><td><strong>Data Evento:</strong></td><td>${data.evento.data_evento ? new Date(data.evento.data_evento).toLocaleDateString('pt-BR') : '—'}</td></tr>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card bg-light">
+                        <div class="card-body">
+                            <h6 class="fw-bold">Retorno do eSocial</h6>
+                            <table class="table table-sm table-borderless">
+                                <tr><td><strong>Número Recibo:</strong></td><td><code>${data.evento.numero_recibo || '—'}</code></td></tr>
+                                <tr><td><strong>Protocolo:</strong></td><td><code>${data.evento.protocolo || '—'}</code></td></tr>
+                                <tr><td><strong>Código Retorno:</strong></td><td>${data.evento.codigo_retorno || '—'}</td></tr>
+                                <tr><td><strong>Mensagem:</strong></td><td>${data.evento.mensagem_retorno || '—'}</td></tr>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        if (data.logs && data.logs.length > 0) {
+            html += `
+                <div class="card bg-light mt-3">
+                    <div class="card-body">
+                        <h6 class="fw-bold">Logs</h6>
+                        <div style="max-height: 200px; overflow-y: auto;">
+                            <table class="table table-sm table-borderless">
+                    `;
+            data.logs.forEach(log => {
+                const tipoClass = log.tipo === 'success' ? 'success' : log.tipo === 'error' ? 'danger' : 'info';
+                html += `
+                    <tr>
+                        <td><span class="badge bg-${tipoClass}">${log.tipo}</span></td>
+                        <td>${log.mensagem}</td>
+                        <td class="text-muted small">${new Date(log.created_at).toLocaleString('pt-BR')}</td>
+                    </tr>
+                `;
+            });
+            html += `</table></div></div></div>`;
+        }
+        
+        container.innerHTML = html;
+        const modal = new bootstrap.Modal(document.getElementById('detalhesEventoModal'));
+        modal.show();
+        
+    } catch (error) {
+        console.error('❌ Erro ao ver detalhes:', error);
+        mostrarAlerta('Erro ao carregar detalhes: ' + error.message, 'danger');
+    }
+}
+
+async function verXMLEsocial(id) {
+    try {
+        const token = localStorage.getItem('token') || (await supabaseClient.auth.getSession()).data.session?.access_token;
+        
+        const response = await fetch(`${ESOCIAL_API_URL}/esocial/eventos/${id}/xml`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (!response.ok) throw new Error('Erro ao carregar XML');
+        
+        const data = await response.json();
+        
+        if (data.xml) {
+            const container = document.getElementById('detalhesEventoConteudo');
+            container.innerHTML = `
+                <div class="card bg-light">
+                    <div class="card-body">
+                        <h6 class="fw-bold">XML do Evento</h6>
+                        <pre style="max-height: 500px; overflow-y: auto; background: #f8f9fa; padding: 15px; border-radius: 6px; font-size: 0.75rem; white-space: pre-wrap; word-wrap: break-word;">${data.xml}</pre>
+                    </div>
+                </div>
+            `;
+            window._xmlAtual = data.xml;
+            const modal = new bootstrap.Modal(document.getElementById('detalhesEventoModal'));
+            modal.show();
+        } else {
+            mostrarAlerta('XML não disponível para este evento.', 'warning');
+        }
+    } catch (error) {
+        console.error('❌ Erro ao carregar XML:', error);
+        mostrarAlerta('Erro ao carregar XML: ' + error.message, 'danger');
+    }
+}
+
+function copiarXMLEsocial() {
+    if (window._xmlAtual) {
+        navigator.clipboard.writeText(window._xmlAtual).then(() => {
+            mostrarAlerta('XML copiado para a área de transferência!', 'success');
+        }).catch(() => {
+            const textarea = document.createElement('textarea');
+            textarea.value = window._xmlAtual;
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+            mostrarAlerta('XML copiado para a área de transferência!', 'success');
+        });
+    }
+}
+
+// ============================================================
+// CERTIFICADO
+// ============================================================
+
+async function uploadCertificadoESocial() {
+    try {
+        const nome = document.getElementById('certificadoNomeInput').value;
+        const cnpj = document.getElementById('certificadoCnpj').value;
+        const arquivo = document.getElementById('certificadoArquivo').files[0];
+        const senha = document.getElementById('certificadoSenha').value;
+        const ativo = document.getElementById('certificadoAtivo').checked;
+        
+        if (!nome || !cnpj || !arquivo || !senha) {
+            mostrarAlerta('Preencha todos os campos.', 'warning');
+            return;
+        }
+        
+        const reader = new FileReader();
+        reader.readAsDataURL(arquivo);
+        
+        reader.onload = async function() {
+            try {
+                const token = localStorage.getItem('token') || (await supabaseClient.auth.getSession()).data.session?.access_token;
+                const arquivoBase64 = reader.result;
+                
+                const response = await fetch(`${ESOCIAL_API_URL}/esocial/certificados`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        nome,
+                        cnpj_cpf: cnpj,
+                        arquivo_certificado: arquivoBase64,
+                        senha
+                    })
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.message || 'Erro ao enviar certificado');
+                }
+                
+                const result = await response.json();
+                
+                if (ativo && result.certificado) {
+                    await fetch(`${ESOCIAL_API_URL}/esocial/certificado/ativo/${result.certificado.id}`, {
+                        method: 'PUT',
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                }
+                
+                mostrarAlerta('✅ Certificado enviado com sucesso!', 'success');
+                bootstrap.Modal.getInstance(document.getElementById('certificadoModal')).hide();
+                carregarCertificadoAtivoESocial();
+                
+            } catch (error) {
+                console.error('❌ Erro ao enviar certificado:', error);
+                mostrarAlerta('Erro ao enviar certificado: ' + error.message, 'danger');
+            }
+        };
+        
+        reader.onerror = function() {
+            mostrarAlerta('Erro ao ler o arquivo.', 'danger');
+        };
+        
+    } catch (error) {
+        console.error('❌ Erro ao enviar certificado:', error);
+        mostrarAlerta('Erro ao enviar certificado: ' + error.message, 'danger');
+    }
+}
+
+async function testarCertificadoESocial() {
+    try {
+        mostrarAlerta('🔄 Testando certificado...', 'info');
+        const token = localStorage.getItem('token') || (await supabaseClient.auth.getSession()).data.session?.access_token;
+        
+        const response = await fetch(`${ESOCIAL_API_URL}/esocial/certificado/testar`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok && result.success) {
+            mostrarAlerta('✅ Certificado válido e funcionando!', 'success');
+        } else {
+            mostrarAlerta('❌ ' + (result.error || 'Certificado inválido'), 'danger');
+        }
+    } catch (error) {
+        console.error('❌ Erro ao testar certificado:', error);
+        mostrarAlerta('Erro ao testar certificado: ' + error.message, 'danger');
+    }
+}
+
+// ============================================================
+// INTEGRAÇÃO SOC E PROCESSAR LOTE
+// ============================================================
+
+async function sincronizarSOCESocial() {
+    if (!confirm('Deseja sincronizar os dados do SOC?')) return;
+    
+    try {
+        mostrarAlerta('🔄 Sincronizando com o SOC...', 'info');
+        const token = localStorage.getItem('token') || (await supabaseClient.auth.getSession()).data.session?.access_token;
+        
+        const response = await fetch(`${ESOCIAL_API_URL}/esocial/integracao/sync`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            mostrarAlerta(`✅ Sincronização concluída! ${result.criados || 0} novos, ${result.atualizados || 0} atualizados.`, 'success');
+            carregarEmpresasESocial();
+            carregarEventosESocial();
+        } else {
+            mostrarAlerta('❌ Erro na sincronização: ' + (result.error || 'Erro desconhecido'), 'danger');
+        }
+    } catch (error) {
+        console.error('❌ Erro na sincronização:', error);
+        mostrarAlerta('Erro na sincronização: ' + error.message, 'danger');
+    }
+}
+
+async function processarLoteESocial() {
+    try {
+        const token = localStorage.getItem('token') || (await supabaseClient.auth.getSession()).data.session?.access_token;
+        
+        const response = await fetch(`${ESOCIAL_API_URL}/esocial/eventos?status=pendente&limit=100`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (!response.ok) throw new Error('Erro ao buscar eventos');
+        
+        const eventos = await response.json();
+        
+        if (eventos.length === 0) {
+            mostrarAlerta('Nenhum evento pendente para processar.', 'info');
+            return;
+        }
+        
+        if (!confirm(`Deseja processar ${eventos.length} eventos pendentes?`)) return;
+        
+        let enviados = 0, erros = 0;
+        
+        for (const evento of eventos) {
+            try {
+                const resp = await fetch(`${ESOCIAL_API_URL}/esocial/eventos/${evento.id}/enviar`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (resp.ok) enviados++; else erros++;
+            } catch (e) { erros++; }
+        }
+        
+        mostrarAlerta(`✅ ${enviados} eventos enviados, ${erros} erros.`, enviados > 0 ? 'success' : 'warning');
+        carregarEventosESocial();
+        carregarEstatisticasESocial();
+        
+    } catch (error) {
+        console.error('❌ Erro ao processar lote:', error);
+        mostrarAlerta('Erro ao processar lote: ' + error.message, 'danger');
+    }
+}
+
+// ============================================================
+// PROCESSAR PLANILHA E-SOCIAL (COM VISUALIZAÇÃO)
+// ============================================================
+
+async function processarPlanilhaESocial() {
+    const fileInput = document.getElementById('uploadESocialFileInput');
+    const statusEl = document.getElementById('uploadESocialStatus');
+    const feedbackEl = document.getElementById('uploadESocialFeedback');
+    const progressEl = document.getElementById('uploadESocialProgress');
+    const progressBar = progressEl?.querySelector('.progress-bar');
+    const tipoEvento = document.getElementById('uploadESocialTipo')?.value || 'S-2200';
+    const ambiente = document.getElementById('uploadESocialAmbiente')?.value || 'homologacao';
+
+    if (!fileInput.files || fileInput.files.length === 0) {
+        statusEl.innerHTML = '<span class="text-warning">⚠️ Selecione um arquivo.</span>';
+        return;
+    }
+
+    statusEl.innerHTML = '<span class="text-info">📤 Processando planilha...</span>';
+    feedbackEl.innerHTML = '';
+    progressEl.style.display = 'block';
+    progressBar.style.width = '0%';
+    progressBar.textContent = '0%';
+
+    try {
+        // Ler a planilha
+        const data = await fileInput.files[0].arrayBuffer();
+        const workbook = XLSX.read(data, { 
+            type: 'array',
+            cellDates: true,
+            cellNF: false,
+            cellText: false,
+            raw: true
+        });
+        
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(sheet, { 
+            defval: '',
+            raw: true,
+            header: 1
+        });
+
+        // Filtrar linhas vazias
+        const rows = jsonData.filter(row => row.some(cell => cell !== '' && cell !== undefined && cell !== null));
+
+        if (rows.length === 0) {
+            throw new Error('A planilha está vazia.');
+        }
+
+        // Encontrar cabeçalho
+        let headerRowIndex = -1;
+        let headerMap = {};
+
+        for (let i = 0; i < rows.length; i++) {
+            const row = rows[i];
+            if (!row || row.length === 0) continue;
+            
+            const rowStr = row.map(c => String(c).toLowerCase().trim());
+            
+            const temKeyword = rowStr.some(cell => 
+                cell.includes('funcionário') || 
+                cell.includes('funcionario') || 
+                cell.includes('colaborador') ||
+                cell.includes('cpf') ||
+                cell.includes('data') ||
+                cell.includes('unidade') ||
+                cell.includes('empresa')
+            );
+            
+            if (temKeyword) {
+                headerRowIndex = i;
+                const headers = rowStr;
+                headerMap = {
+                    empresa: -1,
+                    unidade: -1,
+                    funcionario: -1,
+                    cpf: -1,
+                    dataExame: -1,
+                    tipo: -1
+                };
+
+                headers.forEach((header, idx) => {
+                    if (!header) return;
+                    const h = header.toLowerCase();
+                    if (h.includes('empresa') || h.includes('razao')) headerMap.empresa = idx;
+                    if (h.includes('unidade') || h.includes('filial')) headerMap.unidade = idx;
+                    if (h.includes('funcionário') || h.includes('funcionario') || h.includes('colaborador') || h.includes('nome')) headerMap.funcionario = idx;
+                    if (h.includes('cpf')) headerMap.cpf = idx;
+                    if (h.includes('data') || h.includes('exame')) headerMap.dataExame = idx;
+                    if (h.includes('tipo')) headerMap.tipo = idx;
+                });
+
+                // Verificar se encontrou as colunas essenciais
+                const essenciais = ['funcionario', 'cpf', 'unidade'];
+                const encontradas = essenciais.filter(k => headerMap[k] !== -1);
+                
+                if (encontradas.length >= 2) {
+                    console.log('✅ Cabeçalho encontrado na linha', i);
+                    console.log('📋 Mapeamento:', headerMap);
+                    break;
+                }
+            }
+        }
+
+        if (headerRowIndex === -1) {
+            headerRowIndex = 0;
+            const headers = rows[0].map(h => String(h).toLowerCase().trim());
+            headerMap = {
+                empresa: headers.findIndex(h => h.includes('empresa')),
+                unidade: headers.findIndex(h => h.includes('unidade')),
+                funcionario: headers.findIndex(h => h.includes('funcionário') || h.includes('funcionario') || h.includes('colaborador')),
+                cpf: headers.findIndex(h => h.includes('cpf')),
+                dataExame: headers.findIndex(h => h.includes('data') || h.includes('exame')),
+                tipo: headers.findIndex(h => h.includes('tipo'))
+            };
+            
+            if (headerMap.funcionario === -1) headerMap.funcionario = 2;
+            if (headerMap.cpf === -1) headerMap.cpf = 3;
+            if (headerMap.unidade === -1) headerMap.unidade = 1;
+        }
+
+        // Extrair dados
+        const dataRows = rows.slice(headerRowIndex + 1);
+        
+        // 🔥 AGRUPAR POR UNIDADE
+        const grupos = {};
+        const erros = [];
+        const duplicados = new Set();
+
+        progressBar.style.width = '20%';
+        progressBar.textContent = '20%';
+
+        for (let i = 0; i < dataRows.length; i++) {
+            const row = dataRows[i];
+            if (!row || row.length === 0) continue;
+
+            const hasData = row.some(cell => cell !== '' && cell !== undefined && cell !== null);
+            if (!hasData) continue;
+
+            const nome = String(row[headerMap.funcionario] || '').trim();
+            const cpf = String(row[headerMap.cpf] || '').replace(/\D/g, '').trim();
+            const unidade = String(row[headerMap.unidade] || '').trim();
+            const empresa = headerMap.empresa !== -1 ? String(row[headerMap.empresa] || '').trim() : unidade;
+            const dataExame = headerMap.dataExame !== -1 ? String(row[headerMap.dataExame] || '').trim() : '';
+            const tipo = headerMap.tipo !== -1 ? String(row[headerMap.tipo] || '').trim() : 'Admissional';
+
+            if (!nome || !cpf || !unidade) {
+                erros.push({ linha: i + 1, motivo: 'Dados incompletos', nome, cpf, unidade });
+                continue;
+            }
+
+            const chave = `${cpf}-${unidade}`;
+            if (duplicados.has(chave)) {
+                erros.push({ linha: i + 1, motivo: 'CPF duplicado para mesma unidade', nome, cpf, unidade });
+                continue;
+            }
+            duplicados.add(chave);
+
+            // Buscar CNPJ e Holding da unidade
+            const infoUnidade = await buscarInfoUnidade(unidade);
+
+            if (!grupos[unidade]) {
+                grupos[unidade] = {
+                    unidade: unidade,
+                    empresa: empresa,
+                    cnpj: infoUnidade?.cnpj || null,
+                    holding: infoUnidade?.holding || 'N/A',
+                    funcionarios: []
+                };
+            }
+
+            grupos[unidade].funcionarios.push({
+                nome,
+                cpf,
+                dataExame,
+                tipo,
+                linha: i + 1
+            });
+
+            const percentual = 20 + ((i + 1) / dataRows.length * 30);
+            progressBar.style.width = `${Math.min(percentual, 50)}%`;
+            progressBar.textContent = `${Math.round(Math.min(percentual, 50))}%`;
+        }
+
+        progressBar.style.width = '50%';
+        progressBar.textContent = '50%';
+
+        // 🔥 RENDERIZAR VISUALIZAÇÃO AGRUPADA
+        const visualizacaoHtml = renderizarVisualizacaoAgrupada(grupos, erros);
+
+        // Mostrar na tela
+        feedbackEl.innerHTML = visualizacaoHtml;
+
+        // Verificar se há funcionários para processar
+        const totalFuncionarios = Object.values(grupos).reduce((acc, g) => acc + g.funcionarios.length, 0);
+        
+        if (totalFuncionarios === 0) {
+            statusEl.innerHTML = '<span class="text-warning">⚠️ Nenhum funcionário encontrado na planilha.</span>';
+            progressEl.style.display = 'none';
+            return;
+        }
+
+        statusEl.innerHTML = `
+            <span class="text-success">✅ ${Object.keys(grupos).length} unidades e ${totalFuncionarios} funcionários encontrados!</span>
+        `;
+
+        // 🔥 BOTÃO PARA CONFIRMAR E PROCESSAR
+        const btnProcessar = document.createElement('button');
+        btnProcessar.className = 'btn btn-success mt-3';
+        btnProcessar.innerHTML = `<i class="fas fa-play me-1"></i> Processar ${totalFuncionarios} funcionários`;
+        btnProcessar.onclick = async function() {
+            this.disabled = true;
+            this.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Processando...';
+            await processarFuncionariosAgrupados(grupos, tipoEvento, ambiente);
+            this.disabled = false;
+            this.innerHTML = '<i class="fas fa-check me-1"></i> Concluído!';
+        };
+        
+        feedbackEl.appendChild(btnProcessar);
+
+        progressEl.style.display = 'none';
+
+    } catch (error) {
+        console.error('❌ Erro ao processar planilha:', error);
+        statusEl.innerHTML = `<span class="text-danger">❌ Erro: ${error.message}</span>`;
+        feedbackEl.innerHTML = `<div class="alert alert-danger">${error.message}</div>`;
+        progressEl.style.display = 'none';
+    }
+}
+
+// ============================================================
+// RENDERIZAR VISUALIZAÇÃO AGRUPADA
+// ============================================================
+
+function renderizarVisualizacaoAgrupada(grupos, erros) {
+    let html = '';
+
+    // Se houver erros, mostrar
+    if (erros && erros.length > 0) {
+        html += `
+            <div class="alert alert-danger">
+                <strong>❌ Erros encontrados:</strong>
+                <ul class="mb-0 mt-1">
+                    ${erros.map(e => `<li>Linha ${e.linha}: ${e.motivo} - ${e.nome} (${e.cpf})</li>`).join('')}
+                </ul>
+            </div>
+        `;
+    }
+
+    // Ordenar grupos por holding
+    const gruposOrdenados = Object.values(grupos).sort((a, b) => {
+        if (a.holding < b.holding) return -1;
+        if (a.holding > b.holding) return 1;
+        return a.unidade.localeCompare(b.unidade);
+    });
+
+    // Verificar unidades sem CNPJ
+    const semCnpj = gruposOrdenados.filter(g => !g.cnpj);
+    if (semCnpj.length > 0) {
+        html += `
+            <div class="alert alert-warning">
+                <strong>⚠️ Unidades sem CNPJ cadastrado:</strong>
+                <ul class="mb-0 mt-1">
+                    ${semCnpj.map(g => `<li>${g.unidade} - ${g.funcionarios.length} funcionário(s)</li>`).join('')}
+                </ul>
+                <small class="d-block mt-1">Cadastre as unidades na aba "Cadastro de Unidades" antes de processar.</small>
+            </div>
+        `;
+    }
+
+    // Mostrar apenas grupos com CNPJ ou que têm funcionários
+    const gruposComCnpj = gruposOrdenados.filter(g => g.cnpj);
+
+    if (gruposComCnpj.length === 0) {
+        html += `
+            <div class="alert alert-warning">
+                ⚠️ Nenhuma unidade com CNPJ válido encontrada.
+            </div>
+        `;
+        return html;
+    }
+
+    // 🔥 RENDERIZAR CADA GRUPO
+    html += `
+        <div class="card-modern card">
+            <div class="card-header" style="background: #f8fafc; border-bottom: 2px solid #213b7c;">
+                <span style="font-weight: 700; color: #213b7c;">
+                    <i class="fas fa-building me-2"></i> 
+                    Resumo por Unidade
+                    <span class="badge bg-primary ms-2">${gruposComCnpj.reduce((acc, g) => acc + g.funcionarios.length, 0)} funcionários</span>
+                </span>
+            </div>
+            <div class="card-body p-0">
+    `;
+
+    for (const grupo of gruposComCnpj) {
+        const coresHolding = {
+            'Métodos': 'primary',
+            'DOP': 'success',
+            'Eficaz': 'info',
+            'Exata': 'warning',
+            'VMK': 'danger',
+            'WL': 'secondary'
+        };
+        const corHolding = coresHolding[grupo.holding] || 'secondary';
+
+        html += `
+            <div class="p-3 border-bottom" style="border-color: #e9ecef !important;">
+                <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                    <div>
+                        <span class="badge bg-${corHolding} me-2" style="font-size: 0.9rem; padding: 6px 14px;">
+                            <i class="fas fa-tag me-1"></i> ${grupo.holding}
+                        </span>
+                        <strong style="font-size: 1.1rem;">${grupo.unidade}</strong>
+                    </div>
+                    <div>
+                        <span class="badge bg-primary me-2" style="font-size: 0.8rem; padding: 6px 12px;">
+                            <i class="fas fa-users me-1"></i> ${grupo.funcionarios.length} funcionários
+                        </span>
+                        <span class="badge bg-success" style="font-size: 0.8rem; padding: 6px 12px;">
+                            <i class="fas fa-building me-1"></i> ${grupo.cnpj || 'SEM CNPJ'}
+                        </span>
+                        ${grupo.cnpj ? '' : '<span class="badge bg-danger ms-1">⚠️ SEM CNPJ</span>'}
+                    </div>
+                </div>
+                
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0" style="font-size: 0.85rem;">
+                        <thead style="background: #f8fafc;">
+                            <tr>
+                                <th>Funcionário</th>
+                                <th>CPF</th>
+                                <th>Data do Exame</th>
+                                <th>Tipo</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+        `;
+
+        for (const func of grupo.funcionarios) {
+            const tipoBadge = func.tipo.toLowerCase() === 'admissional' ? 'success' :
+                              func.tipo.toLowerCase() === 'demissional' ? 'danger' :
+                              func.tipo.toLowerCase() === 'periódico' ? 'info' : 'secondary';
+
+            html += `
+                <tr>
+                    <td><strong>${func.nome}</strong></td>
+                    <td><code>${func.cpf}</code></td>
+                    <td>${func.dataExame || '—'}</td>
+                    <td><span class="badge bg-${tipoBadge}">${func.tipo || '—'}</span></td>
+                </tr>
+            `;
+        }
+
+        html += `
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+    }
+
+    html += `
+            </div>
+        </div>
+    `;
+
+    return html;
+}
+
+// ============================================================
+// PROCESSAR FUNCIONÁRIOS AGRUPADOS
+// ============================================================
+
+async function processarFuncionariosAgrupados(grupos, tipoEvento, ambiente) {
+    const statusEl = document.getElementById('uploadESocialStatus');
+    const feedbackEl = document.getElementById('uploadESocialFeedback');
+
+    // Coletar todos os funcionários com CNPJ
+    const funcionariosParaProcessar = [];
+    for (const [unidade, grupo] of Object.entries(grupos)) {
+        if (!grupo.cnpj) continue;
+        for (const func of grupo.funcionarios) {
+            funcionariosParaProcessar.push({
+                ...func,
+                unidade: unidade,
+                cnpj: grupo.cnpj,
+                holding: grupo.holding,
+                empresa: grupo.empresa
+            });
+        }
+    }
+
+    if (funcionariosParaProcessar.length === 0) {
+        statusEl.innerHTML = '<span class="text-warning">⚠️ Nenhum funcionário com CNPJ válido para processar.</span>';
+        return;
+    }
+
+    statusEl.innerHTML = `<span class="text-info">⏳ Processando ${funcionariosParaProcessar.length} funcionários...</span>`;
+
+    let sucessos = 0;
+    let errosProcessamento = [];
+
+    for (let i = 0; i < funcionariosParaProcessar.length; i++) {
+        const func = funcionariosParaProcessar[i];
+        
+        try {
+            // Atualizar status na tabela
+            const statusRow = document.querySelector(`#uploadESocialFeedback tr[data-cpf="${func.cpf}"]`);
+            if (statusRow) {
+                statusRow.style.opacity = '0.5';
+            }
+
+            // Criar evento
+            const evento = await criarEventoESocial(func, tipoEvento, ambiente);
+            
+            if (evento && evento.length > 0) {
+                sucessos++;
+                if (statusRow) {
+                    statusRow.style.opacity = '1';
+                    statusRow.style.background = '#d1fae5';
+                }
+            } else {
+                errosProcessamento.push({
+                    nome: func.nome,
+                    cpf: func.cpf,
+                    motivo: 'Erro ao criar evento'
+                });
+            }
+        } catch (err) {
+            errosProcessamento.push({
+                nome: func.nome,
+                cpf: func.cpf,
+                motivo: err.message
+            });
+        }
+
+        // Atualizar progresso
+        const percentual = Math.round(((i + 1) / funcionariosParaProcessar.length) * 100);
+        statusEl.innerHTML = `<span class="text-info">⏳ Processando ${i + 1}/${funcionariosParaProcessar.length} - ${percentual}%</span>`;
+    }
+
+    // Mostrar resultado
+    let resultadoHtml = `
+        <div class="alert alert-success mt-3">
+            <strong>✅ Processamento concluído!</strong><br>
+            Total processados: ${funcionariosParaProcessar.length}<br>
+            ✅ Sucessos: ${sucessos}<br>
+            ❌ Erros: ${errosProcessamento.length}
+        </div>
+    `;
+
+    if (errosProcessamento.length > 0) {
+        resultadoHtml += `
+            <div class="alert alert-danger">
+                <strong>❌ Erros no processamento:</strong>
+                <ul class="mb-0 mt-1">
+                    ${errosProcessamento.map(e => `<li>${e.nome} (${e.cpf}): ${e.motivo}</li>`).join('')}
+                </ul>
+            </div>
+        `;
+    }
+
+    // Adicionar ao feedback
+    const existingAlert = feedbackEl.querySelector('.alert-success.mt-3');
+    if (existingAlert) {
+        existingAlert.outerHTML = resultadoHtml;
+    } else {
+        feedbackEl.insertAdjacentHTML('beforeend', resultadoHtml);
+    }
+
+    statusEl.innerHTML = `<span class="text-success">✅ ${sucessos} eventos criados com sucesso!</span>`;
+
+    // Recarregar eventos
+    await carregarEventosESocial();
+}
+
+// ============================================================
+// BUSCAR INFORMAÇÕES DA UNIDADE (CNPJ + HOLDING)
+// ============================================================
+
+async function buscarInfoUnidade(nomeUnidade) {
+    try {
+        if (!nomeUnidade) return null;
+
+        const { data: todasUnidades, error } = await supabaseClient
+            .from('precos')
+            .select('cnpj, unidade, holding, razao_social');
+
+        if (error) {
+            console.error('Erro ao buscar unidades:', error);
+            return null;
+        }
+
+        if (!todasUnidades || todasUnidades.length === 0) {
+            return null;
+        }
+
+        const nomeNorm = normalizarUnidade(nomeUnidade);
+
+        // 1. Match exato
+        for (const item of todasUnidades) {
+            const itemNorm = normalizarUnidade(item.unidade);
+            if (itemNorm === nomeNorm) {
+                return { cnpj: item.cnpj, holding: item.holding || 'N/A' };
+            }
+        }
+
+        // 2. Match por razão social
+        for (const item of todasUnidades) {
+            if (item.razao_social) {
+                const razaoNorm = normalizarUnidade(item.razao_social);
+                if (razaoNorm === nomeNorm || nomeNorm.includes(razaoNorm) || razaoNorm.includes(nomeNorm)) {
+                    return { cnpj: item.cnpj, holding: item.holding || 'N/A' };
+                }
+            }
+        }
+
+        // 3. Match parcial
+        const palavras = nomeNorm.split(' ');
+        for (const item of todasUnidades) {
+            const itemNorm = normalizarUnidade(item.unidade);
+            const palavrasItem = itemNorm.split(' ');
+            
+            const matchCount = palavras.filter(p => 
+                palavrasItem.some(ip => ip.includes(p) || p.includes(ip))
+            ).length;
+            
+            if (matchCount >= Math.min(palavras.length, palavrasItem.length) * 0.5) {
+                return { cnpj: item.cnpj, holding: item.holding || 'N/A' };
+            }
+        }
+
+        return null;
+
+    } catch (error) {
+        console.error('Erro ao buscar informações da unidade:', error);
+        return null;
+    }
+}
+
+// ============================================================
+// BUSCAR CNPJ POR UNIDADE (CORRIGIDA)
+// ============================================================
+
+async function buscarCnpjPorUnidade(nomeUnidade) {
+    try {
+        if (!nomeUnidade) return null;
+
+        // Buscar todas as unidades para comparação
+        const { data: todasUnidades, error } = await supabaseClient
+            .from('precos')
+            .select('cnpj, unidade, razao_social');
+
+        if (error) {
+            console.error('Erro ao buscar unidades:', error);
+            return null;
+        }
+
+        if (!todasUnidades || todasUnidades.length === 0) {
+            return null;
+        }
+
+        // Normalizar o nome da unidade da planilha
+        const nomeNorm = normalizarUnidade(nomeUnidade);
+
+        // 1. Tentar match exato por nome normalizado
+        for (const item of todasUnidades) {
+            const itemNorm = normalizarUnidade(item.unidade);
+            if (itemNorm === nomeNorm) {
+                console.log(`✅ CNPJ encontrado (match exato): ${item.unidade} -> ${item.cnpj}`);
+                return item.cnpj;
+            }
+        }
+
+        // 2. Tentar match por razão social
+        for (const item of todasUnidades) {
+            if (item.razao_social) {
+                const razaoNorm = normalizarUnidade(item.razao_social);
+                if (razaoNorm === nomeNorm || nomeNorm.includes(razaoNorm) || razaoNorm.includes(nomeNorm)) {
+                    console.log(`✅ CNPJ encontrado (razao social): ${item.razao_social} -> ${item.cnpj}`);
+                    return item.cnpj;
+                }
+            }
+        }
+
+        // 3. Tentar match parcial
+        const palavras = nomeNorm.split(' ');
+        for (const item of todasUnidades) {
+            const itemNorm = normalizarUnidade(item.unidade);
+            const palavrasItem = itemNorm.split(' ');
+            
+            // Verificar se pelo menos 50% das palavras batem
+            const matchCount = palavras.filter(p => 
+                palavrasItem.some(ip => ip.includes(p) || p.includes(ip))
+            ).length;
+            
+            if (matchCount >= Math.min(palavras.length, palavrasItem.length) * 0.5) {
+                console.log(`✅ CNPJ encontrado (match parcial): ${item.unidade} -> ${item.cnpj}`);
+                return item.cnpj;
+            }
+        }
+
+        console.log(`❌ CNPJ não encontrado para: ${nomeUnidade}`);
+        return null;
+
+    } catch (error) {
+        console.error('Erro ao buscar CNPJ:', error);
+        return null;
+    }
+}
+
+// ============================================================
+// CRIAR EVENTO E-SOCIAL
+// ============================================================
+
+async function criarEventoESocial(funcionario, tipoEvento, ambiente) {
+    try {
+        // Buscar dados da empresa
+        const { data: empresaData, error: empresaError } = await supabaseClient
+            .from('precos')
+            .select('*')
+            .eq('cnpj', funcionario.cnpj)
+            .single();
+
+        if (empresaError || !empresaData) {
+            throw new Error(`Empresa não encontrada para CNPJ: ${funcionario.cnpj}`);
+        }
+
+        // Determinar se é S-2200 ou S-2240
+        const tipos = tipoEvento === 'ambos' ? ['S-2200', 'S-2240'] : [tipoEvento];
+        
+        const eventosCriados = [];
+
+        for (const tipo of tipos) {
+            // Preparar dados do evento
+            const dadosEvento = {
+                // Dados do empregador
+                cnpj: funcionario.cnpj,
+                razao_social: empresaData.razao_social || empresaData.unidade,
+                nome_fantasia: empresaData.unidade,
+                natureza_juridica: empresaData.natureza_juridica || '0000',
+                classificacao_tributaria: empresaData.classificacao_tributaria || '01',
+                
+                // Dados do trabalhador
+                cpf: funcionario.cpf,
+                nome: funcionario.nome,
+                data_nascimento: funcionario.dataNascimento || '1990-01-01',
+                sexo: funcionario.sexo || 'M',
+                raca_cor: funcionario.raca_cor || '1',
+                
+                // Dados da admissão
+                data_admissao: funcionario.dataExame || new Date().toISOString().split('T')[0],
+                matricula: funcionario.matricula || `MAT-${Date.now()}`,
+                salario_base: funcionario.salario || 0,
+                cargo: funcionario.cargo || 'Funcionário',
+                codigo_cbo: funcionario.cbo || '0000-00',
+                tipo_contrato: funcionario.tipoContrato || '1',
+                tipo_previdencia: funcionario.tipoPrevidencia || '1',
+                regime_jornada: funcionario.regimeJornada || '1',
+                
+                // Ambiente
+                ambiente: ambiente || 'homologacao',
+                periodo_apuracao: new Date().toISOString().slice(0, 7),
+                data_evento: new Date().toISOString().split('T')[0]
+            };
+
+            // Enviar para criar evento
+            const token = localStorage.getItem('token') || (await supabaseClient.auth.getSession()).data.session?.access_token;
+            
+            const response = await fetch(`${ESOCIAL_API_URL}/esocial/eventos`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    empresa_id: empresaData.id,
+                    funcionario_id: funcionario.funcionario_id || null,
+                    tipo_evento: tipo,
+                    dados_evento: dadosEvento,
+                    data_evento: funcionario.dataExame || new Date().toISOString().split('T')[0],
+                    periodo_apuracao: new Date().toISOString().slice(0, 7)
+                })
+            });
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.message || 'Erro ao criar evento');
+            }
+
+            const evento = await response.json();
+            eventosCriados.push(evento);
+
+            // Enviar automaticamente
+            if (evento.id) {
+                try {
+                    const enviarResponse = await fetch(`${ESOCIAL_API_URL}/esocial/eventos/${evento.id}/enviar`, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${token}`
+                        }
+                    });
+                    console.log(`📤 Evento ${evento.id} enviado para fila`);
+                } catch (err) {
+                    console.warn(`⚠️ Não foi possível enviar automaticamente: ${err.message}`);
+                }
+            }
+        }
+
+        return eventosCriados;
+
+    } catch (error) {
+        console.error('❌ Erro ao criar evento e-Social:', error);
+        throw error;
+    }
+}
+
 // ================================================================
 // EVENTOS DO DOMContentLoaded
 // ================================================================
@@ -6816,7 +8523,6 @@ document.addEventListener('DOMContentLoaded', function () {
     carregarHoldingsParaFiltro();
     carregarGruposParaFiltro();
     
-    // Popular anos do filtro de boletos
     popularAnosBoletos();
   }
 
@@ -6828,6 +8534,15 @@ document.addEventListener('DOMContentLoaded', function () {
         supabaseClient.auth.getUser().then(({ data }) => {
           if (data.user) {
             mostrarDashboard(data.user);
+          } else {
+            mostrarPaginaLogin();
+          }
+        });
+      } else if (target === 'esocial') {
+        // 🔥 NOVO - Mostrar página E-Social
+        supabaseClient.auth.getUser().then(({ data }) => {
+          if (data.user) {
+            mostrarPaginaESocial(data.user);
           } else {
             mostrarPaginaLogin();
           }
@@ -7711,7 +9426,6 @@ document.getElementById('tab-boletos')?.addEventListener('shown.bs.tab', functio
     carregarBoletos();
 });
 
-// Carregar se já estiver ativa
 setTimeout(() => {
     const boletoTab = document.getElementById('tab-boletos');
     if (boletoTab && boletoTab.classList.contains('active')) {
@@ -7735,7 +9449,6 @@ setTimeout(() => {
 
   document.getElementById('btnExportarBoletos')?.addEventListener('click', exportarBoletosExcel);
 
-  // Carregar boletos se a aba já estiver ativa
   setTimeout(() => {
     const boletoTab = document.getElementById('tab-boletos');
     if (boletoTab && boletoTab.classList.contains('active')) {
@@ -7842,3 +9555,449 @@ async function atualizarNomeUnidadeProcessamento(oldName, newName) {
   console.log('Atualizar nome:', oldName, '->', newName);
   return { success: true, message: `Nome atualizado de "${oldName}" para "${newName}"` };
 }
+// ============================================================
+// ================ ATUALIZAR QUANTIDADE DE VIDAS ==============
+// ============================================================
+
+// Garantir que o evento seja anexado corretamente
+document.addEventListener('DOMContentLoaded', function() {
+    // Botão de atualizar vidas
+    const processVidasBtn = document.getElementById('processUploadVidasBtn');
+    if (processVidasBtn) {
+        processVidasBtn.addEventListener('click', processarPlanilhaVidas);
+        console.log('✅ Evento processUploadVidasBtn registrado');
+    } else {
+        console.warn('⚠️ Botão processUploadVidasBtn não encontrado');
+    }
+
+    // Botão de recarregar holdings
+    const reloadHoldingsBtn = document.getElementById('btnRecarregarHoldings');
+    if (reloadHoldingsBtn) {
+        reloadHoldingsBtn.addEventListener('click', function() {
+            const select = document.getElementById('holdingSelect');
+            if (select) {
+                select.innerHTML = '<option value="">Carregando...</option>';
+                carregarHoldingsParaAtualizacao();
+            }
+        });
+    }
+
+    // Botão de atualizar valor por holding
+    const updateHoldingBtn = document.getElementById('atualizarVidasHoldingBtn');
+    if (updateHoldingBtn) {
+        updateHoldingBtn.addEventListener('click', atualizarValorPorHolding);
+        console.log('✅ Evento atualizarVidasHoldingBtn registrado');
+    }
+
+    // Carregar holdings quando a aba for aberta
+    const tabCadastro = document.getElementById('tab-cadastro');
+    if (tabCadastro) {
+        tabCadastro.addEventListener('shown.bs.tab', function() {
+            carregarHoldingsParaAtualizacao();
+        });
+    }
+
+    // Carregar holdings inicialmente
+    setTimeout(carregarHoldingsParaAtualizacao, 1500);
+});
+
+// Função para processar a planilha de vidas
+async function processarPlanilhaVidas() {
+    console.log('🔄 processarPlanilhaVidas chamada!');
+    
+    const fileInput = document.getElementById('uploadVidasInput');
+    const status = document.getElementById('uploadVidasStatus');
+    const feedback = document.getElementById('uploadVidasFeedback');
+
+    console.log('📁 FileInput:', fileInput);
+    console.log('📁 Files:', fileInput?.files);
+
+    if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+        if (status) status.innerHTML = '<span class="text-warning">⚠️ Selecione um arquivo.</span>';
+        console.warn('⚠️ Nenhum arquivo selecionado');
+        return;
+    }
+
+    const file = fileInput.files[0];
+    console.log('📄 Arquivo selecionado:', file.name, file.size, 'bytes');
+
+    if (status) status.innerHTML = '<span class="text-info">⏳ Processando planilha...</span>';
+    if (feedback) feedback.innerHTML = '';
+
+    try {
+        const data = await file.arrayBuffer();
+        console.log('📊 Arquivo lido, tamanho:', data.byteLength);
+        
+        const workbook = XLSX.read(data, { type: 'array' });
+        console.log('📚 Workbook lido, sheets:', workbook.SheetNames);
+        
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+
+        console.log('📋 Primeiras 5 linhas:', jsonData.slice(0, 5));
+
+        // Filtrar linhas vazias
+        const rows = jsonData.filter(row => row.some(cell => cell !== '' && cell !== undefined && cell !== null));
+
+        if (rows.length === 0) {
+            throw new Error('A planilha está vazia.');
+        }
+
+        console.log(`📋 ${rows.length} linhas com dados`);
+
+        // Detectar cabeçalho e colunas
+        let startRow = 0;
+        let colUnidade = 0;
+        let colVidas = 1;
+
+        const firstRow = rows[0];
+        console.log('📋 Primeira linha:', firstRow);
+
+        // Verificar se a primeira linha é cabeçalho
+        const headerStr = firstRow.map(c => String(c).toLowerCase().trim()).join(' ');
+
+        if (headerStr.includes('unidade') || headerStr.includes('empresa') || headerStr.includes('nome') || 
+            headerStr.includes('func') || headerStr.includes('vidas') || headerStr.includes('qtd')) {
+            startRow = 1;
+            firstRow.forEach((cell, idx) => {
+                const cellStr = String(cell).toLowerCase().trim();
+                if (cellStr.includes('unidade') || cellStr.includes('empresa') || cellStr.includes('nome') || cellStr.includes('razao')) {
+                    colUnidade = idx;
+                    console.log(`📍 Coluna de unidade encontrada na posição ${idx}: "${cell}"`);
+                }
+                if (cellStr.includes('func') || cellStr.includes('vidas') || cellStr.includes('qtd') || 
+                    cellStr.includes('quant') || cellStr.includes('funcionario') || cellStr.includes('colaborador')) {
+                    colVidas = idx;
+                    console.log(`📍 Coluna de vidas encontrada na posição ${idx}: "${cell}"`);
+                }
+            });
+        }
+
+        console.log(`📊 Configuração: startRow=${startRow}, colUnidade=${colUnidade}, colVidas=${colVidas}`);
+
+        // Buscar todas as unidades uma vez para otimizar
+        const { data: todasUnidades, error: buscaUnidadesError } = await supabaseClient
+            .from('precos')
+            .select('id, unidade, razao_social');
+
+        if (buscaUnidadesError) {
+            throw new Error(`Erro ao buscar unidades: ${buscaUnidadesError.message}`);
+        }
+
+        console.log(`📋 ${todasUnidades.length} unidades encontradas no banco`);
+
+        // Criar mapa de unidades normalizadas
+        const mapaUnidades = {};
+        todasUnidades.forEach(u => {
+            const norm = normalizarUnidade(u.unidade);
+            if (!mapaUnidades[norm]) {
+                mapaUnidades[norm] = [];
+            }
+            mapaUnidades[norm].push(u);
+            
+            if (u.razao_social) {
+                const razaoNorm = normalizarUnidade(u.razao_social);
+                if (!mapaUnidades[razaoNorm]) {
+                    mapaUnidades[razaoNorm] = [];
+                }
+                mapaUnidades[razaoNorm].push(u);
+            }
+        });
+
+        console.log(`📋 ${Object.keys(mapaUnidades).length} chaves normalizadas`);
+
+        const resultados = [];
+        let atualizados = 0;
+        let naoEncontrados = 0;
+        let erros = 0;
+
+        for (let i = startRow; i < rows.length; i++) {
+            const row = rows[i];
+            if (!row || row.length === 0) continue;
+
+            const nomeUnidade = String(row[colUnidade] || '').trim();
+            const qtdVidasStr = String(row[colVidas] || '').replace(/[^0-9]/g, '').trim();
+            const qtdVidas = parseInt(qtdVidasStr);
+
+            console.log(`🔍 Linha ${i+1}: "${nomeUnidade}" -> ${qtdVidas} vidas`);
+
+            if (!nomeUnidade || isNaN(qtdVidas) || qtdVidas < 0) {
+                console.log(`⏭️ Linha ${i+1} ignorada (dados inválidos)`);
+                continue;
+            }
+
+            // Buscar a unidade pelo nome normalizado
+            const nomeNorm = normalizarUnidade(nomeUnidade);
+            let unidadeEncontrada = null;
+
+            // Buscar no mapa
+            if (mapaUnidades[nomeNorm]) {
+                unidadeEncontrada = mapaUnidades[nomeNorm][0];
+                console.log(`✅ Encontrada por nome normalizado: "${nomeUnidade}" -> "${unidadeEncontrada.unidade}"`);
+            }
+
+            // Se não encontrou, tentar busca parcial
+            if (!unidadeEncontrada) {
+                for (const [key, unidades] of Object.entries(mapaUnidades)) {
+                    if (key.includes(nomeNorm) || nomeNorm.includes(key)) {
+                        unidadeEncontrada = unidades[0];
+                        console.log(`✅ Encontrada por match parcial: "${nomeUnidade}" -> "${unidadeEncontrada.unidade}"`);
+                        break;
+                    }
+                }
+            }
+
+            if (!unidadeEncontrada) {
+                naoEncontrados++;
+                resultados.push(`❌ Unidade não encontrada: ${nomeUnidade}`);
+                console.log(`❌ Unidade não encontrada: ${nomeUnidade}`);
+                continue;
+            }
+
+            // Atualizar a quantidade de vidas
+            try {
+                const { error: updateError } = await supabaseClient
+                    .from('precos')
+                    .update({ qtd_vidas: qtdVidas })
+                    .eq('id', unidadeEncontrada.id);
+
+                if (updateError) {
+                    erros++;
+                    resultados.push(`❌ Erro ao atualizar ${unidadeEncontrada.unidade}: ${updateError.message}`);
+                    console.error(`❌ Erro ao atualizar ${unidadeEncontrada.unidade}:`, updateError);
+                } else {
+                    atualizados++;
+                    resultados.push(`✅ ${unidadeEncontrada.unidade}: ${qtdVidas} vidas`);
+                    console.log(`✅ ${unidadeEncontrada.unidade}: ${qtdVidas} vidas`);
+                }
+            } catch (err) {
+                erros++;
+                resultados.push(`❌ Erro ao atualizar ${unidadeEncontrada.unidade}: ${err.message}`);
+                console.error(`❌ Erro ao atualizar ${unidadeEncontrada.unidade}:`, err);
+            }
+        }
+
+        console.log(`📊 Resumo: ${atualizados} atualizados, ${naoEncontrados} não encontrados, ${erros} erros`);
+
+        // Exibir resultados
+        let html = `<div class="alert alert-info">
+            <strong>📊 Resumo da Atualização</strong><br>
+            ✅ Atualizados: ${atualizados}<br>
+            ⚠️ Não encontrados: ${naoEncontrados}<br>
+            ❌ Erros: ${erros}
+        </div>`;
+
+        if (resultados.length > 0) {
+            const maxResultados = 100;
+            const resultadosExibir = resultados.length > maxResultados ? 
+                resultados.slice(0, maxResultados) : resultados;
+            
+            html += `<div class="alert alert-secondary" style="max-height: 300px; overflow-y: auto; font-size: 0.85rem;">
+                <strong>Detalhes (${resultados.length} resultados):</strong>
+                <ul class="mb-0 mt-1" style="list-style: none; padding-left: 0;">
+                    ${resultadosExibir.map(r => `<li>${r}</li>`).join('')}
+                </ul>
+                ${resultados.length > maxResultados ? `<p class="text-muted mt-1">... e mais ${resultados.length - maxResultados} resultados</p>` : ''}
+            </div>`;
+        }
+
+        if (feedback) feedback.innerHTML = html;
+        if (status) status.innerHTML = `<span class="text-success">✅ Processamento concluído! ${atualizados} unidades atualizadas.</span>`;
+
+        // Recarregar tabela de preços
+        carregarPrecos();
+
+    } catch (err) {
+        console.error('❌ Erro ao processar planilha de vidas:', err);
+        if (status) status.innerHTML = `<span class="text-danger">❌ Erro: ${err.message}</span>`;
+        if (feedback) feedback.innerHTML = `<div class="alert alert-danger">${err.message}</div>`;
+    }
+}
+
+// ============================================================
+// ================ ATUALIZAR VALOR POR VIDA (HOLDING) ========
+// ============================================================
+
+async function carregarHoldingsParaAtualizacao() {
+    console.log('🔄 Carregando holdings...');
+    try {
+        const { data, error } = await supabaseClient
+            .from('precos')
+            .select('holding')
+            .order('holding');
+
+        if (error) throw error;
+
+        const holdings = [...new Set(data.map(item => item.holding).filter(Boolean))];
+        const select = document.getElementById('holdingSelect');
+
+        console.log(`📋 ${holdings.length} holdings encontradas:`, holdings);
+
+        if (select) {
+            select.innerHTML = '<option value="">Selecione uma holding...</option>';
+            holdings.forEach(h => {
+                const option = document.createElement('option');
+                option.value = h;
+                option.textContent = h;
+                select.appendChild(option);
+            });
+        }
+
+        return holdings;
+    } catch (err) {
+        console.error('❌ Erro ao carregar holdings:', err);
+        const select = document.getElementById('holdingSelect');
+        if (select) {
+            select.innerHTML = '<option value="">Erro ao carregar holdings</option>';
+        }
+        return [];
+    }
+}
+
+async function atualizarValorPorHolding() {
+    console.log('🔄 atualizarValorPorHolding chamada!');
+    
+    const holding = document.getElementById('holdingSelect')?.value;
+    const novoValor = parseFloat(document.getElementById('novoValorVidas')?.value);
+    const statusEl = document.getElementById('holdingUpdateStatus');
+    const btn = document.getElementById('atualizarVidasHoldingBtn');
+
+    console.log(`📊 Holding: "${holding}", Valor: ${novoValor}`);
+
+    if (!holding) {
+        if (statusEl) statusEl.innerHTML = '<span class="text-warning">⚠️ Selecione uma holding.</span>';
+        return;
+    }
+
+    if (isNaN(novoValor) || novoValor < 0) {
+        if (statusEl) statusEl.innerHTML = '<span class="text-warning">⚠️ Insira um valor válido (maior que 0).</span>';
+        return;
+    }
+
+    if (!confirm(`Deseja atualizar o valor por vida para R$ ${novoValor.toFixed(2)} em TODAS as unidades da holding "${holding}"?`)) {
+        return;
+    }
+
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Atualizando...';
+    }
+    if (statusEl) statusEl.innerHTML = '<span class="text-info">⏳ Buscando unidades da holding...</span>';
+
+    try {
+        // Buscar todas as unidades da holding
+        const { data: unidades, error: buscaError } = await supabaseClient
+            .from('precos')
+            .select('id, unidade, vidas, qtd_vidas')
+            .eq('holding', holding);
+
+        if (buscaError) throw buscaError;
+
+        if (!unidades || unidades.length === 0) {
+            if (statusEl) statusEl.innerHTML = `<span class="text-warning">⚠️ Nenhuma unidade encontrada para a holding "${holding}".</span>`;
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-sync me-1"></i> Atualizar';
+            }
+            return;
+        }
+
+        console.log(`📋 ${unidades.length} unidades encontradas para a holding "${holding}"`);
+
+        if (statusEl) statusEl.innerHTML = `<span class="text-info">⏳ Atualizando ${unidades.length} unidades...</span>`;
+
+        let atualizados = 0;
+        let erros = 0;
+        const detalhes = [];
+
+        for (const unidade of unidades) {
+            try {
+                const { error: updateError } = await supabaseClient
+                    .from('precos')
+                    .update({ vidas: novoValor })
+                    .eq('id', unidade.id);
+
+                if (updateError) {
+                    erros++;
+                    detalhes.push(`❌ ${unidade.unidade}: ${updateError.message}`);
+                    console.error(`❌ Erro ao atualizar ${unidade.unidade}:`, updateError);
+                } else {
+                    atualizados++;
+                    detalhes.push(`✅ ${unidade.unidade}: R$ ${novoValor.toFixed(2)} (${unidade.qtd_vidas || 0} vidas)`);
+                    console.log(`✅ ${unidade.unidade}: R$ ${novoValor.toFixed(2)}`);
+                }
+            } catch (err) {
+                erros++;
+                detalhes.push(`❌ ${unidade.unidade}: ${err.message}`);
+                console.error(`❌ Erro ao atualizar ${unidade.unidade}:`, err);
+            }
+        }
+
+        console.log(`📊 Resumo: ${atualizados} atualizados, ${erros} erros`);
+
+        let html = `<div class="alert alert-info">
+            <strong>📊 Resumo da Atualização</strong><br>
+            Holding: <strong>${holding}</strong><br>
+            Novo valor por vida: <strong>R$ ${novoValor.toFixed(2)}</strong><br>
+            ✅ Atualizados: ${atualizados}<br>
+            ❌ Erros: ${erros}
+        </div>`;
+
+        if (detalhes.length > 0 && detalhes.length <= 50) {
+            html += `<div class="alert alert-secondary" style="max-height: 200px; overflow-y: auto; font-size: 0.85rem;">
+                <strong>Detalhes:</strong>
+                <ul class="mb-0 mt-1" style="list-style: none; padding-left: 0;">
+                    ${detalhes.map(d => `<li>${d}</li>`).join('')}
+                </ul>
+            </div>`;
+        }
+
+        if (statusEl) statusEl.innerHTML = html;
+
+        // Recarregar tabela de preços
+        carregarPrecos();
+
+        // Mostrar alerta
+        mostrarAlerta(`✅ ${atualizados} unidades da holding "${holding}" atualizadas para R$ ${novoValor.toFixed(2)}`, 'success');
+
+    } catch (err) {
+        console.error('❌ Erro ao atualizar:', err);
+        if (statusEl) statusEl.innerHTML = `<span class="text-danger">❌ Erro: ${err.message}</span>`;
+        mostrarAlerta('Erro ao atualizar: ' + err.message, 'danger');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-sync me-1"></i> Atualizar';
+        }
+    }
+}
+
+// ============================================================
+// ================ INICIALIZAR NA ABA CADASTRO ===============
+// ============================================================
+
+// Garantir que as funções sejam executadas quando a aba for ativada
+const observerCadastro = new MutationObserver(function() {
+    const tabCadastro = document.getElementById('tab-cadastro');
+    if (tabCadastro && tabCadastro.classList.contains('active')) {
+        carregarHoldingsParaAtualizacao();
+    }
+});
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Verificar se a aba já está ativa
+    const tabCadastro = document.getElementById('tab-cadastro');
+    if (tabCadastro && tabCadastro.classList.contains('active')) {
+        setTimeout(carregarHoldingsParaAtualizacao, 500);
+    }
+
+    // Observer para quando a aba for ativada
+    const tabs = document.querySelectorAll('#mainTabs .nav-link');
+    tabs.forEach(tab => {
+        tab.addEventListener('shown.bs.tab', function(e) {
+            if (e.target.id === 'tab-cadastro') {
+                carregarHoldingsParaAtualizacao();
+            }
+        });
+    });
+});
