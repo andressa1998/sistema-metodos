@@ -1191,31 +1191,39 @@
               </div>
             </div>
             <div class="col-md-6">
-              <div class="card h-100">
-                <div class="card-header" style="background:#f59e0b; color:#fff;">
-                  <i class="fas fa-edit me-2"></i> Atualizar Valor por Vida (Holding)
-                </div>
-                <div class="card-body">
-                  <p class="text-muted">Selecione uma holding e defina o novo valor de <strong>Vidas (R$ por vida)</strong> para todas as unidades dessa holding.</p>
-                  <div class="d-flex gap-2 mb-2">
-                    <select id="holdingSelect" class="form-select flex-grow-1">
-                      <option value="">Carregando holdings...</option>
-                    </select>
-                    <button class="btn btn-outline-primary btn-sm" id="btnRecarregarHoldings" title="Recarregar lista de holdings">
-                      <i class="fas fa-sync"></i>
-                    </button>
-                  </div>
-                  <div class="input-group">
-                    <span class="input-group-text">R$</span>
-                    <input type="number" step="0.01" id="novoValorVidas" class="form-control" placeholder="Novo valor por vida" />
-                    <button class="btn btn-warning" id="atualizarVidasHoldingBtn">
-                      <i class="fas fa-sync me-1"></i> Atualizar
-                    </button>
-                  </div>
-                  <div id="holdingUpdateStatus" class="mt-2 fw-semibold small"></div>
-                </div>
-              </div>
+    <div class="card h-100">
+        <div class="card-header" style="background:#f59e0b; color:#fff;">
+            <i class="fas fa-edit me-2"></i> Atualizar por Holding
+        </div>
+        <div class="card-body">
+            <p class="text-muted">Selecione uma holding e defina os novos valores.</p>
+            <div class="d-flex gap-2 mb-2">
+                <select id="holdingSelect" class="form-select flex-grow-1">
+                    <option value="">Carregando holdings...</option>
+                </select>
+                <button class="btn btn-outline-primary btn-sm" id="btnRecarregarHoldings" title="Recarregar lista">
+                    <i class="fas fa-sync"></i>
+                </button>
             </div>
+            <div class="row g-2">
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold">Valor por Vida (R$)</label>
+                    <input type="number" step="0.01" id="novoValorVidas" class="form-control" placeholder="Opcional" />
+                    <small class="text-muted">Deixe em branco para não alterar</small>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold">Dia de Vencimento</label>
+                    <input type="number" id="novoDiaVencimento" class="form-control" placeholder="Opcional (1-31)" min="1" max="31" />
+                    <small class="text-muted">Deixe em branco para não alterar</small>
+                </div>
+            </div>
+            <button class="btn btn-warning w-100 mt-3" id="atualizarVidasHoldingBtn">
+                <i class="fas fa-sync me-1"></i> Atualizar Holding
+            </button>
+            <div id="holdingUpdateStatus" class="mt-2 fw-semibold small"></div>
+        </div>
+    </div>
+</div>
           </div>
 
           <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4 mt-4">
@@ -1238,12 +1246,12 @@
                 <table class="table table-modern" id="precosTable">
                   <thead>
                     <tr>
-                      <th>Grupo</th><th>Holding</th><th>Unidade</th>
-                      <th>Razão Social</th><th>CNPJ</th>
-                      <th class="text-end">Exame Clínico</th>
+                      <th>Grupo</th>
+                      <th>Holding</th>
+                      <th>Unidade</th>
+                      <th>Razão Social</th>
+                      <th>CNPJ</th>
                       <th class="text-end">Mensalidade</th>
-                      <th class="text-end">Vidas (R$)</th>
-                      <th class="text-end">Qtd Vidas</th>
                       <th class="text-center">Ações</th>
                     </tr>
                   </thead>

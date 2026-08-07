@@ -3374,135 +3374,143 @@ async function criarTodasOSLote() {
   }, 2000);
 }
 
-// ========================= GERAR DESCRIÇÃO RESUMIDA =========================
 function gerarDescricaoResumida(detalhes, mes, ano, unidade, valorTotal) {
-  let descricao = '';
-  let itens = [];
-  
-  if (detalhes.mensalidade) {
-    const mens = detalhes.mensalidade;
-    const valor = mens.precoUnitario || 0;
-    itens.push(`MENSALIDADE: R$ ${valor.toFixed(2)}`);
-  }
-  
-  if (detalhes['vidas (NR-1)']) {
-    const vidas = detalhes['vidas (NR-1)'];
-    const qtd = vidas.quantidade || 0;
-    const valor = vidas.precoUnitario || 0;
-    itens.push(`VIDAS NR-1: ${qtd} x R$ ${valor.toFixed(2)} = R$ ${(qtd * valor).toFixed(2)}`);
-  }
-  
-  const nomesExames = {
-    'exame_clinico': 'EXAME CLINICO',
-    'audiometria': 'AUDIOMETRIA',
-    'acuidade_visual': 'ACUIDADE VISUAL',
-    'eletrocardiograma': 'ECG',
-    'eletroencefalograma': 'EEG',
-    'espirometria': 'ESPIROMETRIA',
-    'raio_x_torax': 'RAIO X TORAX',
-    'hemograma': 'HEMOGRAMA',
-    'anti_hbs': 'ANTI HBS',
-    'anti_hcv': 'ANTI HCV',
-    'anti_hbs_ag': 'ANTI HBS AG',
-    'vdrl': 'VDRL',
-    'coprocultura': 'COPROCULTURA',
-    'parasitologico': 'PARASITOLOGICO',
-    'gama_gt': 'GAMA GT',
-    'glicose': 'GLICOSE',
-    'pesquisa_fungos': 'PESQUISA FUNGOS',
-    'dinamometria': 'DINAMOMETRIA',
-    'visita_tec': 'VISITA TECNICA',
-    'transporte': 'TRANSPORTE'
-  };
-  
-  const exames = ['exame_clinico', 'audiometria', 'acuidade_visual', 'eletrocardiograma', 
-                  'eletroencefalograma', 'espirometria', 'raio_x_torax', 'hemograma',
-                  'anti_hbs', 'anti_hcv', 'anti_hbs_ag', 'vdrl', 'coprocultura',
-                  'parasitologico', 'gama_gt', 'glicose', 'pesquisa_fungos', 
-                  'dinamometria', 'visita_tec', 'transporte'];
-  
-  for (const exame of exames) {
-    if (detalhes[exame]) {
-      const info = detalhes[exame];
-      const qtd = info.quantidade || 0;
-      const valor = info.precoUnitario || 0;
-      const subtotal = qtd * valor;
-      if (qtd > 0 && valor > 0) {
-        const nome = nomesExames[exame] || exame.toUpperCase();
-        itens.push(`${nome} - ${qtd} x ${valor} = R$${subtotal.toFixed(2)}`);
-      }
-    }
-  }
-  
-  if (itens.length === 0) {
-    descricao = `Faturamento ${mes}/${ano} - ${unidade}`;
-  } else {
-    descricao = itens.join('\n');
-  }
-  
-  if (descricao.length > 120) {
-    console.log(`📝 Descrição original: ${descricao.length} caracteres`);
+    let itens = [];
+    let todosNomes = [];
     
-    let resumo = '';
-    let totalExames = 0;
-    let totalValor = 0;
-    let temMensalidade = false;
-    let temVidas = false;
-    let qtdVidas = 0;
-    let valorVidas = 0;
-    
+    // Mensalidade
     if (detalhes.mensalidade) {
-      temMensalidade = true;
-      totalValor += detalhes.mensalidade.precoUnitario || 0;
+        const valor = detalhes.mensalidade.precoUnitario || 0;
+        itens.push(`MENSALIDADE: R$ ${valor.toFixed(2)}`);
     }
     
+    // Vidas
     if (detalhes['vidas (NR-1)']) {
-      temVidas = true;
-      qtdVidas = detalhes['vidas (NR-1)'].quantidade || 0;
-      valorVidas = detalhes['vidas (NR-1)'].precoUnitario || 0;
-      totalValor += qtdVidas * valorVidas;
+        const vidas = detalhes['vidas (NR-1)'];
+        const qtd = vidas.quantidade || 0;
+        const valor = vidas.precoUnitario || 0;
+        itens.push(`VIDAS NR-1: ${qtd} x R$ ${valor.toFixed(2)} = R$ ${(qtd * valor).toFixed(2)}`);
     }
+    
+    // Exames - incluir nomes dos colaboradores
+    const nomesExames = {
+        'exame_clinico': 'EXAME CLINICO',
+        'audiometria': 'AUDIOMETRIA',
+        'acuidade_visual': 'ACUIDADE VISUAL',
+        'eletrocardiograma': 'ECG',
+        'eletroencefalograma': 'EEG',
+        'espirometria': 'ESPIROMETRIA',
+        'raio_x_torax': 'RAIO X TORAX',
+        'hemograma': 'HEMOGRAMA',
+        'anti_hbs': 'ANTI HBS',
+        'anti_hcv': 'ANTI HCV',
+        'anti_hbs_ag': 'ANTI HBS AG',
+        'vdrl': 'VDRL',
+        'coprocultura': 'COPROCULTURA',
+        'parasitologico': 'PARASITOLOGICO',
+        'gama_gt': 'GAMA GT',
+        'glicose': 'GLICOSE',
+        'pesquisa_fungos': 'PESQUISA FUNGOS',
+        'dinamometria': 'DINAMOMETRIA',
+        'visita_tec': 'VISITA TECNICA',
+        'transporte': 'TRANSPORTE'
+    };
+    
+    const exames = ['exame_clinico', 'audiometria', 'acuidade_visual', 'eletrocardiograma', 
+                    'eletroencefalograma', 'espirometria', 'raio_x_torax', 'hemograma',
+                    'anti_hbs', 'anti_hcv', 'anti_hbs_ag', 'vdrl', 'coprocultura',
+                    'parasitologico', 'gama_gt', 'glicose', 'pesquisa_fungos', 
+                    'dinamometria', 'visita_tec', 'transporte'];
     
     for (const exame of exames) {
-      if (detalhes[exame]) {
-        const qtd = detalhes[exame].quantidade || 0;
-        totalExames += qtd;
-        totalValor += qtd * (detalhes[exame].precoUnitario || 0);
-      }
+        if (detalhes[exame]) {
+            const info = detalhes[exame];
+            const qtd = info.quantidade || 0;
+            const valor = info.precoUnitario || 0;
+            const subtotal = qtd * valor;
+            const funcionarios = info.funcionarios || [];
+            
+            if (qtd > 0 && valor > 0) {
+                const nome = nomesExames[exame] || exame.toUpperCase();
+                let item = `${nome} - ${qtd} x R$ ${valor.toFixed(2)} = R$ ${subtotal.toFixed(2)}`;
+                
+                // ADICIONAR NOMES DOS COLABORADORES
+                if (funcionarios.length > 0) {
+                    const nomes = funcionarios.map(f => f.nome).filter(n => n && n !== 'N/A');
+                    if (nomes.length > 0) {
+                        item += ` (${nomes.join(', ')})`;
+                        todosNomes = todosNomes.concat(nomes);
+                    }
+                }
+                itens.push(item);
+            }
+        }
     }
     
-    let partes = [];
-    if (temMensalidade) {
-      partes.push(`Mensalidade R$ ${(detalhes.mensalidade.precoUnitario || 0).toFixed(2)}`);
-    }
-    if (temVidas) {
-      partes.push(`${qtdVidas} vidas R$ ${(qtdVidas * valorVidas).toFixed(2)}`);
-    }
-    if (totalExames > 0) {
-      partes.push(`${totalExames} exames`);
+    let descricao = itens.length > 0 ? itens.join('\n') : `Faturamento ${mes}/${ano} - ${unidade}`;
+    
+    // Se ultrapassar 120 caracteres, otimizar mantendo alguns nomes
+    if (descricao.length > 120) {
+        let resumo = '';
+        let totalExames = 0;
+        let totalValor = 0;
+        let temMensalidade = false;
+        let temVidas = false;
+        let qtdVidas = 0;
+        let valorVidas = 0;
+        
+        if (detalhes.mensalidade) {
+            temMensalidade = true;
+            totalValor += detalhes.mensalidade.precoUnitario || 0;
+        }
+        
+        if (detalhes['vidas (NR-1)']) {
+            temVidas = true;
+            qtdVidas = detalhes['vidas (NR-1)'].quantidade || 0;
+            valorVidas = detalhes['vidas (NR-1)'].precoUnitario || 0;
+            totalValor += qtdVidas * valorVidas;
+        }
+        
+        for (const exame of exames) {
+            if (detalhes[exame]) {
+                const qtd = detalhes[exame].quantidade || 0;
+                totalExames += qtd;
+                totalValor += qtd * (detalhes[exame].precoUnitario || 0);
+            }
+        }
+        
+        let partes = [];
+        if (temMensalidade) {
+            partes.push(`Mensalidade R$ ${(detalhes.mensalidade.precoUnitario || 0).toFixed(2)}`);
+        }
+        if (temVidas) {
+            partes.push(`${qtdVidas} vidas R$ ${(qtdVidas * valorVidas).toFixed(2)}`);
+        }
+        if (totalExames > 0) {
+            partes.push(`${totalExames} exames`);
+        }
+        
+        // Adicionar nomes no resumo (máximo 3 nomes)
+        if (todosNomes.length > 0) {
+            const nomesUnicos = [...new Set(todosNomes)];
+            const nomesStr = nomesUnicos.slice(0, 3).join(', ');
+            if (nomesUnicos.length > 3) {
+                partes.push(`Colabs: ${nomesStr} +${nomesUnicos.length - 3}`);
+            } else {
+                partes.push(`Colabs: ${nomesStr}`);
+            }
+        }
+        
+        resumo = `FAT ${mes}/${ano}: ${partes.join(' | ')}. Total: R$ ${totalValor.toFixed(2)}`;
+        
+        if (resumo.length > 120) {
+            resumo = resumo.substring(0, 117) + '...';
+        }
+        
+        return resumo;
     }
     
-    if (partes.length > 0) {
-      resumo = `FAT ${mes}/${ano}: ${partes.join(' | ')}. Total: R$ ${totalValor.toFixed(2)}`;
-    } else {
-      resumo = `Faturamento ${mes}/${ano} - ${unidade}`;
-    }
-    
-    if (resumo.length > 120) {
-      resumo = `FAT ${mes}/${ano}: ${partes.slice(0, 3).join(' | ')}. Total: R$ ${totalValor.toFixed(2)}`;
-    }
-    
-    if (resumo.length > 120) {
-      resumo = resumo.substring(0, 117) + '...';
-    }
-    
-    console.log(`📝 Descrição resumida: ${resumo.length} caracteres`);
-    console.log(`   ${resumo}`);
-    
-    return resumo;
-  }
-  
-  return descricao;
+    return descricao;
 }
 
 // ========================= CONSULTAR STATUS DA NFS-e COM DETALHES =========================
@@ -3750,7 +3758,7 @@ async function carregarRelatorio(mes = 0, ano = 0, filtroUnidade = '', status = 
     let queryPrecos = supabaseClient.from('precos').select('unidade, holding, grupo');
     
     if (filtroHolding) {
-      queryPrecos = queryPrecos.ilike('holding', `%${filtroHolding}%`);
+      queryPrecos = queryPrecos.eq('holding', filtroHolding);
     }
     if (filtroGrupo) {
       queryPrecos = queryPrecos.ilike('grupo', `%${filtroGrupo}%`);
@@ -4888,19 +4896,72 @@ async function carregarGraficos(ano = 0) {
 }
 
 // ========================= FUNÇÕES DE CRUD PREÇOS =========================
-let precosDataGlobal = [];
+let termoBuscaPrecos = ''; // Guarda o termo de busca atual
+let precosDataGlobal = []; // Dados originais
 
+// Função para carregar preços (mantém o filtro)
 async function carregarPrecos() {
-  const { data, error } = await supabaseClient
-    .from('precos')
-    .select('*')
-    .order('unidade', { ascending: true });
-  if (error) {
-    mostrarAlerta('Erro ao carregar preços: ' + error.message, 'danger');
-    return;
-  }
-  precosDataGlobal = data || [];
-  renderizarTabelaPrecos(precosDataGlobal);
+    console.log('🔄 Carregando preços...');
+    
+    const { data, error } = await supabaseClient
+        .from('precos')
+        .select('*')
+        .order('unidade', { ascending: true });
+    
+    if (error) {
+        mostrarAlerta('Erro ao carregar preços: ' + error.message, 'danger');
+        return;
+    }
+    
+    precosDataGlobal = data || [];
+    
+    // Se tiver termo de busca, aplicar o filtro
+    if (termoBuscaPrecos) {
+        const filtrados = aplicarFiltroPrecosData(precosDataGlobal, termoBuscaPrecos);
+        renderizarTabelaPrecos(filtrados);
+        console.log(`📋 Filtro ativo: "${termoBuscaPrecos}" - ${filtrados.length} resultados`);
+    } else {
+        renderizarTabelaPrecos(precosDataGlobal);
+        console.log(`📋 ${precosDataGlobal.length} registros carregados`);
+    }
+}
+
+// Função para filtrar os dados
+function aplicarFiltroPrecosData(dados, termo) {
+    if (!termo) return dados;
+    
+    const termoLower = termo.toLowerCase();
+    return dados.filter(item => {
+        const grupo = (item.grupo || '').toLowerCase();
+        const holding = (item.holding || '').toLowerCase();
+        const unidade = (item.unidade || '').toLowerCase();
+        const razao = (item.razao_social || '').toLowerCase();
+        const cnpj = (item.cnpj || '').replace(/\D/g, '');
+        return grupo.includes(termoLower) || 
+               holding.includes(termoLower) || 
+               unidade.includes(termoLower) || 
+               razao.includes(termoLower) || 
+               cnpj.includes(termoLower);
+    });
+}
+
+// Função para aplicar filtro e renderizar
+function aplicarFiltroPrecos(termo) {
+    termoBuscaPrecos = termo || '';
+    
+    const searchInput = document.getElementById('searchPreco');
+    if (searchInput) {
+        searchInput.value = termoBuscaPrecos;
+    }
+    
+    if (termoBuscaPrecos) {
+        const filtrados = aplicarFiltroPrecosData(precosDataGlobal, termoBuscaPrecos);
+        renderizarTabelaPrecos(filtrados);
+        console.log(`🔍 Filtro aplicado: "${termoBuscaPrecos}" - ${filtrados.length} resultados`);
+    } else {
+        renderizarTabelaPrecos(precosDataGlobal);
+        console.log(`📋 ${precosDataGlobal.length} registros exibidos`);
+    }
 }
 
 function renderizarTabelaPrecos(dados) {
@@ -4915,10 +4976,9 @@ function renderizarTabelaPrecos(dados) {
       <td>${row.grupo || ''}</td>
       <td>${row.holding || ''}</td>
       <td><strong>${row.unidade}</strong></td>
+      <td>${row.razao_social || ''}</td>
       <td>${row.cnpj || ''}</td>
-      <td class="text-end">${row.exame_clinico ? 'R$ ' + row.exame_clinico.toFixed(2) : ''}</td>
       <td class="text-end">${row.mensalidade ? 'R$ ' + row.mensalidade.toFixed(2) : ''}</td>
-      <td class="text-end">${row.vidas || ''}</td>
       <td class="text-center">
         <button class="btn btn-sm btn-soft-primary btn-edit" data-id="${row.id}"><i class="fas fa-edit"></i></button>
         <button class="btn btn-sm btn-soft-danger btn-delete" data-id="${row.id}"><i class="fas fa-trash"></i></button>
@@ -4942,48 +5002,50 @@ function renderizarTabelaPrecos(dados) {
 }
 
 async function salvarPreco(dados) {
-  const id = dados.id;
-  const payload = { ...dados };
-  delete payload.id;
-  
-  Object.keys(payload).forEach(key => {
-    if (payload[key] === null || payload[key] === undefined || payload[key] === '') {
-      delete payload[key];
+    const id = dados.id;
+    const payload = { ...dados };
+    delete payload.id;
+    
+    Object.keys(payload).forEach(key => {
+        if (payload[key] === null || payload[key] === undefined || payload[key] === '') {
+            delete payload[key];
+        }
+    });
+    
+    let result;
+    if (id) {
+        result = await supabaseClient
+            .from('precos')
+            .update(payload)
+            .eq('id', id);
+    } else {
+        result = await supabaseClient
+            .from('precos')
+            .insert([payload]);
     }
-  });
-  
-  console.log('📤 PAYLOAD:', payload);
-  
-  let result;
-  if (id) {
-    result = await supabaseClient
-      .from('precos')
-      .update(payload)
-      .eq('id', id);
-  } else {
-    result = await supabaseClient
-      .from('precos')
-      .insert([payload]);
-  }
-  
-  if (result.error) {
-    throw new Error(result.error.message + (result.error.details ? ' - ' + result.error.details : ''));
-  }
-  
-  return result;
+    
+    if (result.error) {
+        throw new Error(result.error.message + (result.error.details ? ' - ' + result.error.details : ''));
+    }
+    
+    // Recarregar e manter o filtro
+    await carregarPrecos();
+    return result;
 }
 
 async function excluirPreco(id) {
-  const { error } = await supabaseClient
-    .from('precos')
-    .delete()
-    .eq('id', id);
-  if (error) {
-    mostrarAlerta('Erro ao excluir: ' + error.message, 'danger');
-  } else {
-    mostrarAlerta('Registro excluído com sucesso!', 'success');
-    carregarPrecos();
-  }
+    const { error } = await supabaseClient
+        .from('precos')
+        .delete()
+        .eq('id', id);
+    
+    if (error) {
+        mostrarAlerta('Erro ao excluir: ' + error.message, 'danger');
+    } else {
+        mostrarAlerta('Registro excluído com sucesso!', 'success');
+        // Recarregar mantendo o filtro
+        await carregarPrecos();
+    }
 }
 
 function preencherFormulario(dados) {
@@ -5070,19 +5132,37 @@ function lerFormulario() {
 }
 
 async function editarPreco(id) {
-  const { data, error } = await supabaseClient
-    .from('precos')
-    .select('*')
-    .eq('id', id)
-    .single();
-  if (error) {
-    mostrarAlerta('Erro ao carregar dados para edição: ' + error.message, 'danger');
-    return;
-  }
-  preencherFormulario(data);
-  document.getElementById('precoModalLabel').textContent = 'Editar Preços';
-  const modal = new bootstrap.Modal(document.getElementById('precoModal'));
-  modal.show();
+    const { data, error } = await supabaseClient
+        .from('precos')
+        .select('*')
+        .eq('id', id)
+        .single();
+    
+    if (error) {
+        mostrarAlerta('Erro ao carregar dados para edição: ' + error.message, 'danger');
+        return;
+    }
+    
+    preencherFormulario(data);
+    document.getElementById('precoModalLabel').textContent = 'Editar Preços';
+    
+    // Guardar o termo de busca atual
+    const searchInput = document.getElementById('searchPreco');
+    const termoAtual = searchInput ? searchInput.value.trim() : '';
+    
+    const modal = new bootstrap.Modal(document.getElementById('precoModal'));
+    modal.show();
+    
+    // Quando o modal fechar, restaurar o filtro
+    modal._element.addEventListener('hidden.bs.modal', function() {
+        if (termoAtual) {
+            setTimeout(() => {
+                aplicarFiltroPrecos(termoAtual);
+            }, 100);
+        } else {
+            setTimeout(carregarPrecos, 100);
+        }
+    }, { once: true });
 }
 
 // ========================= FUNÇÕES AUXILIARES DE STATUS =========================
@@ -6170,56 +6250,65 @@ async function carregarHoldingsParaAtualizacao() {
 }
 
 async function atualizarValorPorHolding() {
-    console.log('🔄 atualizarValorPorHolding chamada!');
+    console.log('🔄 Atualizando holding...');
     
     const holding = document.getElementById('holdingSelect')?.value;
-    const novoValor = parseFloat(document.getElementById('novoValorVidas')?.value);
+    const novoValor = document.getElementById('novoValorVidas')?.value;
+    const novoDiaVencimento = document.getElementById('novoDiaVencimento')?.value;
     const statusEl = document.getElementById('holdingUpdateStatus');
     const btn = document.getElementById('atualizarVidasHoldingBtn');
-
-    console.log(`📊 Holding: "${holding}", Valor: ${novoValor}`);
 
     if (!holding) {
         if (statusEl) statusEl.innerHTML = '<span class="text-warning">⚠️ Selecione uma holding.</span>';
         return;
     }
 
-    if (isNaN(novoValor) || novoValor < 0) {
-        if (statusEl) statusEl.innerHTML = '<span class="text-warning">⚠️ Insira um valor válido (maior que 0).</span>';
+    // Converter valores (pode ser vazio)
+    const valorNum = novoValor !== '' ? parseFloat(novoValor) : null;
+    const diaNum = novoDiaVencimento !== '' ? parseInt(novoDiaVencimento) : null;
+
+    // Validar se pelo menos um foi preenchido
+    if (valorNum === null && diaNum === null) {
+        if (statusEl) statusEl.innerHTML = '<span class="text-warning">⚠️ Preencha pelo menos um campo (Valor ou Dia de Vencimento).</span>';
         return;
     }
 
-    if (!confirm(`Deseja atualizar o valor por vida para R$ ${novoValor.toFixed(2)} em TODAS as unidades da holding "${holding}"?`)) {
+    // Validar valor se preenchido
+    if (valorNum !== null && (isNaN(valorNum) || valorNum < 0)) {
+        if (statusEl) statusEl.innerHTML = '<span class="text-warning">⚠️ Valor inválido para Vidas.</span>';
         return;
     }
 
-    if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Atualizando...';
+    // Validar dia se preenchido
+    if (diaNum !== null && (isNaN(diaNum) || diaNum < 1 || diaNum > 31)) {
+        if (statusEl) statusEl.innerHTML = '<span class="text-warning">⚠️ Dia de vencimento inválido (1 a 31).</span>';
+        return;
     }
-    if (statusEl) statusEl.innerHTML = '<span class="text-info">⏳ Buscando unidades da holding...</span>';
+
+    let mensagem = `Deseja atualizar na holding "${holding}":\n`;
+    if (valorNum !== null) mensagem += `- Valor por vida: R$ ${valorNum.toFixed(2)}\n`;
+    if (diaNum !== null) mensagem += `- Dia de vencimento: ${diaNum}\n`;
+    
+    if (!confirm(mensagem)) return;
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Atualizando...';
+    if (statusEl) statusEl.innerHTML = '<span class="text-info">⏳ Buscando unidades...</span>';
 
     try {
-        // Buscar todas as unidades da holding
         const { data: unidades, error: buscaError } = await supabaseClient
             .from('precos')
-            .select('id, unidade, vidas, qtd_vidas')
+            .select('id, unidade, vidas, qtd_vidas, dia_vencimento')
             .eq('holding', holding);
 
         if (buscaError) throw buscaError;
 
         if (!unidades || unidades.length === 0) {
-            if (statusEl) statusEl.innerHTML = `<span class="text-warning">⚠️ Nenhuma unidade encontrada para a holding "${holding}".</span>`;
-            if (btn) {
-                btn.disabled = false;
-                btn.innerHTML = '<i class="fas fa-sync me-1"></i> Atualizar';
-            }
+            if (statusEl) statusEl.innerHTML = `<span class="text-warning">⚠️ Nenhuma unidade encontrada para "${holding}".</span>`;
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-sync me-1"></i> Atualizar';
             return;
         }
-
-        console.log(`📋 ${unidades.length} unidades encontradas para a holding "${holding}"`);
-
-        if (statusEl) statusEl.innerHTML = `<span class="text-info">⏳ Atualizando ${unidades.length} unidades...</span>`;
 
         let atualizados = 0;
         let erros = 0;
@@ -6227,65 +6316,84 @@ async function atualizarValorPorHolding() {
 
         for (const unidade of unidades) {
             try {
+                const updateData = {};
+                if (valorNum !== null) updateData.vidas = valorNum;
+                if (diaNum !== null) updateData.dia_vencimento = diaNum;
+                
                 const { error: updateError } = await supabaseClient
                     .from('precos')
-                    .update({ vidas: novoValor })
+                    .update(updateData)
                     .eq('id', unidade.id);
 
                 if (updateError) {
                     erros++;
                     detalhes.push(`❌ ${unidade.unidade}: ${updateError.message}`);
-                    console.error(`❌ Erro ao atualizar ${unidade.unidade}:`, updateError);
                 } else {
                     atualizados++;
-                    detalhes.push(`✅ ${unidade.unidade}: R$ ${novoValor.toFixed(2)} (${unidade.qtd_vidas || 0} vidas)`);
-                    console.log(`✅ ${unidade.unidade}: R$ ${novoValor.toFixed(2)}`);
+                    let msg = `✅ ${unidade.unidade}`;
+                    if (valorNum !== null) msg += `: R$ ${valorNum.toFixed(2)}`;
+                    if (diaNum !== null) msg += ` (dia ${diaNum})`;
+                    detalhes.push(msg);
                 }
             } catch (err) {
                 erros++;
                 detalhes.push(`❌ ${unidade.unidade}: ${err.message}`);
-                console.error(`❌ Erro ao atualizar ${unidade.unidade}:`, err);
             }
         }
 
-        console.log(`📊 Resumo: ${atualizados} atualizados, ${erros} erros`);
-
         let html = `<div class="alert alert-info">
-            <strong>📊 Resumo da Atualização</strong><br>
+            <strong>📊 Resumo</strong><br>
             Holding: <strong>${holding}</strong><br>
-            Novo valor por vida: <strong>R$ ${novoValor.toFixed(2)}</strong><br>
+            ${valorNum !== null ? `Valor por vida: <strong>R$ ${valorNum.toFixed(2)}</strong><br>` : ''}
+            ${diaNum !== null ? `Dia vencimento: <strong>${diaNum}</strong><br>` : ''}
             ✅ Atualizados: ${atualizados}<br>
             ❌ Erros: ${erros}
         </div>`;
 
-        if (detalhes.length > 0 && detalhes.length <= 50) {
-            html += `<div class="alert alert-secondary" style="max-height: 200px; overflow-y: auto; font-size: 0.85rem;">
-                <strong>Detalhes:</strong>
-                <ul class="mb-0 mt-1" style="list-style: none; padding-left: 0;">
-                    ${detalhes.map(d => `<li>${d}</li>`).join('')}
-                </ul>
+        if (detalhes.length > 0 && detalhes.length <= 30) {
+            html += `<div style="max-height:150px;overflow-y:auto;font-size:0.85rem;">
+                <ul class="mb-0">${detalhes.map(d => `<li>${d}</li>`).join('')}</ul>
             </div>`;
         }
 
         if (statusEl) statusEl.innerHTML = html;
-
-        // Recarregar tabela de preços
         carregarPrecos();
-
-        // Mostrar alerta
-        mostrarAlerta(`✅ ${atualizados} unidades da holding "${holding}" atualizadas para R$ ${novoValor.toFixed(2)}`, 'success');
+        mostrarAlerta(`✅ ${atualizados} unidades da holding "${holding}" atualizadas!`, 'success');
 
     } catch (err) {
-        console.error('❌ Erro ao atualizar:', err);
+        console.error('❌ Erro:', err);
         if (statusEl) statusEl.innerHTML = `<span class="text-danger">❌ Erro: ${err.message}</span>`;
-        mostrarAlerta('Erro ao atualizar: ' + err.message, 'danger');
     } finally {
-        if (btn) {
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-sync me-1"></i> Atualizar';
-        }
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-sync me-1"></i> Atualizar';
     }
 }
+
+// ============================================================
+// INICIALIZAR FILTRO DE PREÇOS
+// ============================================================
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Configurar o input de busca
+    const searchInput = document.getElementById('searchPreco');
+    if (searchInput) {
+        // Remover event listeners antigos
+        const newSearch = searchInput.cloneNode(true);
+        searchInput.parentNode.replaceChild(newSearch, searchInput);
+        
+        // Adicionar novo listener
+        newSearch.addEventListener('input', function() {
+            const termo = this.value.trim();
+            aplicarFiltroPrecos(termo);
+        });
+        
+        // Se já tiver valor, aplicar
+        if (newSearch.value.trim()) {
+            termoBuscaPrecos = newSearch.value.trim();
+            setTimeout(() => carregarPrecos(), 100);
+        }
+    }
+});
 
 // ============================================================
 // ================ INICIALIZAR NA ABA CADASTRO ===============
