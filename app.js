@@ -4904,43 +4904,41 @@ async function carregarPrecos() {
 }
 
 function renderizarTabelaPrecos(dados) {
-    const tbody = document.getElementById('precosBody');
-    if (!dados || dados.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="10" class="text-center text-muted py-4">Nenhum registro encontrado</td></tr>`;
-        return;
-    }
-    let html = '';
-    dados.forEach(row => {
-        html += `<tr>
-            <td>${row.grupo || ''}</td>
-            <td>${row.holding || ''}</td>
-            <td><strong>${row.unidade}</strong></td>
-            <td>${row.razao_social || ''}</td>
-            <td>${row.cnpj || ''}</td>
-            <td class="text-end">${row.exame_clinico ? 'R$ ' + row.exame_clinico.toFixed(2) : ''}</td>
-            <td class="text-end">${row.mensalidade ? 'R$ ' + row.mensalidade.toFixed(2) : ''}</td>
-            <td class="text-end">${row.vidas ? 'R$ ' + row.vidas.toFixed(2) : ''}</td>
-            <td class="text-end">${row.qtd_vidas || 0}</td>
-            <td class="text-center">
-                <button class="btn btn-sm btn-soft-primary btn-edit" data-id="${row.id}"><i class="fas fa-edit"></i></button>
-                <button class="btn btn-sm btn-soft-danger btn-delete" data-id="${row.id}"><i class="fas fa-trash"></i></button>
-            </td>
-        </tr>`;
-    });
-    tbody.innerHTML = html;
+  const tbody = document.getElementById('precosBody');
+  if (!dados || dados.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-4">Nenhum registro encontrado</td></tr>`;
+    return;
+  }
+  let html = '';
+  dados.forEach(row => {
+    html += `<tr>
+      <td>${row.grupo || ''}</td>
+      <td>${row.holding || ''}</td>
+      <td><strong>${row.unidade}</strong></td>
+      <td>${row.cnpj || ''}</td>
+      <td class="text-end">${row.exame_clinico ? 'R$ ' + row.exame_clinico.toFixed(2) : ''}</td>
+      <td class="text-end">${row.mensalidade ? 'R$ ' + row.mensalidade.toFixed(2) : ''}</td>
+      <td class="text-end">${row.vidas || ''}</td>
+      <td class="text-center">
+        <button class="btn btn-sm btn-soft-primary btn-edit" data-id="${row.id}"><i class="fas fa-edit"></i></button>
+        <button class="btn btn-sm btn-soft-danger btn-delete" data-id="${row.id}"><i class="fas fa-trash"></i></button>
+      </td>
+    </tr>`;
+  });
+  tbody.innerHTML = html;
 
-    document.querySelectorAll('.btn-edit').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const id = parseInt(btn.dataset.id);
-            editarPreco(id);
-        });
+  document.querySelectorAll('.btn-edit').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = parseInt(btn.dataset.id);
+      editarPreco(id);
     });
-    document.querySelectorAll('.btn-delete').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const id = parseInt(btn.dataset.id);
-            if (confirm('Deseja realmente excluir este registro?')) excluirPreco(id);
-        });
+  });
+  document.querySelectorAll('.btn-delete').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = parseInt(btn.dataset.id);
+      if (confirm('Deseja realmente excluir este registro?')) excluirPreco(id);
     });
+  });
 }
 
 async function salvarPreco(dados) {
@@ -5872,6 +5870,453 @@ function handleColumnFilterClick(e) {
     setFilterColuna(coluna, valor);
 }
 
+// ============================================================
+// ================ ATUALIZAR QUANTIDADE DE VIDAS ==============
+// ============================================================
+
+// Garantir que o evento seja anexado corretamente
+document.addEventListener('DOMContentLoaded', function() {
+    // Botão de atualizar vidas
+    const processVidasBtn = document.getElementById('processUploadVidasBtn');
+    if (processVidasBtn) {
+        processVidasBtn.addEventListener('click', processarPlanilhaVidas);
+        console.log('✅ Evento processUploadVidasBtn registrado');
+    } else {
+        console.warn('⚠️ Botão processUploadVidasBtn não encontrado');
+    }
+
+    // Botão de recarregar holdings
+    const reloadHoldingsBtn = document.getElementById('btnRecarregarHoldings');
+    if (reloadHoldingsBtn) {
+        reloadHoldingsBtn.addEventListener('click', function() {
+            const select = document.getElementById('holdingSelect');
+            if (select) {
+                select.innerHTML = '<option value="">Carregando...</option>';
+                carregarHoldingsParaAtualizacao();
+            }
+        });
+    }
+
+    // Botão de atualizar valor por holding
+    const updateHoldingBtn = document.getElementById('atualizarVidasHoldingBtn');
+    if (updateHoldingBtn) {
+        updateHoldingBtn.addEventListener('click', atualizarValorPorHolding);
+        console.log('✅ Evento atualizarVidasHoldingBtn registrado');
+    }
+
+    // Carregar holdings quando a aba for aberta
+    const tabCadastro = document.getElementById('tab-cadastro');
+    if (tabCadastro) {
+        tabCadastro.addEventListener('shown.bs.tab', function() {
+            carregarHoldingsParaAtualizacao();
+        });
+    }
+
+    // Carregar holdings inicialmente
+    setTimeout(carregarHoldingsParaAtualizacao, 1500);
+});
+
+// Função para processar a planilha de vidas
+async function processarPlanilhaVidas() {
+    console.log('🔄 processarPlanilhaVidas chamada!');
+    
+    const fileInput = document.getElementById('uploadVidasInput');
+    const status = document.getElementById('uploadVidasStatus');
+    const feedback = document.getElementById('uploadVidasFeedback');
+
+    console.log('📁 FileInput:', fileInput);
+    console.log('📁 Files:', fileInput?.files);
+
+    if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+        if (status) status.innerHTML = '<span class="text-warning">⚠️ Selecione um arquivo.</span>';
+        console.warn('⚠️ Nenhum arquivo selecionado');
+        return;
+    }
+
+    const file = fileInput.files[0];
+    console.log('📄 Arquivo selecionado:', file.name, file.size, 'bytes');
+
+    if (status) status.innerHTML = '<span class="text-info">⏳ Processando planilha...</span>';
+    if (feedback) feedback.innerHTML = '';
+
+    try {
+        const data = await file.arrayBuffer();
+        console.log('📊 Arquivo lido, tamanho:', data.byteLength);
+        
+        const workbook = XLSX.read(data, { type: 'array' });
+        console.log('📚 Workbook lido, sheets:', workbook.SheetNames);
+        
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+
+        console.log('📋 Primeiras 5 linhas:', jsonData.slice(0, 5));
+
+        // Filtrar linhas vazias
+        const rows = jsonData.filter(row => row.some(cell => cell !== '' && cell !== undefined && cell !== null));
+
+        if (rows.length === 0) {
+            throw new Error('A planilha está vazia.');
+        }
+
+        console.log(`📋 ${rows.length} linhas com dados`);
+
+        // Detectar cabeçalho e colunas
+        let startRow = 0;
+        let colUnidade = 0;
+        let colVidas = 1;
+
+        const firstRow = rows[0];
+        console.log('📋 Primeira linha:', firstRow);
+
+        // Verificar se a primeira linha é cabeçalho
+        const headerStr = firstRow.map(c => String(c).toLowerCase().trim()).join(' ');
+
+        if (headerStr.includes('unidade') || headerStr.includes('empresa') || headerStr.includes('nome') || 
+            headerStr.includes('func') || headerStr.includes('vidas') || headerStr.includes('qtd')) {
+            startRow = 1;
+            firstRow.forEach((cell, idx) => {
+                const cellStr = String(cell).toLowerCase().trim();
+                if (cellStr.includes('unidade') || cellStr.includes('empresa') || cellStr.includes('nome') || cellStr.includes('razao')) {
+                    colUnidade = idx;
+                    console.log(`📍 Coluna de unidade encontrada na posição ${idx}: "${cell}"`);
+                }
+                if (cellStr.includes('func') || cellStr.includes('vidas') || cellStr.includes('qtd') || 
+                    cellStr.includes('quant') || cellStr.includes('funcionario') || cellStr.includes('colaborador')) {
+                    colVidas = idx;
+                    console.log(`📍 Coluna de vidas encontrada na posição ${idx}: "${cell}"`);
+                }
+            });
+        }
+
+        console.log(`📊 Configuração: startRow=${startRow}, colUnidade=${colUnidade}, colVidas=${colVidas}`);
+
+        // Buscar todas as unidades uma vez para otimizar
+        const { data: todasUnidades, error: buscaUnidadesError } = await supabaseClient
+            .from('precos')
+            .select('id, unidade, razao_social');
+
+        if (buscaUnidadesError) {
+            throw new Error(`Erro ao buscar unidades: ${buscaUnidadesError.message}`);
+        }
+
+        console.log(`📋 ${todasUnidades.length} unidades encontradas no banco`);
+
+        // Criar mapa de unidades normalizadas
+        const mapaUnidades = {};
+        todasUnidades.forEach(u => {
+            const norm = normalizarUnidade(u.unidade);
+            if (!mapaUnidades[norm]) {
+                mapaUnidades[norm] = [];
+            }
+            mapaUnidades[norm].push(u);
+            
+            if (u.razao_social) {
+                const razaoNorm = normalizarUnidade(u.razao_social);
+                if (!mapaUnidades[razaoNorm]) {
+                    mapaUnidades[razaoNorm] = [];
+                }
+                mapaUnidades[razaoNorm].push(u);
+            }
+        });
+
+        console.log(`📋 ${Object.keys(mapaUnidades).length} chaves normalizadas`);
+
+        const resultados = [];
+        let atualizados = 0;
+        let naoEncontrados = 0;
+        let erros = 0;
+
+        for (let i = startRow; i < rows.length; i++) {
+            const row = rows[i];
+            if (!row || row.length === 0) continue;
+
+            const nomeUnidade = String(row[colUnidade] || '').trim();
+            const qtdVidasStr = String(row[colVidas] || '').replace(/[^0-9]/g, '').trim();
+            const qtdVidas = parseInt(qtdVidasStr);
+
+            console.log(`🔍 Linha ${i+1}: "${nomeUnidade}" -> ${qtdVidas} vidas`);
+
+            if (!nomeUnidade || isNaN(qtdVidas) || qtdVidas < 0) {
+                console.log(`⏭️ Linha ${i+1} ignorada (dados inválidos)`);
+                continue;
+            }
+
+            // Buscar a unidade pelo nome normalizado
+            const nomeNorm = normalizarUnidade(nomeUnidade);
+            let unidadeEncontrada = null;
+
+            // Buscar no mapa
+            if (mapaUnidades[nomeNorm]) {
+                unidadeEncontrada = mapaUnidades[nomeNorm][0];
+                console.log(`✅ Encontrada por nome normalizado: "${nomeUnidade}" -> "${unidadeEncontrada.unidade}"`);
+            }
+
+            // Se não encontrou, tentar busca parcial
+            if (!unidadeEncontrada) {
+                for (const [key, unidades] of Object.entries(mapaUnidades)) {
+                    if (key.includes(nomeNorm) || nomeNorm.includes(key)) {
+                        unidadeEncontrada = unidades[0];
+                        console.log(`✅ Encontrada por match parcial: "${nomeUnidade}" -> "${unidadeEncontrada.unidade}"`);
+                        break;
+                    }
+                }
+            }
+
+            if (!unidadeEncontrada) {
+                naoEncontrados++;
+                resultados.push(`❌ Unidade não encontrada: ${nomeUnidade}`);
+                console.log(`❌ Unidade não encontrada: ${nomeUnidade}`);
+                continue;
+            }
+
+            // Atualizar a quantidade de vidas
+            try {
+                const { error: updateError } = await supabaseClient
+                    .from('precos')
+                    .update({ qtd_vidas: qtdVidas })
+                    .eq('id', unidadeEncontrada.id);
+
+                if (updateError) {
+                    erros++;
+                    resultados.push(`❌ Erro ao atualizar ${unidadeEncontrada.unidade}: ${updateError.message}`);
+                    console.error(`❌ Erro ao atualizar ${unidadeEncontrada.unidade}:`, updateError);
+                } else {
+                    atualizados++;
+                    resultados.push(`✅ ${unidadeEncontrada.unidade}: ${qtdVidas} vidas`);
+                    console.log(`✅ ${unidadeEncontrada.unidade}: ${qtdVidas} vidas`);
+                }
+            } catch (err) {
+                erros++;
+                resultados.push(`❌ Erro ao atualizar ${unidadeEncontrada.unidade}: ${err.message}`);
+                console.error(`❌ Erro ao atualizar ${unidadeEncontrada.unidade}:`, err);
+            }
+        }
+
+        console.log(`📊 Resumo: ${atualizados} atualizados, ${naoEncontrados} não encontrados, ${erros} erros`);
+
+        // Exibir resultados
+        let html = `<div class="alert alert-info">
+            <strong>📊 Resumo da Atualização</strong><br>
+            ✅ Atualizados: ${atualizados}<br>
+            ⚠️ Não encontrados: ${naoEncontrados}<br>
+            ❌ Erros: ${erros}
+        </div>`;
+
+        if (resultados.length > 0) {
+            const maxResultados = 100;
+            const resultadosExibir = resultados.length > maxResultados ? 
+                resultados.slice(0, maxResultados) : resultados;
+            
+            html += `<div class="alert alert-secondary" style="max-height: 300px; overflow-y: auto; font-size: 0.85rem;">
+                <strong>Detalhes (${resultados.length} resultados):</strong>
+                <ul class="mb-0 mt-1" style="list-style: none; padding-left: 0;">
+                    ${resultadosExibir.map(r => `<li>${r}</li>`).join('')}
+                </ul>
+                ${resultados.length > maxResultados ? `<p class="text-muted mt-1">... e mais ${resultados.length - maxResultados} resultados</p>` : ''}
+            </div>`;
+        }
+
+        if (feedback) feedback.innerHTML = html;
+        if (status) status.innerHTML = `<span class="text-success">✅ Processamento concluído! ${atualizados} unidades atualizadas.</span>`;
+
+        // Recarregar tabela de preços
+        carregarPrecos();
+
+    } catch (err) {
+        console.error('❌ Erro ao processar planilha de vidas:', err);
+        if (status) status.innerHTML = `<span class="text-danger">❌ Erro: ${err.message}</span>`;
+        if (feedback) feedback.innerHTML = `<div class="alert alert-danger">${err.message}</div>`;
+    }
+}
+
+// ============================================================
+// ================ ATUALIZAR VALOR POR VIDA (HOLDING) ========
+// ============================================================
+
+async function carregarHoldingsParaAtualizacao() {
+    console.log('🔄 Carregando holdings...');
+    try {
+        const { data, error } = await supabaseClient
+            .from('precos')
+            .select('holding')
+            .order('holding');
+
+        if (error) throw error;
+
+        const holdings = [...new Set(data.map(item => item.holding).filter(Boolean))];
+        const select = document.getElementById('holdingSelect');
+
+        console.log(`📋 ${holdings.length} holdings encontradas:`, holdings);
+
+        if (select) {
+            select.innerHTML = '<option value="">Selecione uma holding...</option>';
+            holdings.forEach(h => {
+                const option = document.createElement('option');
+                option.value = h;
+                option.textContent = h;
+                select.appendChild(option);
+            });
+        }
+
+        return holdings;
+    } catch (err) {
+        console.error('❌ Erro ao carregar holdings:', err);
+        const select = document.getElementById('holdingSelect');
+        if (select) {
+            select.innerHTML = '<option value="">Erro ao carregar holdings</option>';
+        }
+        return [];
+    }
+}
+
+async function atualizarValorPorHolding() {
+    console.log('🔄 atualizarValorPorHolding chamada!');
+    
+    const holding = document.getElementById('holdingSelect')?.value;
+    const novoValor = parseFloat(document.getElementById('novoValorVidas')?.value);
+    const statusEl = document.getElementById('holdingUpdateStatus');
+    const btn = document.getElementById('atualizarVidasHoldingBtn');
+
+    console.log(`📊 Holding: "${holding}", Valor: ${novoValor}`);
+
+    if (!holding) {
+        if (statusEl) statusEl.innerHTML = '<span class="text-warning">⚠️ Selecione uma holding.</span>';
+        return;
+    }
+
+    if (isNaN(novoValor) || novoValor < 0) {
+        if (statusEl) statusEl.innerHTML = '<span class="text-warning">⚠️ Insira um valor válido (maior que 0).</span>';
+        return;
+    }
+
+    if (!confirm(`Deseja atualizar o valor por vida para R$ ${novoValor.toFixed(2)} em TODAS as unidades da holding "${holding}"?`)) {
+        return;
+    }
+
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Atualizando...';
+    }
+    if (statusEl) statusEl.innerHTML = '<span class="text-info">⏳ Buscando unidades da holding...</span>';
+
+    try {
+        // Buscar todas as unidades da holding
+        const { data: unidades, error: buscaError } = await supabaseClient
+            .from('precos')
+            .select('id, unidade, vidas, qtd_vidas')
+            .eq('holding', holding);
+
+        if (buscaError) throw buscaError;
+
+        if (!unidades || unidades.length === 0) {
+            if (statusEl) statusEl.innerHTML = `<span class="text-warning">⚠️ Nenhuma unidade encontrada para a holding "${holding}".</span>`;
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-sync me-1"></i> Atualizar';
+            }
+            return;
+        }
+
+        console.log(`📋 ${unidades.length} unidades encontradas para a holding "${holding}"`);
+
+        if (statusEl) statusEl.innerHTML = `<span class="text-info">⏳ Atualizando ${unidades.length} unidades...</span>`;
+
+        let atualizados = 0;
+        let erros = 0;
+        const detalhes = [];
+
+        for (const unidade of unidades) {
+            try {
+                const { error: updateError } = await supabaseClient
+                    .from('precos')
+                    .update({ vidas: novoValor })
+                    .eq('id', unidade.id);
+
+                if (updateError) {
+                    erros++;
+                    detalhes.push(`❌ ${unidade.unidade}: ${updateError.message}`);
+                    console.error(`❌ Erro ao atualizar ${unidade.unidade}:`, updateError);
+                } else {
+                    atualizados++;
+                    detalhes.push(`✅ ${unidade.unidade}: R$ ${novoValor.toFixed(2)} (${unidade.qtd_vidas || 0} vidas)`);
+                    console.log(`✅ ${unidade.unidade}: R$ ${novoValor.toFixed(2)}`);
+                }
+            } catch (err) {
+                erros++;
+                detalhes.push(`❌ ${unidade.unidade}: ${err.message}`);
+                console.error(`❌ Erro ao atualizar ${unidade.unidade}:`, err);
+            }
+        }
+
+        console.log(`📊 Resumo: ${atualizados} atualizados, ${erros} erros`);
+
+        let html = `<div class="alert alert-info">
+            <strong>📊 Resumo da Atualização</strong><br>
+            Holding: <strong>${holding}</strong><br>
+            Novo valor por vida: <strong>R$ ${novoValor.toFixed(2)}</strong><br>
+            ✅ Atualizados: ${atualizados}<br>
+            ❌ Erros: ${erros}
+        </div>`;
+
+        if (detalhes.length > 0 && detalhes.length <= 50) {
+            html += `<div class="alert alert-secondary" style="max-height: 200px; overflow-y: auto; font-size: 0.85rem;">
+                <strong>Detalhes:</strong>
+                <ul class="mb-0 mt-1" style="list-style: none; padding-left: 0;">
+                    ${detalhes.map(d => `<li>${d}</li>`).join('')}
+                </ul>
+            </div>`;
+        }
+
+        if (statusEl) statusEl.innerHTML = html;
+
+        // Recarregar tabela de preços
+        carregarPrecos();
+
+        // Mostrar alerta
+        mostrarAlerta(`✅ ${atualizados} unidades da holding "${holding}" atualizadas para R$ ${novoValor.toFixed(2)}`, 'success');
+
+    } catch (err) {
+        console.error('❌ Erro ao atualizar:', err);
+        if (statusEl) statusEl.innerHTML = `<span class="text-danger">❌ Erro: ${err.message}</span>`;
+        mostrarAlerta('Erro ao atualizar: ' + err.message, 'danger');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-sync me-1"></i> Atualizar';
+        }
+    }
+}
+
+// ============================================================
+// ================ INICIALIZAR NA ABA CADASTRO ===============
+// ============================================================
+
+// Garantir que as funções sejam executadas quando a aba for ativada
+const observerCadastro = new MutationObserver(function() {
+    const tabCadastro = document.getElementById('tab-cadastro');
+    if (tabCadastro && tabCadastro.classList.contains('active')) {
+        carregarHoldingsParaAtualizacao();
+    }
+});
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Verificar se a aba já está ativa
+    const tabCadastro = document.getElementById('tab-cadastro');
+    if (tabCadastro && tabCadastro.classList.contains('active')) {
+        setTimeout(carregarHoldingsParaAtualizacao, 500);
+    }
+
+    // Observer para quando a aba for ativada
+    const tabs = document.querySelectorAll('#mainTabs .nav-link');
+    tabs.forEach(tab => {
+        tab.addEventListener('shown.bs.tab', function(e) {
+            if (e.target.id === 'tab-cadastro') {
+                carregarHoldingsParaAtualizacao();
+            }
+        });
+    });
+});
+
 function popularAnosBoletos() {
     const select = document.getElementById('boletoFiltroAno');
     if (!select) return;
@@ -6698,10 +7143,7 @@ let eventosData = [];
 let paginaAtualEventos = 1;
 let registrosPorPaginaEventos = 25;
 
-// ============================================================
-// MOSTRAR PÁGINA E-SOCIAL
-// ============================================================
-
+// ========================= MOSTRAR PÁGINA E-SOCIAL =========================
 function mostrarPaginaESocial(user) {
     console.log('📱 Abrindo página E-Social...');
     
@@ -6721,12 +7163,13 @@ function mostrarPaginaESocial(user) {
         document.getElementById('userEmailESocial').textContent = user.email;
     }
     
-    initESocial();
+    // Chamar a inicialização do módulo e-Social (agora definida em esocial.js)
+    if (typeof initESocial === 'function') {
+        initESocial();
+    } else {
+        console.error('❌ Função initESocial não encontrada! Verifique se o arquivo esocial.js foi carregado.');
+    }
 }
-
-// ============================================================
-// INICIAR E-SOCIAL
-// ============================================================
 
 // ============================================================
 // INICIAR E-SOCIAL
@@ -6735,55 +7178,23 @@ function mostrarPaginaESocial(user) {
 function initESocial() {
     console.log('🚀 Inicializando módulo e-Social...');
     
-    // ============================================================
-    // CARREGAR DADOS INICIAIS
-    // ============================================================
-    
     carregarEmpresasESocial();
     carregarEventosESocial();
     carregarEstatisticasESocial();
     carregarCertificadoAtivoESocial();
     
-    // ============================================================
-    // FILTROS
-    // ============================================================
-    
     document.getElementById('btnAplicarFiltrosEventos')?.addEventListener('click', aplicarFiltrosESocial);
     document.getElementById('btnLimparFiltrosEventos')?.addEventListener('click', limparFiltrosESocial);
-    
-    // ============================================================
-    // NOVO EVENTO
-    // ============================================================
-    
     document.getElementById('btnNovoEvento')?.addEventListener('click', abrirModalNovoEventoESocial);
     document.getElementById('btnSalvarEvento')?.addEventListener('click', salvarEventoESocial);
-    document.getElementById('eventoTipo')?.addEventListener('change', carregarCamposDinamicosESocial);
-    document.getElementById('eventoEmpresa')?.addEventListener('change', carregarFuncionariosESocial);
-    
-    // ============================================================
-    // CERTIFICADO
-    // ============================================================
-    
     document.getElementById('btnUploadCertificado')?.addEventListener('click', uploadCertificadoESocial);
     document.getElementById('btnTestarCertificado')?.addEventListener('click', testarCertificadoESocial);
-    
-    // ============================================================
-    // AÇÕES EM MASSA
-    // ============================================================
-    
     document.getElementById('btnSyncSOC')?.addEventListener('click', sincronizarSOCESocial);
     document.getElementById('btnProcessarLote')?.addEventListener('click', processarLoteESocial);
     document.getElementById('btnCopiarXML')?.addEventListener('click', copiarXMLEsocial);
     
-    // ============================================================
-    // 🔥 UPLOAD PLANILHA E-SOCIAL (NOVO)
-    // ============================================================
-    
-    document.getElementById('btnProcessarESocialPlanilha')?.addEventListener('click', processarPlanilhaESocial);
-    
-    // ============================================================
-    // NAVEGAÇÃO - VOLTAR E LOGOUT
-    // ============================================================
+    document.getElementById('eventoTipo')?.addEventListener('change', carregarCamposDinamicosESocial);
+    document.getElementById('eventoEmpresa')?.addEventListener('change', carregarFuncionariosESocial);
     
     document.getElementById('btnVoltarMenuESocial')?.addEventListener('click', function() {
         supabaseClient.auth.getUser().then(({ data }) => {
@@ -7717,758 +8128,6 @@ async function processarLoteESocial() {
     } catch (error) {
         console.error('❌ Erro ao processar lote:', error);
         mostrarAlerta('Erro ao processar lote: ' + error.message, 'danger');
-    }
-}
-
-// ============================================================
-// PROCESSAR PLANILHA E-SOCIAL (VERSÃO COMPLETA CORRIGIDA)
-// ============================================================
-
-async function processarPlanilhaESocial() {
-    const fileInput = document.getElementById('uploadESocialFileInput');
-    const statusEl = document.getElementById('uploadESocialStatus');
-    const feedbackEl = document.getElementById('uploadESocialFeedback');
-    const progressEl = document.getElementById('uploadESocialProgress');
-    const progressBar = progressEl?.querySelector('.progress-bar');
-    const tipoEvento = document.getElementById('uploadESocialTipo')?.value || 'S-2200';
-    const ambiente = document.getElementById('uploadESocialAmbiente')?.value || 'homologacao';
-
-    if (!fileInput.files || fileInput.files.length === 0) {
-        statusEl.innerHTML = '<span class="text-warning">⚠️ Selecione um arquivo.</span>';
-        return;
-    }
-
-    statusEl.innerHTML = '<span class="text-info">📤 Processando planilha...</span>';
-    feedbackEl.innerHTML = '';
-    progressEl.style.display = 'block';
-    progressBar.style.width = '0%';
-    progressBar.textContent = '0%';
-
-    try {
-        const data = await fileInput.files[0].arrayBuffer();
-        const workbook = XLSX.read(data, { 
-            type: 'array',
-            cellDates: true,
-            cellNF: false,
-            cellText: false,
-            raw: true
-        });
-        
-        const sheetName = workbook.SheetNames[0];
-        const sheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(sheet, { 
-            defval: '',
-            raw: true,
-            header: 1
-        });
-
-        const rows = jsonData.filter(row => row.some(cell => cell !== '' && cell !== undefined && cell !== null));
-
-        if (rows.length === 0) {
-            throw new Error('A planilha está vazia.');
-        }
-
-        // Encontrar cabeçalho
-        let headerRowIndex = -1;
-        let headerMap = {};
-
-        for (let i = 0; i < rows.length; i++) {
-            const row = rows[i];
-            if (!row || row.length === 0) continue;
-            
-            const rowStr = row.map(c => String(c).toLowerCase().trim());
-            
-            const temKeyword = rowStr.some(cell => 
-                cell.includes('funcionário') || 
-                cell.includes('funcionario') || 
-                cell.includes('colaborador') ||
-                cell.includes('cpf') ||
-                cell.includes('data') ||
-                cell.includes('unidade') ||
-                cell.includes('empresa')
-            );
-            
-            if (temKeyword) {
-                headerRowIndex = i;
-                const headers = rowStr;
-                headerMap = {
-                    empresa: -1,
-                    unidade: -1,
-                    funcionario: -1,
-                    cpf: -1,
-                    dataExame: -1,
-                    tipo: -1
-                };
-
-                headers.forEach((header, idx) => {
-                    if (!header) return;
-                    const h = header.toLowerCase();
-                    if (h.includes('empresa') || h.includes('razao')) headerMap.empresa = idx;
-                    if (h.includes('unidade') || h.includes('filial')) headerMap.unidade = idx;
-                    if (h.includes('funcionário') || h.includes('funcionario') || h.includes('colaborador') || h.includes('nome')) headerMap.funcionario = idx;
-                    if (h.includes('cpf')) headerMap.cpf = idx;
-                    if (h.includes('data') || h.includes('exame')) headerMap.dataExame = idx;
-                    if (h.includes('tipo')) headerMap.tipo = idx;
-                });
-
-                const essenciais = ['funcionario', 'cpf', 'unidade'];
-                const encontradas = essenciais.filter(k => headerMap[k] !== -1);
-                
-                if (encontradas.length >= 2) {
-                    console.log('✅ Cabeçalho encontrado na linha', i);
-                    console.log('📋 Mapeamento:', headerMap);
-                    break;
-                }
-            }
-        }
-
-        if (headerRowIndex === -1) {
-            headerRowIndex = 0;
-            const headers = rows[0].map(h => String(h).toLowerCase().trim());
-            headerMap = {
-                empresa: headers.findIndex(h => h.includes('empresa')),
-                unidade: headers.findIndex(h => h.includes('unidade')),
-                funcionario: headers.findIndex(h => h.includes('funcionário') || h.includes('funcionario') || h.includes('colaborador')),
-                cpf: headers.findIndex(h => h.includes('cpf')),
-                dataExame: headers.findIndex(h => h.includes('data') || h.includes('exame')),
-                tipo: headers.findIndex(h => h.includes('tipo'))
-            };
-            
-            if (headerMap.funcionario === -1) headerMap.funcionario = 2;
-            if (headerMap.cpf === -1) headerMap.cpf = 3;
-            if (headerMap.unidade === -1) headerMap.unidade = 1;
-        }
-
-        // Extrair dados
-        const dataRows = rows.slice(headerRowIndex + 1);
-        
-        const grupos = {};
-        const erros = [];
-        const duplicados = new Set();
-
-        progressBar.style.width = '20%';
-        progressBar.textContent = '20%';
-
-        for (let i = 0; i < dataRows.length; i++) {
-            const row = dataRows[i];
-            if (!row || row.length === 0) continue;
-
-            const hasData = row.some(cell => cell !== '' && cell !== undefined && cell !== null);
-            if (!hasData) continue;
-
-            const nome = String(row[headerMap.funcionario] || '').trim();
-            const cpf = String(row[headerMap.cpf] || '').replace(/\D/g, '').trim();
-            const unidade = String(row[headerMap.unidade] || '').trim();
-            const empresa = headerMap.empresa !== -1 ? String(row[headerMap.empresa] || '').trim() : unidade;
-            const dataExame = headerMap.dataExame !== -1 ? String(row[headerMap.dataExame] || '').trim() : '';
-            const tipo = headerMap.tipo !== -1 ? String(row[headerMap.tipo] || '').trim() : 'Admissional';
-
-            // 🔥 IGNORAR DADOS INCOMPLETOS - não adicionar ao array de erros
-            if (!nome || !cpf || !unidade) {
-                continue;  // Pular silenciosamente
-            }
-
-            const chave = `${cpf}-${unidade}`;
-            if (duplicados.has(chave)) {
-                // 🔥 ADICIONAR APENAS ERROS DE CPF DUPLICADO
-                erros.push({ 
-                    linha: i + 2, 
-                    motivo: 'CPF duplicado para mesma unidade', 
-                    nome, 
-                    cpf, 
-                    unidade 
-                });
-                continue;
-            }
-            duplicados.add(chave);
-
-            const infoUnidade = await buscarInfoUnidade(unidade);
-
-            if (!grupos[unidade]) {
-                grupos[unidade] = {
-                    unidade: unidade,
-                    empresa: empresa,
-                    cnpj: infoUnidade?.cnpj || null,
-                    holding: infoUnidade?.holding || 'N/A',
-                    funcionarios: []
-                };
-            }
-
-            grupos[unidade].funcionarios.push({
-                nome,
-                cpf,
-                dataExame,
-                tipo,
-                linha: i + 2
-            });
-
-            const percentual = 20 + ((i + 1) / dataRows.length * 30);
-            progressBar.style.width = `${Math.min(percentual, 50)}%`;
-            progressBar.textContent = `${Math.round(Math.min(percentual, 50))}%`;
-        }
-
-        progressBar.style.width = '50%';
-        progressBar.textContent = '50%';
-
-        // 🔥 RENDERIZAR VISUALIZAÇÃO COM FILTRO DE ERROS
-        const visualizacaoHtml = renderizarVisualizacaoAgrupada(grupos, erros);
-        feedbackEl.innerHTML = visualizacaoHtml;
-
-        const totalFuncionarios = Object.values(grupos).reduce((acc, g) => acc + g.funcionarios.length, 0);
-        
-        if (totalFuncionarios === 0) {
-            statusEl.innerHTML = '<span class="text-warning">⚠️ Nenhum funcionário encontrado na planilha.</span>';
-            progressEl.style.display = 'none';
-            return;
-        }
-
-        // Verificar se há grupos com CNPJ
-        const gruposComCnpj = Object.values(grupos).filter(g => g.cnpj);
-        
-        if (gruposComCnpj.length === 0) {
-            statusEl.innerHTML = '<span class="text-warning">⚠️ Nenhuma unidade com CNPJ válido.</span>';
-            progressEl.style.display = 'none';
-            
-            // Adicionar botão fechar nos alerts
-            document.querySelectorAll('#uploadESocialFeedback .alert .btn-close').forEach(btn => {
-                btn.addEventListener('click', function() {
-                    this.closest('.alert').remove();
-                });
-            });
-            return;
-        }
-
-        statusEl.innerHTML = `
-            <span class="text-success">✅ ${Object.keys(grupos).length} unidades e ${totalFuncionarios} funcionários encontrados!</span>
-        `;
-
-        // 🔥 BOTÃO PROCESSAR
-        const btnProcessar = document.createElement('button');
-        btnProcessar.className = 'btn btn-success mt-3';
-        btnProcessar.innerHTML = `<i class="fas fa-play me-1"></i> Processar ${totalFuncionarios} funcionários`;
-        btnProcessar.onclick = async function() {
-            this.disabled = true;
-            this.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Processando...';
-            await processarFuncionariosAgrupados(grupos, tipoEvento, ambiente);
-            this.disabled = false;
-            this.innerHTML = '<i class="fas fa-check me-1"></i> Concluído!';
-        };
-        
-        feedbackEl.appendChild(btnProcessar);
-
-        // 🔥 ADICIONAR FUNCIONALIDADE DE FECHAR NOS ALERTS
-        document.querySelectorAll('#uploadESocialFeedback .alert .btn-close').forEach(btn => {
-            btn.addEventListener('click', function() {
-                this.closest('.alert').remove();
-            });
-        });
-
-        progressEl.style.display = 'none';
-
-    } catch (error) {
-        console.error('❌ Erro ao processar planilha:', error);
-        statusEl.innerHTML = `<span class="text-danger">❌ Erro: ${error.message}</span>`;
-        feedbackEl.innerHTML = `<div class="alert alert-danger">${error.message}</div>`;
-        progressEl.style.display = 'none';
-    }
-}
-
-// ============================================================
-// RENDERIZAR VISUALIZAÇÃO AGRUPADA (COM BOTÃO FECHAR)
-// ============================================================
-
-function renderizarVisualizacaoAgrupada(grupos, erros) {
-    let html = '';
-
-    // 🔥 FILTRAR APENAS ERROS DE CPF DUPLICADO (ignorar dados incompletos)
-    const errosFiltrados = erros.filter(e => e.motivo === 'CPF duplicado para mesma unidade');
-
-    // Se houver erros de CPF duplicado, mostrar com botão fechar
-    if (errosFiltrados && errosFiltrados.length > 0) {
-        html += `
-            <div class="alert alert-danger alert-dismissible fade show" role="alert" style="border-radius: 12px;">
-                <strong>⚠️ CPF duplicado encontrado:</strong>
-                <ul class="mb-0 mt-1">
-                    ${errosFiltrados.map(e => `<li>Linha ${e.linha}: ${e.nome} (${e.cpf}) - ${e.unidade}</li>`).join('')}
-                </ul>
-                <small class="d-block mt-1">Corrija os CPFs duplicados na planilha e tente novamente.</small>
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar" style="position: absolute; right: 16px; top: 16px;"></button>
-            </div>
-        `;
-    }
-
-    // Ordenar grupos por holding
-    const gruposOrdenados = Object.values(grupos).sort((a, b) => {
-        if (a.holding < b.holding) return -1;
-        if (a.holding > b.holding) return 1;
-        return a.unidade.localeCompare(b.unidade);
-    });
-
-    // Verificar unidades sem CNPJ
-    const semCnpj = gruposOrdenados.filter(g => !g.cnpj);
-    if (semCnpj.length > 0) {
-        html += `
-            <div class="alert alert-warning alert-dismissible fade show" role="alert" style="border-radius: 12px;">
-                <strong>⚠️ Unidades sem CNPJ cadastrado:</strong>
-                <ul class="mb-0 mt-1">
-                    ${semCnpj.map(g => `<li>${g.unidade} - ${g.funcionarios.length} funcionário(s)</li>`).join('')}
-                </ul>
-                <small class="d-block mt-1">Cadastre as unidades na aba "Cadastro de Unidades" antes de processar.</small>
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar" style="position: absolute; right: 16px; top: 16px;"></button>
-            </div>
-        `;
-    }
-
-    // Mostrar apenas grupos com CNPJ ou que têm funcionários
-    const gruposComCnpj = gruposOrdenados.filter(g => g.cnpj);
-
-    if (gruposComCnpj.length === 0) {
-        // Se não houver grupos com CNPJ, mostrar mensagem
-        const totalFuncionarios = gruposOrdenados.reduce((acc, g) => acc + g.funcionarios.length, 0);
-        if (totalFuncionarios > 0) {
-            html += `
-                <div class="alert alert-info alert-dismissible fade show" role="alert" style="border-radius: 12px;">
-                    ⚠️ Nenhuma unidade com CNPJ válido encontrada. 
-                    ${semCnpj.length > 0 ? `Encontradas ${semCnpj.length} unidades sem CNPJ.` : ''}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar" style="position: absolute; right: 16px; top: 16px;"></button>
-                </div>
-            `;
-        }
-        return html;
-    }
-
-    // 🔥 RENDERIZAR CADA GRUPO
-    html += `
-        <div class="card-modern card">
-            <div class="card-header" style="background: #f8fafc; border-bottom: 2px solid #213b7c;">
-                <span style="font-weight: 700; color: #213b7c;">
-                    <i class="fas fa-building me-2"></i> 
-                    Resumo por Unidade
-                    <span class="badge bg-primary ms-2">${gruposComCnpj.reduce((acc, g) => acc + g.funcionarios.length, 0)} funcionários</span>
-                </span>
-            </div>
-            <div class="card-body p-0">
-    `;
-
-    for (const grupo of gruposComCnpj) {
-        const coresHolding = {
-            'Métodos': 'primary',
-            'DOP': 'success',
-            'Eficaz': 'info',
-            'Exata': 'warning',
-            'VMK': 'danger',
-            'WL': 'secondary'
-        };
-        const corHolding = coresHolding[grupo.holding] || 'secondary';
-
-        html += `
-            <div class="p-3 border-bottom" style="border-color: #e9ecef !important;">
-                <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
-                    <div>
-                        <span class="badge bg-${corHolding} me-2" style="font-size: 0.9rem; padding: 6px 14px;">
-                            <i class="fas fa-tag me-1"></i> ${grupo.holding}
-                        </span>
-                        <strong style="font-size: 1.1rem;">${grupo.unidade}</strong>
-                    </div>
-                    <div>
-                        <span class="badge bg-primary me-2" style="font-size: 0.8rem; padding: 6px 12px;">
-                            <i class="fas fa-users me-1"></i> ${grupo.funcionarios.length} funcionários
-                        </span>
-                        <span class="badge bg-success" style="font-size: 0.8rem; padding: 6px 12px;">
-                            <i class="fas fa-building me-1"></i> ${grupo.cnpj || 'SEM CNPJ'}
-                        </span>
-                    </div>
-                </div>
-                
-                <div class="table-responsive">
-                    <table class="table table-sm table-hover mb-0" style="font-size: 0.85rem;">
-                        <thead style="background: #f8fafc;">
-                            <tr>
-                                <th>Funcionário</th>
-                                <th>CPF</th>
-                                <th>Data do Exame</th>
-                                <th>Tipo</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-        `;
-
-        for (const func of grupo.funcionarios) {
-            const tipoBadge = func.tipo.toLowerCase() === 'admissional' ? 'success' :
-                              func.tipo.toLowerCase() === 'demissional' ? 'danger' :
-                              func.tipo.toLowerCase() === 'periódico' ? 'info' : 'secondary';
-
-            html += `
-                <tr>
-                    <td><strong>${func.nome}</strong></td>
-                    <td><code>${func.cpf}</code></td>
-                    <td>${func.dataExame || '—'}</td>
-                    <td><span class="badge bg-${tipoBadge}">${func.tipo || '—'}</span></td>
-                </tr>
-            `;
-        }
-
-        html += `
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        `;
-    }
-
-    html += `
-            </div>
-        </div>
-    `;
-
-    return html;
-}
-
-// ============================================================
-// PROCESSAR FUNCIONÁRIOS AGRUPADOS
-// ============================================================
-
-async function processarFuncionariosAgrupados(grupos, tipoEvento, ambiente) {
-    const statusEl = document.getElementById('uploadESocialStatus');
-    const feedbackEl = document.getElementById('uploadESocialFeedback');
-
-    // Coletar todos os funcionários com CNPJ
-    const funcionariosParaProcessar = [];
-    for (const [unidade, grupo] of Object.entries(grupos)) {
-        if (!grupo.cnpj) continue;
-        for (const func of grupo.funcionarios) {
-            funcionariosParaProcessar.push({
-                ...func,
-                unidade: unidade,
-                cnpj: grupo.cnpj,
-                holding: grupo.holding,
-                empresa: grupo.empresa
-            });
-        }
-    }
-
-    if (funcionariosParaProcessar.length === 0) {
-        statusEl.innerHTML = '<span class="text-warning">⚠️ Nenhum funcionário com CNPJ válido para processar.</span>';
-        return;
-    }
-
-    statusEl.innerHTML = `<span class="text-info">⏳ Processando ${funcionariosParaProcessar.length} funcionários...</span>`;
-
-    let sucessos = 0;
-    let errosProcessamento = [];
-
-    for (let i = 0; i < funcionariosParaProcessar.length; i++) {
-        const func = funcionariosParaProcessar[i];
-        
-        try {
-            // Atualizar status na tabela
-            const statusRow = document.querySelector(`#uploadESocialFeedback tr[data-cpf="${func.cpf}"]`);
-            if (statusRow) {
-                statusRow.style.opacity = '0.5';
-            }
-
-            // Criar evento
-            const evento = await criarEventoESocial(func, tipoEvento, ambiente);
-            
-            if (evento && evento.length > 0) {
-                sucessos++;
-                if (statusRow) {
-                    statusRow.style.opacity = '1';
-                    statusRow.style.background = '#d1fae5';
-                }
-            } else {
-                errosProcessamento.push({
-                    nome: func.nome,
-                    cpf: func.cpf,
-                    motivo: 'Erro ao criar evento'
-                });
-            }
-        } catch (err) {
-            errosProcessamento.push({
-                nome: func.nome,
-                cpf: func.cpf,
-                motivo: err.message
-            });
-        }
-
-        // Atualizar progresso
-        const percentual = Math.round(((i + 1) / funcionariosParaProcessar.length) * 100);
-        statusEl.innerHTML = `<span class="text-info">⏳ Processando ${i + 1}/${funcionariosParaProcessar.length} - ${percentual}%</span>`;
-    }
-
-    // Mostrar resultado
-    let resultadoHtml = `
-        <div class="alert alert-success mt-3">
-            <strong>✅ Processamento concluído!</strong><br>
-            Total processados: ${funcionariosParaProcessar.length}<br>
-            ✅ Sucessos: ${sucessos}<br>
-            ❌ Erros: ${errosProcessamento.length}
-        </div>
-    `;
-
-    if (errosProcessamento.length > 0) {
-        resultadoHtml += `
-            <div class="alert alert-danger">
-                <strong>❌ Erros no processamento:</strong>
-                <ul class="mb-0 mt-1">
-                    ${errosProcessamento.map(e => `<li>${e.nome} (${e.cpf}): ${e.motivo}</li>`).join('')}
-                </ul>
-            </div>
-        `;
-    }
-
-    // Adicionar ao feedback
-    const existingAlert = feedbackEl.querySelector('.alert-success.mt-3');
-    if (existingAlert) {
-        existingAlert.outerHTML = resultadoHtml;
-    } else {
-        feedbackEl.insertAdjacentHTML('beforeend', resultadoHtml);
-    }
-
-    statusEl.innerHTML = `<span class="text-success">✅ ${sucessos} eventos criados com sucesso!</span>`;
-
-    // Recarregar eventos
-    await carregarEventosESocial();
-}
-
-// ============================================================
-// BUSCAR INFORMAÇÕES DA UNIDADE (CNPJ + HOLDING)
-// ============================================================
-
-async function buscarInfoUnidade(nomeUnidade) {
-    try {
-        if (!nomeUnidade) return null;
-
-        const { data: todasUnidades, error } = await supabaseClient
-            .from('precos')
-            .select('cnpj, unidade, holding, razao_social');
-
-        if (error) {
-            console.error('Erro ao buscar unidades:', error);
-            return null;
-        }
-
-        if (!todasUnidades || todasUnidades.length === 0) {
-            return null;
-        }
-
-        const nomeNorm = normalizarUnidade(nomeUnidade);
-
-        // 1. Match exato
-        for (const item of todasUnidades) {
-            const itemNorm = normalizarUnidade(item.unidade);
-            if (itemNorm === nomeNorm) {
-                return { cnpj: item.cnpj, holding: item.holding || 'N/A' };
-            }
-        }
-
-        // 2. Match por razão social
-        for (const item of todasUnidades) {
-            if (item.razao_social) {
-                const razaoNorm = normalizarUnidade(item.razao_social);
-                if (razaoNorm === nomeNorm || nomeNorm.includes(razaoNorm) || razaoNorm.includes(nomeNorm)) {
-                    return { cnpj: item.cnpj, holding: item.holding || 'N/A' };
-                }
-            }
-        }
-
-        // 3. Match parcial
-        const palavras = nomeNorm.split(' ');
-        for (const item of todasUnidades) {
-            const itemNorm = normalizarUnidade(item.unidade);
-            const palavrasItem = itemNorm.split(' ');
-            
-            const matchCount = palavras.filter(p => 
-                palavrasItem.some(ip => ip.includes(p) || p.includes(ip))
-            ).length;
-            
-            if (matchCount >= Math.min(palavras.length, palavrasItem.length) * 0.5) {
-                return { cnpj: item.cnpj, holding: item.holding || 'N/A' };
-            }
-        }
-
-        return null;
-
-    } catch (error) {
-        console.error('Erro ao buscar informações da unidade:', error);
-        return null;
-    }
-}
-
-// ============================================================
-// BUSCAR CNPJ POR UNIDADE (CORRIGIDA)
-// ============================================================
-
-async function buscarCnpjPorUnidade(nomeUnidade) {
-    try {
-        if (!nomeUnidade) return null;
-
-        // Buscar todas as unidades para comparação
-        const { data: todasUnidades, error } = await supabaseClient
-            .from('precos')
-            .select('cnpj, unidade, razao_social');
-
-        if (error) {
-            console.error('Erro ao buscar unidades:', error);
-            return null;
-        }
-
-        if (!todasUnidades || todasUnidades.length === 0) {
-            return null;
-        }
-
-        // Normalizar o nome da unidade da planilha
-        const nomeNorm = normalizarUnidade(nomeUnidade);
-
-        // 1. Tentar match exato por nome normalizado
-        for (const item of todasUnidades) {
-            const itemNorm = normalizarUnidade(item.unidade);
-            if (itemNorm === nomeNorm) {
-                console.log(`✅ CNPJ encontrado (match exato): ${item.unidade} -> ${item.cnpj}`);
-                return item.cnpj;
-            }
-        }
-
-        // 2. Tentar match por razão social
-        for (const item of todasUnidades) {
-            if (item.razao_social) {
-                const razaoNorm = normalizarUnidade(item.razao_social);
-                if (razaoNorm === nomeNorm || nomeNorm.includes(razaoNorm) || razaoNorm.includes(nomeNorm)) {
-                    console.log(`✅ CNPJ encontrado (razao social): ${item.razao_social} -> ${item.cnpj}`);
-                    return item.cnpj;
-                }
-            }
-        }
-
-        // 3. Tentar match parcial
-        const palavras = nomeNorm.split(' ');
-        for (const item of todasUnidades) {
-            const itemNorm = normalizarUnidade(item.unidade);
-            const palavrasItem = itemNorm.split(' ');
-            
-            // Verificar se pelo menos 50% das palavras batem
-            const matchCount = palavras.filter(p => 
-                palavrasItem.some(ip => ip.includes(p) || p.includes(ip))
-            ).length;
-            
-            if (matchCount >= Math.min(palavras.length, palavrasItem.length) * 0.5) {
-                console.log(`✅ CNPJ encontrado (match parcial): ${item.unidade} -> ${item.cnpj}`);
-                return item.cnpj;
-            }
-        }
-
-        console.log(`❌ CNPJ não encontrado para: ${nomeUnidade}`);
-        return null;
-
-    } catch (error) {
-        console.error('Erro ao buscar CNPJ:', error);
-        return null;
-    }
-}
-
-// ============================================================
-// CRIAR EVENTO E-SOCIAL
-// ============================================================
-
-async function criarEventoESocial(funcionario, tipoEvento, ambiente) {
-    try {
-        // Buscar dados da empresa
-        const { data: empresaData, error: empresaError } = await supabaseClient
-            .from('precos')
-            .select('*')
-            .eq('cnpj', funcionario.cnpj)
-            .single();
-
-        if (empresaError || !empresaData) {
-            throw new Error(`Empresa não encontrada para CNPJ: ${funcionario.cnpj}`);
-        }
-
-        // Determinar se é S-2200 ou S-2240
-        const tipos = tipoEvento === 'ambos' ? ['S-2200', 'S-2240'] : [tipoEvento];
-        
-        const eventosCriados = [];
-
-        for (const tipo of tipos) {
-            // Preparar dados do evento
-            const dadosEvento = {
-                // Dados do empregador
-                cnpj: funcionario.cnpj,
-                razao_social: empresaData.razao_social || empresaData.unidade,
-                nome_fantasia: empresaData.unidade,
-                natureza_juridica: empresaData.natureza_juridica || '0000',
-                classificacao_tributaria: empresaData.classificacao_tributaria || '01',
-                
-                // Dados do trabalhador
-                cpf: funcionario.cpf,
-                nome: funcionario.nome,
-                data_nascimento: funcionario.dataNascimento || '1990-01-01',
-                sexo: funcionario.sexo || 'M',
-                raca_cor: funcionario.raca_cor || '1',
-                
-                // Dados da admissão
-                data_admissao: funcionario.dataExame || new Date().toISOString().split('T')[0],
-                matricula: funcionario.matricula || `MAT-${Date.now()}`,
-                salario_base: funcionario.salario || 0,
-                cargo: funcionario.cargo || 'Funcionário',
-                codigo_cbo: funcionario.cbo || '0000-00',
-                tipo_contrato: funcionario.tipoContrato || '1',
-                tipo_previdencia: funcionario.tipoPrevidencia || '1',
-                regime_jornada: funcionario.regimeJornada || '1',
-                
-                // Ambiente
-                ambiente: ambiente || 'homologacao',
-                periodo_apuracao: new Date().toISOString().slice(0, 7),
-                data_evento: new Date().toISOString().split('T')[0]
-            };
-
-            // Enviar para criar evento
-            const token = localStorage.getItem('token') || (await supabaseClient.auth.getSession()).data.session?.access_token;
-            
-            const response = await fetch(`${ESOCIAL_API_URL}/esocial/eventos`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({
-                    empresa_id: empresaData.id,
-                    funcionario_id: funcionario.funcionario_id || null,
-                    tipo_evento: tipo,
-                    dados_evento: dadosEvento,
-                    data_evento: funcionario.dataExame || new Date().toISOString().split('T')[0],
-                    periodo_apuracao: new Date().toISOString().slice(0, 7)
-                })
-            });
-
-            if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.message || 'Erro ao criar evento');
-            }
-
-            const evento = await response.json();
-            eventosCriados.push(evento);
-
-            // Enviar automaticamente
-            if (evento.id) {
-                try {
-                    const enviarResponse = await fetch(`${ESOCIAL_API_URL}/esocial/eventos/${evento.id}/enviar`, {
-                        method: 'POST',
-                        headers: {
-                            'Authorization': `Bearer ${token}`
-                        }
-                    });
-                    console.log(`📤 Evento ${evento.id} enviado para fila`);
-                } catch (err) {
-                    console.warn(`⚠️ Não foi possível enviar automaticamente: ${err.message}`);
-                }
-            }
-        }
-
-        return eventosCriados;
-
-    } catch (error) {
-        console.error('❌ Erro ao criar evento e-Social:', error);
-        throw error;
     }
 }
 
@@ -9588,449 +9247,3 @@ async function atualizarNomeUnidadeProcessamento(oldName, newName) {
   console.log('Atualizar nome:', oldName, '->', newName);
   return { success: true, message: `Nome atualizado de "${oldName}" para "${newName}"` };
 }
-// ============================================================
-// ================ ATUALIZAR QUANTIDADE DE VIDAS ==============
-// ============================================================
-
-// Garantir que o evento seja anexado corretamente
-document.addEventListener('DOMContentLoaded', function() {
-    // Botão de atualizar vidas
-    const processVidasBtn = document.getElementById('processUploadVidasBtn');
-    if (processVidasBtn) {
-        processVidasBtn.addEventListener('click', processarPlanilhaVidas);
-        console.log('✅ Evento processUploadVidasBtn registrado');
-    } else {
-        console.warn('⚠️ Botão processUploadVidasBtn não encontrado');
-    }
-
-    // Botão de recarregar holdings
-    const reloadHoldingsBtn = document.getElementById('btnRecarregarHoldings');
-    if (reloadHoldingsBtn) {
-        reloadHoldingsBtn.addEventListener('click', function() {
-            const select = document.getElementById('holdingSelect');
-            if (select) {
-                select.innerHTML = '<option value="">Carregando...</option>';
-                carregarHoldingsParaAtualizacao();
-            }
-        });
-    }
-
-    // Botão de atualizar valor por holding
-    const updateHoldingBtn = document.getElementById('atualizarVidasHoldingBtn');
-    if (updateHoldingBtn) {
-        updateHoldingBtn.addEventListener('click', atualizarValorPorHolding);
-        console.log('✅ Evento atualizarVidasHoldingBtn registrado');
-    }
-
-    // Carregar holdings quando a aba for aberta
-    const tabCadastro = document.getElementById('tab-cadastro');
-    if (tabCadastro) {
-        tabCadastro.addEventListener('shown.bs.tab', function() {
-            carregarHoldingsParaAtualizacao();
-        });
-    }
-
-    // Carregar holdings inicialmente
-    setTimeout(carregarHoldingsParaAtualizacao, 1500);
-});
-
-// Função para processar a planilha de vidas
-async function processarPlanilhaVidas() {
-    console.log('🔄 processarPlanilhaVidas chamada!');
-    
-    const fileInput = document.getElementById('uploadVidasInput');
-    const status = document.getElementById('uploadVidasStatus');
-    const feedback = document.getElementById('uploadVidasFeedback');
-
-    console.log('📁 FileInput:', fileInput);
-    console.log('📁 Files:', fileInput?.files);
-
-    if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
-        if (status) status.innerHTML = '<span class="text-warning">⚠️ Selecione um arquivo.</span>';
-        console.warn('⚠️ Nenhum arquivo selecionado');
-        return;
-    }
-
-    const file = fileInput.files[0];
-    console.log('📄 Arquivo selecionado:', file.name, file.size, 'bytes');
-
-    if (status) status.innerHTML = '<span class="text-info">⏳ Processando planilha...</span>';
-    if (feedback) feedback.innerHTML = '';
-
-    try {
-        const data = await file.arrayBuffer();
-        console.log('📊 Arquivo lido, tamanho:', data.byteLength);
-        
-        const workbook = XLSX.read(data, { type: 'array' });
-        console.log('📚 Workbook lido, sheets:', workbook.SheetNames);
-        
-        const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
-
-        console.log('📋 Primeiras 5 linhas:', jsonData.slice(0, 5));
-
-        // Filtrar linhas vazias
-        const rows = jsonData.filter(row => row.some(cell => cell !== '' && cell !== undefined && cell !== null));
-
-        if (rows.length === 0) {
-            throw new Error('A planilha está vazia.');
-        }
-
-        console.log(`📋 ${rows.length} linhas com dados`);
-
-        // Detectar cabeçalho e colunas
-        let startRow = 0;
-        let colUnidade = 0;
-        let colVidas = 1;
-
-        const firstRow = rows[0];
-        console.log('📋 Primeira linha:', firstRow);
-
-        // Verificar se a primeira linha é cabeçalho
-        const headerStr = firstRow.map(c => String(c).toLowerCase().trim()).join(' ');
-
-        if (headerStr.includes('unidade') || headerStr.includes('empresa') || headerStr.includes('nome') || 
-            headerStr.includes('func') || headerStr.includes('vidas') || headerStr.includes('qtd')) {
-            startRow = 1;
-            firstRow.forEach((cell, idx) => {
-                const cellStr = String(cell).toLowerCase().trim();
-                if (cellStr.includes('unidade') || cellStr.includes('empresa') || cellStr.includes('nome') || cellStr.includes('razao')) {
-                    colUnidade = idx;
-                    console.log(`📍 Coluna de unidade encontrada na posição ${idx}: "${cell}"`);
-                }
-                if (cellStr.includes('func') || cellStr.includes('vidas') || cellStr.includes('qtd') || 
-                    cellStr.includes('quant') || cellStr.includes('funcionario') || cellStr.includes('colaborador')) {
-                    colVidas = idx;
-                    console.log(`📍 Coluna de vidas encontrada na posição ${idx}: "${cell}"`);
-                }
-            });
-        }
-
-        console.log(`📊 Configuração: startRow=${startRow}, colUnidade=${colUnidade}, colVidas=${colVidas}`);
-
-        // Buscar todas as unidades uma vez para otimizar
-        const { data: todasUnidades, error: buscaUnidadesError } = await supabaseClient
-            .from('precos')
-            .select('id, unidade, razao_social');
-
-        if (buscaUnidadesError) {
-            throw new Error(`Erro ao buscar unidades: ${buscaUnidadesError.message}`);
-        }
-
-        console.log(`📋 ${todasUnidades.length} unidades encontradas no banco`);
-
-        // Criar mapa de unidades normalizadas
-        const mapaUnidades = {};
-        todasUnidades.forEach(u => {
-            const norm = normalizarUnidade(u.unidade);
-            if (!mapaUnidades[norm]) {
-                mapaUnidades[norm] = [];
-            }
-            mapaUnidades[norm].push(u);
-            
-            if (u.razao_social) {
-                const razaoNorm = normalizarUnidade(u.razao_social);
-                if (!mapaUnidades[razaoNorm]) {
-                    mapaUnidades[razaoNorm] = [];
-                }
-                mapaUnidades[razaoNorm].push(u);
-            }
-        });
-
-        console.log(`📋 ${Object.keys(mapaUnidades).length} chaves normalizadas`);
-
-        const resultados = [];
-        let atualizados = 0;
-        let naoEncontrados = 0;
-        let erros = 0;
-
-        for (let i = startRow; i < rows.length; i++) {
-            const row = rows[i];
-            if (!row || row.length === 0) continue;
-
-            const nomeUnidade = String(row[colUnidade] || '').trim();
-            const qtdVidasStr = String(row[colVidas] || '').replace(/[^0-9]/g, '').trim();
-            const qtdVidas = parseInt(qtdVidasStr);
-
-            console.log(`🔍 Linha ${i+1}: "${nomeUnidade}" -> ${qtdVidas} vidas`);
-
-            if (!nomeUnidade || isNaN(qtdVidas) || qtdVidas < 0) {
-                console.log(`⏭️ Linha ${i+1} ignorada (dados inválidos)`);
-                continue;
-            }
-
-            // Buscar a unidade pelo nome normalizado
-            const nomeNorm = normalizarUnidade(nomeUnidade);
-            let unidadeEncontrada = null;
-
-            // Buscar no mapa
-            if (mapaUnidades[nomeNorm]) {
-                unidadeEncontrada = mapaUnidades[nomeNorm][0];
-                console.log(`✅ Encontrada por nome normalizado: "${nomeUnidade}" -> "${unidadeEncontrada.unidade}"`);
-            }
-
-            // Se não encontrou, tentar busca parcial
-            if (!unidadeEncontrada) {
-                for (const [key, unidades] of Object.entries(mapaUnidades)) {
-                    if (key.includes(nomeNorm) || nomeNorm.includes(key)) {
-                        unidadeEncontrada = unidades[0];
-                        console.log(`✅ Encontrada por match parcial: "${nomeUnidade}" -> "${unidadeEncontrada.unidade}"`);
-                        break;
-                    }
-                }
-            }
-
-            if (!unidadeEncontrada) {
-                naoEncontrados++;
-                resultados.push(`❌ Unidade não encontrada: ${nomeUnidade}`);
-                console.log(`❌ Unidade não encontrada: ${nomeUnidade}`);
-                continue;
-            }
-
-            // Atualizar a quantidade de vidas
-            try {
-                const { error: updateError } = await supabaseClient
-                    .from('precos')
-                    .update({ qtd_vidas: qtdVidas })
-                    .eq('id', unidadeEncontrada.id);
-
-                if (updateError) {
-                    erros++;
-                    resultados.push(`❌ Erro ao atualizar ${unidadeEncontrada.unidade}: ${updateError.message}`);
-                    console.error(`❌ Erro ao atualizar ${unidadeEncontrada.unidade}:`, updateError);
-                } else {
-                    atualizados++;
-                    resultados.push(`✅ ${unidadeEncontrada.unidade}: ${qtdVidas} vidas`);
-                    console.log(`✅ ${unidadeEncontrada.unidade}: ${qtdVidas} vidas`);
-                }
-            } catch (err) {
-                erros++;
-                resultados.push(`❌ Erro ao atualizar ${unidadeEncontrada.unidade}: ${err.message}`);
-                console.error(`❌ Erro ao atualizar ${unidadeEncontrada.unidade}:`, err);
-            }
-        }
-
-        console.log(`📊 Resumo: ${atualizados} atualizados, ${naoEncontrados} não encontrados, ${erros} erros`);
-
-        // Exibir resultados
-        let html = `<div class="alert alert-info">
-            <strong>📊 Resumo da Atualização</strong><br>
-            ✅ Atualizados: ${atualizados}<br>
-            ⚠️ Não encontrados: ${naoEncontrados}<br>
-            ❌ Erros: ${erros}
-        </div>`;
-
-        if (resultados.length > 0) {
-            const maxResultados = 100;
-            const resultadosExibir = resultados.length > maxResultados ? 
-                resultados.slice(0, maxResultados) : resultados;
-            
-            html += `<div class="alert alert-secondary" style="max-height: 300px; overflow-y: auto; font-size: 0.85rem;">
-                <strong>Detalhes (${resultados.length} resultados):</strong>
-                <ul class="mb-0 mt-1" style="list-style: none; padding-left: 0;">
-                    ${resultadosExibir.map(r => `<li>${r}</li>`).join('')}
-                </ul>
-                ${resultados.length > maxResultados ? `<p class="text-muted mt-1">... e mais ${resultados.length - maxResultados} resultados</p>` : ''}
-            </div>`;
-        }
-
-        if (feedback) feedback.innerHTML = html;
-        if (status) status.innerHTML = `<span class="text-success">✅ Processamento concluído! ${atualizados} unidades atualizadas.</span>`;
-
-        // Recarregar tabela de preços
-        carregarPrecos();
-
-    } catch (err) {
-        console.error('❌ Erro ao processar planilha de vidas:', err);
-        if (status) status.innerHTML = `<span class="text-danger">❌ Erro: ${err.message}</span>`;
-        if (feedback) feedback.innerHTML = `<div class="alert alert-danger">${err.message}</div>`;
-    }
-}
-
-// ============================================================
-// ================ ATUALIZAR VALOR POR VIDA (HOLDING) ========
-// ============================================================
-
-async function carregarHoldingsParaAtualizacao() {
-    console.log('🔄 Carregando holdings...');
-    try {
-        const { data, error } = await supabaseClient
-            .from('precos')
-            .select('holding')
-            .order('holding');
-
-        if (error) throw error;
-
-        const holdings = [...new Set(data.map(item => item.holding).filter(Boolean))];
-        const select = document.getElementById('holdingSelect');
-
-        console.log(`📋 ${holdings.length} holdings encontradas:`, holdings);
-
-        if (select) {
-            select.innerHTML = '<option value="">Selecione uma holding...</option>';
-            holdings.forEach(h => {
-                const option = document.createElement('option');
-                option.value = h;
-                option.textContent = h;
-                select.appendChild(option);
-            });
-        }
-
-        return holdings;
-    } catch (err) {
-        console.error('❌ Erro ao carregar holdings:', err);
-        const select = document.getElementById('holdingSelect');
-        if (select) {
-            select.innerHTML = '<option value="">Erro ao carregar holdings</option>';
-        }
-        return [];
-    }
-}
-
-async function atualizarValorPorHolding() {
-    console.log('🔄 atualizarValorPorHolding chamada!');
-    
-    const holding = document.getElementById('holdingSelect')?.value;
-    const novoValor = parseFloat(document.getElementById('novoValorVidas')?.value);
-    const statusEl = document.getElementById('holdingUpdateStatus');
-    const btn = document.getElementById('atualizarVidasHoldingBtn');
-
-    console.log(`📊 Holding: "${holding}", Valor: ${novoValor}`);
-
-    if (!holding) {
-        if (statusEl) statusEl.innerHTML = '<span class="text-warning">⚠️ Selecione uma holding.</span>';
-        return;
-    }
-
-    if (isNaN(novoValor) || novoValor < 0) {
-        if (statusEl) statusEl.innerHTML = '<span class="text-warning">⚠️ Insira um valor válido (maior que 0).</span>';
-        return;
-    }
-
-    if (!confirm(`Deseja atualizar o valor por vida para R$ ${novoValor.toFixed(2)} em TODAS as unidades da holding "${holding}"?`)) {
-        return;
-    }
-
-    if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Atualizando...';
-    }
-    if (statusEl) statusEl.innerHTML = '<span class="text-info">⏳ Buscando unidades da holding...</span>';
-
-    try {
-        // Buscar todas as unidades da holding
-        const { data: unidades, error: buscaError } = await supabaseClient
-            .from('precos')
-            .select('id, unidade, vidas, qtd_vidas')
-            .eq('holding', holding);
-
-        if (buscaError) throw buscaError;
-
-        if (!unidades || unidades.length === 0) {
-            if (statusEl) statusEl.innerHTML = `<span class="text-warning">⚠️ Nenhuma unidade encontrada para a holding "${holding}".</span>`;
-            if (btn) {
-                btn.disabled = false;
-                btn.innerHTML = '<i class="fas fa-sync me-1"></i> Atualizar';
-            }
-            return;
-        }
-
-        console.log(`📋 ${unidades.length} unidades encontradas para a holding "${holding}"`);
-
-        if (statusEl) statusEl.innerHTML = `<span class="text-info">⏳ Atualizando ${unidades.length} unidades...</span>`;
-
-        let atualizados = 0;
-        let erros = 0;
-        const detalhes = [];
-
-        for (const unidade of unidades) {
-            try {
-                const { error: updateError } = await supabaseClient
-                    .from('precos')
-                    .update({ vidas: novoValor })
-                    .eq('id', unidade.id);
-
-                if (updateError) {
-                    erros++;
-                    detalhes.push(`❌ ${unidade.unidade}: ${updateError.message}`);
-                    console.error(`❌ Erro ao atualizar ${unidade.unidade}:`, updateError);
-                } else {
-                    atualizados++;
-                    detalhes.push(`✅ ${unidade.unidade}: R$ ${novoValor.toFixed(2)} (${unidade.qtd_vidas || 0} vidas)`);
-                    console.log(`✅ ${unidade.unidade}: R$ ${novoValor.toFixed(2)}`);
-                }
-            } catch (err) {
-                erros++;
-                detalhes.push(`❌ ${unidade.unidade}: ${err.message}`);
-                console.error(`❌ Erro ao atualizar ${unidade.unidade}:`, err);
-            }
-        }
-
-        console.log(`📊 Resumo: ${atualizados} atualizados, ${erros} erros`);
-
-        let html = `<div class="alert alert-info">
-            <strong>📊 Resumo da Atualização</strong><br>
-            Holding: <strong>${holding}</strong><br>
-            Novo valor por vida: <strong>R$ ${novoValor.toFixed(2)}</strong><br>
-            ✅ Atualizados: ${atualizados}<br>
-            ❌ Erros: ${erros}
-        </div>`;
-
-        if (detalhes.length > 0 && detalhes.length <= 50) {
-            html += `<div class="alert alert-secondary" style="max-height: 200px; overflow-y: auto; font-size: 0.85rem;">
-                <strong>Detalhes:</strong>
-                <ul class="mb-0 mt-1" style="list-style: none; padding-left: 0;">
-                    ${detalhes.map(d => `<li>${d}</li>`).join('')}
-                </ul>
-            </div>`;
-        }
-
-        if (statusEl) statusEl.innerHTML = html;
-
-        // Recarregar tabela de preços
-        carregarPrecos();
-
-        // Mostrar alerta
-        mostrarAlerta(`✅ ${atualizados} unidades da holding "${holding}" atualizadas para R$ ${novoValor.toFixed(2)}`, 'success');
-
-    } catch (err) {
-        console.error('❌ Erro ao atualizar:', err);
-        if (statusEl) statusEl.innerHTML = `<span class="text-danger">❌ Erro: ${err.message}</span>`;
-        mostrarAlerta('Erro ao atualizar: ' + err.message, 'danger');
-    } finally {
-        if (btn) {
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-sync me-1"></i> Atualizar';
-        }
-    }
-}
-
-// ============================================================
-// ================ INICIALIZAR NA ABA CADASTRO ===============
-// ============================================================
-
-// Garantir que as funções sejam executadas quando a aba for ativada
-const observerCadastro = new MutationObserver(function() {
-    const tabCadastro = document.getElementById('tab-cadastro');
-    if (tabCadastro && tabCadastro.classList.contains('active')) {
-        carregarHoldingsParaAtualizacao();
-    }
-});
-
-document.addEventListener('DOMContentLoaded', function() {
-    // Verificar se a aba já está ativa
-    const tabCadastro = document.getElementById('tab-cadastro');
-    if (tabCadastro && tabCadastro.classList.contains('active')) {
-        setTimeout(carregarHoldingsParaAtualizacao, 500);
-    }
-
-    // Observer para quando a aba for ativada
-    const tabs = document.querySelectorAll('#mainTabs .nav-link');
-    tabs.forEach(tab => {
-        tab.addEventListener('shown.bs.tab', function(e) {
-            if (e.target.id === 'tab-cadastro') {
-                carregarHoldingsParaAtualizacao();
-            }
-        });
-    });
-});
