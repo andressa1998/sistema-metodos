@@ -299,7 +299,8 @@ async function criarOrdemServicoOmie(registro, codigoCliente) {
     registro.mes,
     registro.ano,
     registro.unidade,
-    registro.valor_total
+    registro.valor_total,
+    registro.data_vencimento
   );
 
   let dataVencimentoOriginal = '01/08/2026';
@@ -3374,46 +3375,47 @@ async function criarTodasOSLote() {
   }, 2000);
 }
 
-function gerarDescricaoResumida(detalhes, mes, ano, unidade, valorTotal) {
-    let itens = [];
-    let todosNomes = [];
-    
-    // Mensalidade
+// ========================= GERAR DESCRIÇÃO RESUMIDA (COM NOMES DOS COLABORADORES POR EXAME) =========================
+function gerarDescricaoResumida(detalhes, mes, ano, unidade, valorTotal, dataVencimento = null) {
+    // 1. MENSALIDADE
+    let mensalidadeTexto = '';
     if (detalhes.mensalidade) {
         const valor = detalhes.mensalidade.precoUnitario || 0;
-        itens.push(`MENSALIDADE: R$ ${valor.toFixed(2)}`);
+        mensalidadeTexto = `Mensalidade: R$ ${valor.toFixed(2).replace('.', ',')}`;
     }
     
-    // Vidas
+    // 2. VIDAS
+    let vidasTexto = '';
     if (detalhes['vidas (NR-1)']) {
         const vidas = detalhes['vidas (NR-1)'];
         const qtd = vidas.quantidade || 0;
         const valor = vidas.precoUnitario || 0;
-        itens.push(`VIDAS NR-1: ${qtd} x R$ ${valor.toFixed(2)} = R$ ${(qtd * valor).toFixed(2)}`);
+        const subtotal = qtd * valor;
+        vidasTexto = `Vidas: ${qtd} vidas, total: R$ ${subtotal.toFixed(2).replace('.', ',')}`;
     }
     
-    // Exames - incluir nomes dos colaboradores
+    // 3. COLETAR TODOS OS EXAMES COM SEUS FUNCIONÁRIOS
     const nomesExames = {
-        'exame_clinico': 'EXAME CLINICO',
-        'audiometria': 'AUDIOMETRIA',
-        'acuidade_visual': 'ACUIDADE VISUAL',
-        'eletrocardiograma': 'ECG',
-        'eletroencefalograma': 'EEG',
-        'espirometria': 'ESPIROMETRIA',
-        'raio_x_torax': 'RAIO X TORAX',
-        'hemograma': 'HEMOGRAMA',
-        'anti_hbs': 'ANTI HBS',
-        'anti_hcv': 'ANTI HCV',
-        'anti_hbs_ag': 'ANTI HBS AG',
+        'exame_clinico': 'Exame Clinico',
+        'audiometria': 'Audiometria Ocupacional',
+        'acuidade_visual': 'Acuidade Visual',
+        'eletrocardiograma': 'Eletrocardiograma',
+        'eletroencefalograma': 'Eletroencefalograma',
+        'espirometria': 'Espirometria',
+        'raio_x_torax': 'Raio X Torax',
+        'hemograma': 'Hemograma Completo',
+        'anti_hbs': 'Anti Hbs',
+        'anti_hcv': 'Anti Hcv',
+        'anti_hbs_ag': 'Anti Hbs AG',
         'vdrl': 'VDRL',
-        'coprocultura': 'COPROCULTURA',
-        'parasitologico': 'PARASITOLOGICO',
-        'gama_gt': 'GAMA GT',
-        'glicose': 'GLICOSE',
-        'pesquisa_fungos': 'PESQUISA FUNGOS',
-        'dinamometria': 'DINAMOMETRIA',
-        'visita_tec': 'VISITA TECNICA',
-        'transporte': 'TRANSPORTE'
+        'coprocultura': 'Coprocultura',
+        'parasitologico': 'Parasitologico',
+        'gama_gt': 'Gama GT',
+        'glicose': 'Glicose',
+        'pesquisa_fungos': 'Pesquisa de Fungos',
+        'dinamometria': 'Dinamometria',
+        'visita_tec': 'Visita Tecnica',
+        'transporte': 'Transporte'
     };
     
     const exames = ['exame_clinico', 'audiometria', 'acuidade_visual', 'eletrocardiograma', 
@@ -3422,95 +3424,150 @@ function gerarDescricaoResumida(detalhes, mes, ano, unidade, valorTotal) {
                     'parasitologico', 'gama_gt', 'glicose', 'pesquisa_fungos', 
                     'dinamometria', 'visita_tec', 'transporte'];
     
+    let examesData = [];
+    
     for (const exame of exames) {
         if (detalhes[exame]) {
             const info = detalhes[exame];
             const qtd = info.quantidade || 0;
             const valor = info.precoUnitario || 0;
-            const subtotal = qtd * valor;
             const funcionarios = info.funcionarios || [];
+            const subtotal = qtd * valor;
             
             if (qtd > 0 && valor > 0) {
-                const nome = nomesExames[exame] || exame.toUpperCase();
-                let item = `${nome} - ${qtd} x R$ ${valor.toFixed(2)} = R$ ${subtotal.toFixed(2)}`;
-                
-                // ADICIONAR NOMES DOS COLABORADORES
-                if (funcionarios.length > 0) {
-                    const nomes = funcionarios.map(f => f.nome).filter(n => n && n !== 'N/A');
-                    if (nomes.length > 0) {
-                        item += ` (${nomes.join(', ')})`;
-                        todosNomes = todosNomes.concat(nomes);
+                const nomeExame = nomesExames[exame] || exame;
+                examesData.push({
+                    nome: nomeExame,
+                    qtd: qtd,
+                    valor: valor,
+                    subtotal: subtotal,
+                    funcionarios: funcionarios,
+                    // LINHA RESUMIDA SEM NOMES (para versão compacta)
+                    linhaResumida: `${nomeExame} (${qtd} unid. x R$ ${valor.toFixed(2).replace('.', ',')})`
+                });
+            }
+        }
+    }
+    
+    // 4. CRIAR A DESCRIÇÃO COMPLETA COM NOMES DOS COLABORADORES
+    let descricaoCompleta = '';
+    
+    // Cabeçalho
+    descricaoCompleta += `FAT ${mes}/${ano} - ${unidade}\n`;
+    descricaoCompleta += `R$ ${valorTotal.toFixed(2).replace('.', ',')}\n`;
+    descricaoCompleta += `---\n`;
+    
+    // Mensalidade
+    if (mensalidadeTexto) {
+        descricaoCompleta += `${mensalidadeTexto}\n`;
+    }
+    
+    // Vidas
+    if (vidasTexto) {
+        descricaoCompleta += `${vidasTexto}\n`;
+    }
+    
+    // Exames COM NOMES DOS COLABORADORES
+    if (examesData.length > 0) {
+        descricaoCompleta += `EXAMES:\n`;
+        for (const exame of examesData) {
+            // Nome do exame e quantidade
+            descricaoCompleta += `${exame.nome} (${exame.qtd} unid. x R$ ${exame.valor.toFixed(2).replace('.', ',')})\n`;
+            
+            // Listar cada colaborador que fez este exame
+            const funcionarios = exame.funcionarios || [];
+            if (funcionarios.length > 0) {
+                for (const func of funcionarios) {
+                    if (func.nome && func.nome !== 'N/A') {
+                        const dataExame = func.data || 'data nao informada';
+                        descricaoCompleta += `  - ${func.nome.toUpperCase()} (${dataExame})\n`;
                     }
                 }
-                itens.push(item);
             }
+            
+            // Subtotal do exame
+            descricaoCompleta += `R$ ${exame.subtotal.toFixed(2).replace('.', ',')}\n`;
         }
     }
     
-    let descricao = itens.length > 0 ? itens.join('\n') : `Faturamento ${mes}/${ano} - ${unidade}`;
+    // Vencimento
+    let vencimentoStr = 'N/A';
+    if (dataVencimento) {
+        try {
+            const venc = new Date(dataVencimento + 'T00:00:00');
+            vencimentoStr = venc.toLocaleDateString('pt-BR');
+        } catch (e) {
+            vencimentoStr = dataVencimento;
+        }
+    }
+    descricaoCompleta += `---\nVenc: ${vencimentoStr}`;
     
-    // Se ultrapassar 120 caracteres, otimizar mantendo alguns nomes
-    if (descricao.length > 120) {
-        let resumo = '';
-        let totalExames = 0;
-        let totalValor = 0;
-        let temMensalidade = false;
-        let temVidas = false;
-        let qtdVidas = 0;
-        let valorVidas = 0;
-        
-        if (detalhes.mensalidade) {
-            temMensalidade = true;
-            totalValor += detalhes.mensalidade.precoUnitario || 0;
-        }
-        
-        if (detalhes['vidas (NR-1)']) {
-            temVidas = true;
-            qtdVidas = detalhes['vidas (NR-1)'].quantidade || 0;
-            valorVidas = detalhes['vidas (NR-1)'].precoUnitario || 0;
-            totalValor += qtdVidas * valorVidas;
-        }
-        
-        for (const exame of exames) {
-            if (detalhes[exame]) {
-                const qtd = detalhes[exame].quantidade || 0;
-                totalExames += qtd;
-                totalValor += qtd * (detalhes[exame].precoUnitario || 0);
-            }
-        }
-        
-        let partes = [];
-        if (temMensalidade) {
-            partes.push(`Mensalidade R$ ${(detalhes.mensalidade.precoUnitario || 0).toFixed(2)}`);
-        }
-        if (temVidas) {
-            partes.push(`${qtdVidas} vidas R$ ${(qtdVidas * valorVidas).toFixed(2)}`);
-        }
-        if (totalExames > 0) {
-            partes.push(`${totalExames} exames`);
-        }
-        
-        // Adicionar nomes no resumo (máximo 3 nomes)
-        if (todosNomes.length > 0) {
-            const nomesUnicos = [...new Set(todosNomes)];
-            const nomesStr = nomesUnicos.slice(0, 3).join(', ');
-            if (nomesUnicos.length > 3) {
-                partes.push(`Colabs: ${nomesStr} +${nomesUnicos.length - 3}`);
-            } else {
-                partes.push(`Colabs: ${nomesStr}`);
-            }
-        }
-        
-        resumo = `FAT ${mes}/${ano}: ${partes.join(' | ')}. Total: R$ ${totalValor.toFixed(2)}`;
-        
-        if (resumo.length > 120) {
-            resumo = resumo.substring(0, 117) + '...';
-        }
-        
-        return resumo;
+    // 5. VERIFICAR SE A DESCRIÇÃO COMPLETA EXCEDE 500 CARACTERES
+    if (descricaoCompleta.length <= 500) {
+        return descricaoCompleta;
     }
     
-    return descricao;
+    // 6. SE EXCEDER 500 CARACTERES, CRIAR VERSÃO RESUMIDA (SEM NOMES)
+    console.log(`⚠️ Descricao com nomes excedeu 500 caracteres (${descricaoCompleta.length}). Criando versao resumida...`);
+    
+    let descricaoResumida = '';
+    
+    // Cabeçalho resumido
+    descricaoResumida += `FAT ${mes}/${ano} - ${unidade}\n`;
+    descricaoResumida += `R$ ${valorTotal.toFixed(2).replace('.', ',')}\n`;
+    descricaoResumida += `---\n`;
+    
+    // Mensalidade
+    if (mensalidadeTexto) {
+        descricaoResumida += `${mensalidadeTexto}\n`;
+    }
+    
+    // Vidas
+    if (vidasTexto) {
+        descricaoResumida += `${vidasTexto}\n`;
+    }
+    
+    // Exames RESUMIDOS (sem nomes dos colaboradores)
+    if (examesData.length > 0) {
+        descricaoResumida += `EXAMES:\n`;
+        for (const exame of examesData) {
+            descricaoResumida += `${exame.linhaResumida}\n`;
+        }
+        const totalExames = examesData.reduce((sum, e) => sum + e.subtotal, 0);
+        descricaoResumida += `Total Exames: R$ ${totalExames.toFixed(2).replace('.', ',')}\n`;
+    }
+    
+    descricaoResumida += `---\nVenc: ${vencimentoStr}`;
+    
+    // 7. VERIFICAR SE A VERSÃO RESUMIDA AINDA EXCEDE 500 CARACTERES
+    if (descricaoResumida.length > 500) {
+        console.log(`⚠️ Descricao resumida ainda excede 500 caracteres (${descricaoResumida.length}). Otimizando...`);
+        
+        let descricaoOtimizada = '';
+        
+        if (mensalidadeTexto) {
+            descricaoOtimizada += `${mensalidadeTexto} | `;
+        }
+        if (vidasTexto) {
+            descricaoOtimizada += `${vidasTexto} | `;
+        }
+        
+        const examesCompactos = examesData.map(e => 
+            `${e.nome} (${e.qtd})`
+        ).join(' | ');
+        
+        descricaoOtimizada += `Exames: ${examesCompactos}`;
+        descricaoOtimizada += ` | Total: R$ ${valorTotal.toFixed(2).replace('.', ',')}`;
+        descricaoOtimizada += ` | Venc: ${vencimentoStr}`;
+        
+        if (descricaoOtimizada.length > 500) {
+            descricaoOtimizada = descricaoOtimizada.substring(0, 497) + '...';
+        }
+        
+        return descricaoOtimizada;
+    }
+    
+    return descricaoResumida;
 }
 
 // ========================= CONSULTAR STATUS DA NFS-e COM DETALHES =========================
