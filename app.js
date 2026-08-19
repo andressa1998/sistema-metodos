@@ -3502,13 +3502,13 @@ function gerarDescricaoResumida(detalhes, mes, ano, unidade, valorTotal, dataVen
     }
     descricaoCompleta += `---\nVenc: ${vencimentoStr}`;
     
-    // 5. VERIFICAR SE A DESCRIÇÃO COMPLETA EXCEDE 500 CARACTERES
-    if (descricaoCompleta.length <= 500) {
+    // 5. VERIFICAR SE A DESCRIÇÃO COMPLETA EXCEDE 1000 CARACTERES
+    if (descricaoCompleta.length <= 1000) {
         return descricaoCompleta;
     }
     
     // 6. SE EXCEDER 500 CARACTERES, CRIAR VERSÃO RESUMIDA (SEM NOMES)
-    console.log(`⚠️ Descricao com nomes excedeu 500 caracteres (${descricaoCompleta.length}). Criando versao resumida...`);
+    console.log(`⚠️ Descricao com nomes excedeu 1000 caracteres (${descricaoCompleta.length}). Criando versao resumida...`);
     
     let descricaoResumida = '';
     
