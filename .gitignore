@@ -1,0 +1,4 @@
+certificados/
+*.pfx
+*.p12
+.env
