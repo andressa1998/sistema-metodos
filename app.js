@@ -299,8 +299,7 @@ async function criarOrdemServicoOmie(registro, codigoCliente) {
     registro.mes,
     registro.ano,
     registro.unidade,
-    registro.valor_total,
-    registro.data_vencimento
+    registro.valor_total
   );
 
   let dataVencimentoOriginal = '01/08/2026';
@@ -3375,47 +3374,46 @@ async function criarTodasOSLote() {
   }, 2000);
 }
 
-// ========================= GERAR DESCRIÇÃO RESUMIDA (COM NOMES DOS COLABORADORES POR EXAME) =========================
-function gerarDescricaoResumida(detalhes, mes, ano, unidade, valorTotal, dataVencimento = null) {
-    // 1. MENSALIDADE
-    let mensalidadeTexto = '';
+function gerarDescricaoResumida(detalhes, mes, ano, unidade, valorTotal) {
+    let itens = [];
+    let todosNomes = [];
+    
+    // Mensalidade
     if (detalhes.mensalidade) {
         const valor = detalhes.mensalidade.precoUnitario || 0;
-        mensalidadeTexto = `Mensalidade: R$ ${valor.toFixed(2).replace('.', ',')}`;
+        itens.push(`MENSALIDADE: R$ ${valor.toFixed(2)}`);
     }
     
-    // 2. VIDAS
-    let vidasTexto = '';
+    // Vidas
     if (detalhes['vidas (NR-1)']) {
         const vidas = detalhes['vidas (NR-1)'];
         const qtd = vidas.quantidade || 0;
         const valor = vidas.precoUnitario || 0;
-        const subtotal = qtd * valor;
-        vidasTexto = `Vidas: ${qtd} vidas, total: R$ ${subtotal.toFixed(2).replace('.', ',')}`;
+        itens.push(`VIDAS NR-1: ${qtd} x R$ ${valor.toFixed(2)} = R$ ${(qtd * valor).toFixed(2)}`);
     }
     
-    // 3. COLETAR TODOS OS EXAMES COM SEUS FUNCIONÁRIOS
+    // Exames - incluir nomes dos colaboradores
     const nomesExames = {
-        'exame_clinico': 'Exame Clinico',
-        'audiometria': 'Audiometria Ocupacional',
-        'acuidade_visual': 'Acuidade Visual',
-        'eletrocardiograma': 'Eletrocardiograma',
-        'eletroencefalograma': 'Eletroencefalograma',
-        'espirometria': 'Espirometria',
-        'raio_x_torax': 'Raio X Torax',
-        'hemograma': 'Hemograma Completo',
-        'anti_hbs': 'Anti Hbs',
-        'anti_hcv': 'Anti Hcv',
-        'anti_hbs_ag': 'Anti Hbs AG',
+        'exame_clinico': 'EXAME CLINICO',
+        'audiometria': 'AUDIOMETRIA',
+        'acuidade_visual': 'ACUIDADE VISUAL',
+        'eletrocardiograma': 'ECG',
+        'eletroencefalograma': 'EEG',
+        'espirometria': 'ESPIROMETRIA',
+        'raio_x_torax': 'RAIO X TORAX',
+        'hemograma': 'HEMOGRAMA',
+        'anti_hbs': 'ANTI HBS',
+        'anti_hcv': 'ANTI HCV',
+        'anti_hbs_ag': 'ANTI HBS AG',
         'vdrl': 'VDRL',
-        'coprocultura': 'Coprocultura',
-        'parasitologico': 'Parasitologico',
-        'gama_gt': 'Gama GT',
-        'glicose': 'Glicose',
-        'pesquisa_fungos': 'Pesquisa de Fungos',
-        'dinamometria': 'Dinamometria',
-        'visita_tec': 'Visita Tecnica',
-        'transporte': 'Transporte'
+        'coprocultura': 'COPROCULTURA',
+        'parasitologico': 'PARASITOLOGICO',
+        'gama_gt': 'GAMA GT',
+        'glicose': 'GLICOSE',
+        'pesquisa_fungos': 'PESQUISA FUNGOS',
+        'dinamometria': 'DINAMOMETRIA',
+        'visita_tec': 'VISITA TECNICA',
+        'transporte': 'TRANSPORTE'
     };
     
     const exames = ['exame_clinico', 'audiometria', 'acuidade_visual', 'eletrocardiograma', 
@@ -3424,150 +3422,95 @@ function gerarDescricaoResumida(detalhes, mes, ano, unidade, valorTotal, dataVen
                     'parasitologico', 'gama_gt', 'glicose', 'pesquisa_fungos', 
                     'dinamometria', 'visita_tec', 'transporte'];
     
-    let examesData = [];
-    
     for (const exame of exames) {
         if (detalhes[exame]) {
             const info = detalhes[exame];
             const qtd = info.quantidade || 0;
             const valor = info.precoUnitario || 0;
-            const funcionarios = info.funcionarios || [];
             const subtotal = qtd * valor;
+            const funcionarios = info.funcionarios || [];
             
             if (qtd > 0 && valor > 0) {
-                const nomeExame = nomesExames[exame] || exame;
-                examesData.push({
-                    nome: nomeExame,
-                    qtd: qtd,
-                    valor: valor,
-                    subtotal: subtotal,
-                    funcionarios: funcionarios,
-                    // LINHA RESUMIDA SEM NOMES (para versão compacta)
-                    linhaResumida: `${nomeExame} (${qtd} unid. x R$ ${valor.toFixed(2).replace('.', ',')})`
-                });
-            }
-        }
-    }
-    
-    // 4. CRIAR A DESCRIÇÃO COMPLETA COM NOMES DOS COLABORADORES
-    let descricaoCompleta = '';
-    
-    // Cabeçalho
-    descricaoCompleta += `FAT ${mes}/${ano} - ${unidade}\n`;
-    descricaoCompleta += `R$ ${valorTotal.toFixed(2).replace('.', ',')}\n`;
-    descricaoCompleta += `---\n`;
-    
-    // Mensalidade
-    if (mensalidadeTexto) {
-        descricaoCompleta += `${mensalidadeTexto}\n`;
-    }
-    
-    // Vidas
-    if (vidasTexto) {
-        descricaoCompleta += `${vidasTexto}\n`;
-    }
-    
-    // Exames COM NOMES DOS COLABORADORES
-    if (examesData.length > 0) {
-        descricaoCompleta += `EXAMES:\n`;
-        for (const exame of examesData) {
-            // Nome do exame e quantidade
-            descricaoCompleta += `${exame.nome} (${exame.qtd} unid. x R$ ${exame.valor.toFixed(2).replace('.', ',')})\n`;
-            
-            // Listar cada colaborador que fez este exame
-            const funcionarios = exame.funcionarios || [];
-            if (funcionarios.length > 0) {
-                for (const func of funcionarios) {
-                    if (func.nome && func.nome !== 'N/A') {
-                        const dataExame = func.data || 'data nao informada';
-                        descricaoCompleta += `  - ${func.nome.toUpperCase()} (${dataExame})\n`;
+                const nome = nomesExames[exame] || exame.toUpperCase();
+                let item = `${nome} - ${qtd} x R$ ${valor.toFixed(2)} = R$ ${subtotal.toFixed(2)}`;
+                
+                // ADICIONAR NOMES DOS COLABORADORES
+                if (funcionarios.length > 0) {
+                    const nomes = funcionarios.map(f => f.nome).filter(n => n && n !== 'N/A');
+                    if (nomes.length > 0) {
+                        item += ` (${nomes.join(', ')})`;
+                        todosNomes = todosNomes.concat(nomes);
                     }
                 }
+                itens.push(item);
             }
-            
-            // Subtotal do exame
-            descricaoCompleta += `R$ ${exame.subtotal.toFixed(2).replace('.', ',')}\n`;
         }
     }
     
-    // Vencimento
-    let vencimentoStr = 'N/A';
-    if (dataVencimento) {
-        try {
-            const venc = new Date(dataVencimento + 'T00:00:00');
-            vencimentoStr = venc.toLocaleDateString('pt-BR');
-        } catch (e) {
-            vencimentoStr = dataVencimento;
-        }
-    }
-    descricaoCompleta += `---\nVenc: ${vencimentoStr}`;
+    let descricao = itens.length > 0 ? itens.join('\n') : `Faturamento ${mes}/${ano} - ${unidade}`;
     
-    // 5. VERIFICAR SE A DESCRIÇÃO COMPLETA EXCEDE 1000 CARACTERES
-    if (descricaoCompleta.length <= 1000) {
-        return descricaoCompleta;
-    }
-    
-    // 6. SE EXCEDER 500 CARACTERES, CRIAR VERSÃO RESUMIDA (SEM NOMES)
-    console.log(`⚠️ Descricao com nomes excedeu 1000 caracteres (${descricaoCompleta.length}). Criando versao resumida...`);
-    
-    let descricaoResumida = '';
-    
-    // Cabeçalho resumido
-    descricaoResumida += `FAT ${mes}/${ano} - ${unidade}\n`;
-    descricaoResumida += `R$ ${valorTotal.toFixed(2).replace('.', ',')}\n`;
-    descricaoResumida += `---\n`;
-    
-    // Mensalidade
-    if (mensalidadeTexto) {
-        descricaoResumida += `${mensalidadeTexto}\n`;
-    }
-    
-    // Vidas
-    if (vidasTexto) {
-        descricaoResumida += `${vidasTexto}\n`;
-    }
-    
-    // Exames RESUMIDOS (sem nomes dos colaboradores)
-    if (examesData.length > 0) {
-        descricaoResumida += `EXAMES:\n`;
-        for (const exame of examesData) {
-            descricaoResumida += `${exame.linhaResumida}\n`;
-        }
-        const totalExames = examesData.reduce((sum, e) => sum + e.subtotal, 0);
-        descricaoResumida += `Total Exames: R$ ${totalExames.toFixed(2).replace('.', ',')}\n`;
-    }
-    
-    descricaoResumida += `---\nVenc: ${vencimentoStr}`;
-    
-    // 7. VERIFICAR SE A VERSÃO RESUMIDA AINDA EXCEDE 500 CARACTERES
-    if (descricaoResumida.length > 500) {
-        console.log(`⚠️ Descricao resumida ainda excede 500 caracteres (${descricaoResumida.length}). Otimizando...`);
+    // Se ultrapassar 120 caracteres, otimizar mantendo alguns nomes
+    if (descricao.length > 120) {
+        let resumo = '';
+        let totalExames = 0;
+        let totalValor = 0;
+        let temMensalidade = false;
+        let temVidas = false;
+        let qtdVidas = 0;
+        let valorVidas = 0;
         
-        let descricaoOtimizada = '';
-        
-        if (mensalidadeTexto) {
-            descricaoOtimizada += `${mensalidadeTexto} | `;
-        }
-        if (vidasTexto) {
-            descricaoOtimizada += `${vidasTexto} | `;
+        if (detalhes.mensalidade) {
+            temMensalidade = true;
+            totalValor += detalhes.mensalidade.precoUnitario || 0;
         }
         
-        const examesCompactos = examesData.map(e => 
-            `${e.nome} (${e.qtd})`
-        ).join(' | ');
-        
-        descricaoOtimizada += `Exames: ${examesCompactos}`;
-        descricaoOtimizada += ` | Total: R$ ${valorTotal.toFixed(2).replace('.', ',')}`;
-        descricaoOtimizada += ` | Venc: ${vencimentoStr}`;
-        
-        if (descricaoOtimizada.length > 500) {
-            descricaoOtimizada = descricaoOtimizada.substring(0, 497) + '...';
+        if (detalhes['vidas (NR-1)']) {
+            temVidas = true;
+            qtdVidas = detalhes['vidas (NR-1)'].quantidade || 0;
+            valorVidas = detalhes['vidas (NR-1)'].precoUnitario || 0;
+            totalValor += qtdVidas * valorVidas;
         }
         
-        return descricaoOtimizada;
+        for (const exame of exames) {
+            if (detalhes[exame]) {
+                const qtd = detalhes[exame].quantidade || 0;
+                totalExames += qtd;
+                totalValor += qtd * (detalhes[exame].precoUnitario || 0);
+            }
+        }
+        
+        let partes = [];
+        if (temMensalidade) {
+            partes.push(`Mensalidade R$ ${(detalhes.mensalidade.precoUnitario || 0).toFixed(2)}`);
+        }
+        if (temVidas) {
+            partes.push(`${qtdVidas} vidas R$ ${(qtdVidas * valorVidas).toFixed(2)}`);
+        }
+        if (totalExames > 0) {
+            partes.push(`${totalExames} exames`);
+        }
+        
+        // Adicionar nomes no resumo (máximo 3 nomes)
+        if (todosNomes.length > 0) {
+            const nomesUnicos = [...new Set(todosNomes)];
+            const nomesStr = nomesUnicos.slice(0, 3).join(', ');
+            if (nomesUnicos.length > 3) {
+                partes.push(`Colabs: ${nomesStr} +${nomesUnicos.length - 3}`);
+            } else {
+                partes.push(`Colabs: ${nomesStr}`);
+            }
+        }
+        
+        resumo = `FAT ${mes}/${ano}: ${partes.join(' | ')}. Total: R$ ${totalValor.toFixed(2)}`;
+        
+        if (resumo.length > 120) {
+            resumo = resumo.substring(0, 117) + '...';
+        }
+        
+        return resumo;
     }
     
-    return descricaoResumida;
+    return descricao;
 }
 
 // ========================= CONSULTAR STATUS DA NFS-e COM DETALHES =========================
@@ -7300,1000 +7243,41 @@ async function atualizarStatusTodasOS() {
 }
 
 // ============================================================
-// ================ E-SOCIAL - FUNÇÕES ========================
+// ================ E-SOCIAL - NAVEGAÇÃO ======================
+// ============================================================
+//
+// IMPORTANTE:
+// Toda a lógica do módulo eSocial fica em esocial.js.
+// app.js mantém apenas a navegação entre os módulos para que
+// Faturamento e eSocial possam evoluir de forma independente.
+//
 // ============================================================
 
-const ESOCIAL_API_URL = 'http://localhost:3002/api';
-let eventosData = [];
-let paginaAtualEventos = 1;
-let registrosPorPaginaEventos = 25;
-
-// ========================= MOSTRAR PÁGINA E-SOCIAL =========================
 function mostrarPaginaESocial(user) {
-    console.log('📱 Abrindo página E-Social...');
-    
-    document.getElementById('loginPage').classList.add('hidden');
-    document.getElementById('menuPage').classList.add('hidden');
-    document.getElementById('dashboardPage').classList.add('hidden');
-    
-    const esocialPage = document.getElementById('esocialPage');
-    if (esocialPage) {
-        esocialPage.classList.remove('hidden');
-    } else {
-        console.error('❌ Elemento esocialPage não encontrado!');
-        return;
-    }
-    
-    if (user && user.email) {
-        document.getElementById('userEmailESocial').textContent = user.email;
-    }
-    
-    // Chamar a inicialização do módulo e-Social (agora definida em esocial.js)
-    if (typeof initESocial === 'function') {
-        initESocial();
-    } else {
-        console.error('❌ Função initESocial não encontrada! Verifique se o arquivo esocial.js foi carregado.');
-    }
-}
+  console.log('📱 Abrindo módulo eSocial...');
 
-// ============================================================
-// INICIAR E-SOCIAL
-// ============================================================
+  document.getElementById('loginPage')?.classList.add('hidden');
+  document.getElementById('menuPage')?.classList.add('hidden');
+  document.getElementById('dashboardPage')?.classList.add('hidden');
 
-function initESocial() {
-    console.log('🚀 Inicializando módulo e-Social...');
-    
-    carregarEmpresasESocial();
-    carregarEventosESocial();
-    carregarEstatisticasESocial();
-    carregarCertificadoAtivoESocial();
-    
-    document.getElementById('btnAplicarFiltrosEventos')?.addEventListener('click', aplicarFiltrosESocial);
-    document.getElementById('btnLimparFiltrosEventos')?.addEventListener('click', limparFiltrosESocial);
-    document.getElementById('btnNovoEvento')?.addEventListener('click', abrirModalNovoEventoESocial);
-    document.getElementById('btnSalvarEvento')?.addEventListener('click', salvarEventoESocial);
-    document.getElementById('btnUploadCertificado')?.addEventListener('click', uploadCertificadoESocial);
-    document.getElementById('btnTestarCertificado')?.addEventListener('click', testarCertificadoESocial);
-    document.getElementById('btnSyncSOC')?.addEventListener('click', sincronizarSOCESocial);
-    document.getElementById('btnProcessarLote')?.addEventListener('click', processarLoteESocial);
-    document.getElementById('btnCopiarXML')?.addEventListener('click', copiarXMLEsocial);
-    
-    document.getElementById('eventoTipo')?.addEventListener('change', carregarCamposDinamicosESocial);
-    document.getElementById('eventoEmpresa')?.addEventListener('change', carregarFuncionariosESocial);
-    
-    document.getElementById('btnVoltarMenuESocial')?.addEventListener('click', function() {
-        supabaseClient.auth.getUser().then(({ data }) => {
-            if (data.user) {
-                mostrarMenu(data.user);
-            } else {
-                mostrarPaginaLogin();
-            }
-        });
-    });
+  const esocialPage = document.getElementById('esocialPage');
+  if (!esocialPage) {
+    console.error('❌ Elemento esocialPage não encontrado.');
+    return;
+  }
 
-    document.getElementById('logoutBtnESocial')?.addEventListener('click', function() {
-        supabaseClient.auth.signOut();
-        mostrarPaginaLogin();
-    });
-    
-    console.log('✅ Módulo e-Social inicializado');
-}
+  esocialPage.classList.remove('hidden');
 
-// ============================================================
-// CARREGAR EMPRESAS
-// ============================================================
+  if (user?.email) {
+    const emailEl = document.getElementById('userEmailESocial');
+    if (emailEl) emailEl.textContent = user.email;
+  }
 
-async function carregarEmpresasESocial() {
-    try {
-        const token = localStorage.getItem('token') || (await supabaseClient.auth.getSession()).data.session?.access_token;
-        if (!token) return [];
-        
-        const response = await fetch(`${ESOCIAL_API_URL}/esocial/empresas`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        
-        if (!response.ok) throw new Error('Erro ao carregar empresas');
-        
-        const empresas = await response.json();
-        
-        const selectFiltro = document.getElementById('filtroEmpresaEvento');
-        if (selectFiltro) {
-            selectFiltro.innerHTML = '<option value="">Todas</option>';
-            empresas.forEach(emp => {
-                selectFiltro.innerHTML += `<option value="${emp.id}">${emp.unidade}</option>`;
-            });
-        }
-        
-        const selectModal = document.getElementById('eventoEmpresa');
-        if (selectModal) {
-            selectModal.innerHTML = '<option value="">Selecione...</option>';
-            empresas.forEach(emp => {
-                selectModal.innerHTML += `<option value="${emp.id}">${emp.unidade}</option>`;
-            });
-        }
-        
-        return empresas;
-    } catch (error) {
-        console.error('❌ Erro ao carregar empresas eSocial:', error);
-        return [];
-    }
-}
-
-// ============================================================
-// CARREGAR FUNCIONÁRIOS
-// ============================================================
-
-async function carregarFuncionariosESocial() {
-    const empresaId = document.getElementById('eventoEmpresa')?.value;
-    const select = document.getElementById('eventoFuncionario');
-    
-    if (!empresaId) {
-        select.innerHTML = '<option value="">Selecione (opcional)...</option>';
-        return;
-    }
-    
-    try {
-        const token = localStorage.getItem('token') || (await supabaseClient.auth.getSession()).data.session?.access_token;
-        if (!token) return;
-        
-        const response = await fetch(`${ESOCIAL_API_URL}/esocial/funcionarios?empresa_id=${empresaId}&ativo=true`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        
-        if (!response.ok) throw new Error('Erro ao carregar funcionários');
-        
-        const funcionarios = await response.json();
-        
-        select.innerHTML = '<option value="">Selecione (opcional)...</option>';
-        funcionarios.forEach(func => {
-            select.innerHTML += `<option value="${func.id}">${func.nome} (${func.cpf})</option>`;
-        });
-    } catch (error) {
-        console.error('❌ Erro ao carregar funcionários eSocial:', error);
-    }
-}
-
-// ============================================================
-// CARREGAR EVENTOS
-// ============================================================
-
-async function carregarEventosESocial(filtros = {}) {
-    try {
-        const token = localStorage.getItem('token') || (await supabaseClient.auth.getSession()).data.session?.access_token;
-        if (!token) return [];
-        
-        const params = new URLSearchParams();
-        if (filtros.tipo) params.append('tipo_evento', filtros.tipo);
-        if (filtros.status) params.append('status', filtros.status);
-        if (filtros.empresa) params.append('empresa_id', filtros.empresa);
-        if (filtros.data_inicio) params.append('data_inicio', filtros.data_inicio);
-        if (filtros.data_fim) params.append('data_fim', filtros.data_fim);
-        params.append('limit', '200');
-        
-        const response = await fetch(`${ESOCIAL_API_URL}/esocial/eventos?${params}`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        
-        if (!response.ok) throw new Error('Erro ao carregar eventos');
-        
-        eventosData = await response.json();
-        renderizarTabelaEventosESocial();
-        return eventosData;
-    } catch (error) {
-        console.error('❌ Erro ao carregar eventos eSocial:', error);
-        return [];
-    }
-}
-
-// ============================================================
-// CARREGAR ESTATÍSTICAS
-// ============================================================
-
-async function carregarEstatisticasESocial() {
-    try {
-        const token = localStorage.getItem('token') || (await supabaseClient.auth.getSession()).data.session?.access_token;
-        if (!token) return null;
-        
-        const response = await fetch(`${ESOCIAL_API_URL}/esocial/eventos/stats`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        
-        if (!response.ok) throw new Error('Erro ao carregar estatísticas');
-        
-        const stats = await response.json();
-        
-        document.getElementById('totalEventos').textContent = stats.total || 0;
-        
-        const statusMap = {};
-        stats.status.forEach(s => {
-            statusMap[s.status] = s.total;
-        });
-        
-        document.getElementById('eventosSucesso').textContent = statusMap['sucesso'] || 0;
-        document.getElementById('eventosPendentes').textContent = (statusMap['pendente'] || 0) + (statusMap['processando'] || 0);
-        document.getElementById('eventosErro').textContent = statusMap['erro'] || 0;
-        document.getElementById('totalEventosTexto').textContent = `${stats.total || 0} eventos`;
-        
-        return stats;
-    } catch (error) {
-        console.error('❌ Erro ao carregar estatísticas eSocial:', error);
-        return null;
-    }
-}
-
-// ============================================================
-// CARREGAR CERTIFICADO ATIVO
-// ============================================================
-
-async function carregarCertificadoAtivoESocial() {
-    try {
-        const token = localStorage.getItem('token') || (await supabaseClient.auth.getSession()).data.session?.access_token;
-        if (!token) return [];
-        
-        const response = await fetch(`${ESOCIAL_API_URL}/esocial/certificados`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        
-        if (!response.ok) throw new Error('Erro ao carregar certificados');
-        
-        const certificados = await response.json();
-        const ativo = certificados.find(c => c.ativo);
-        
-        if (ativo) {
-            const validade = new Date(ativo.data_validade);
-            const hoje = new Date();
-            const diasRestantes = Math.ceil((validade - hoje) / (1000 * 60 * 60 * 24));
-            
-            document.getElementById('certificadoNome').textContent = ativo.nome;
-            document.getElementById('certificadoValidade').textContent = `Validade: ${validade.toLocaleDateString('pt-BR')} (${diasRestantes} dias)`;
-            
-            const statusEl = document.getElementById('certificadoStatus');
-            if (diasRestantes > 30) {
-                statusEl.className = 'badge bg-success';
-                statusEl.textContent = '✅ Válido';
-            } else if (diasRestantes > 7) {
-                statusEl.className = 'badge bg-warning';
-                statusEl.textContent = '⚠️ Próximo ao vencimento';
-            } else {
-                statusEl.className = 'badge bg-danger';
-                statusEl.textContent = '❌ Expirando em breve';
-            }
-            
-            document.getElementById('esocialStatusBadge').className = 'badge bg-success';
-            document.getElementById('esocialStatusBadge').textContent = '✅ Conectado';
-        } else {
-            document.getElementById('certificadoNome').textContent = 'Nenhum certificado ativo';
-            document.getElementById('certificadoValidade').textContent = 'Validade: --';
-            document.getElementById('certificadoStatus').className = 'badge bg-danger';
-            document.getElementById('certificadoStatus').textContent = '❌ Inativo';
-            document.getElementById('esocialStatusBadge').className = 'badge bg-danger';
-            document.getElementById('esocialStatusBadge').textContent = '❌ Sem certificado';
-        }
-        
-        return certificados;
-    } catch (error) {
-        console.error('❌ Erro ao carregar certificados eSocial:', error);
-        return [];
-    }
-}
-
-// ============================================================
-// RENDERIZAR TABELA DE EVENTOS
-// ============================================================
-
-function renderizarTabelaEventosESocial() {
-    const tbody = document.getElementById('eventosBody');
-    
-    if (!eventosData || eventosData.length === 0) {
-        tbody.innerHTML = `
-            <tr>
-                <td colspan="9" class="text-center text-muted py-4">
-                    <i class="fas fa-inbox me-2"></i> Nenhum evento encontrado
-                </td>
-            </tr>
-        `;
-        return;
-    }
-    
-    const statusMap = {
-        'pendente': { class: 'warning', icon: 'fa-clock', text: 'Pendente' },
-        'processando': { class: 'info', icon: 'fa-spinner fa-spin', text: 'Processando' },
-        'sucesso': { class: 'success', icon: 'fa-check-circle', text: 'Sucesso' },
-        'erro': { class: 'danger', icon: 'fa-times-circle', text: 'Erro' },
-        'cancelado': { class: 'secondary', icon: 'fa-ban', text: 'Cancelado' }
-    };
-    
-    let html = '';
-    eventosData.forEach(evento => {
-        const status = statusMap[evento.status] || statusMap['pendente'];
-        const dataCriacao = new Date(evento.created_at).toLocaleString('pt-BR');
-        const dataEvento = evento.data_evento ? new Date(evento.data_evento).toLocaleDateString('pt-BR') : '—';
-        const periodo = evento.periodo_apuracao || dataEvento;
-        
-        html += `<tr>
-            <td><code class="small">${evento.codigo_evento || evento.id}</code></td>
-            <td><span class="badge bg-primary">${evento.tipo_evento}</span></td>
-            <td>${evento.empresa_nome || evento.empresa_id}</td>
-            <td>${evento.funcionario_nome || '—'}</td>
-            <td>
-                <span class="badge bg-${status.class}">
-                    <i class="fas ${status.icon}"></i> ${status.text}
-                </span>
-            </td>
-            <td>${periodo}</td>
-            <td>${evento.numero_recibo ? `<code class="small">${evento.numero_recibo}</code>` : '—'}</td>
-            <td>${dataCriacao}</td>
-            <td class="text-center">
-                <div class="btn-group btn-group-sm">
-                    <button class="btn btn-outline-primary btn-detalhes-evento" data-id="${evento.id}">
-                        <i class="fas fa-eye"></i>
-                    </button>
-                    ${evento.status === 'pendente' || evento.status === 'erro' ? `
-                        <button class="btn btn-outline-success btn-enviar-evento" data-id="${evento.id}">
-                            <i class="fas fa-play"></i>
-                        </button>
-                    ` : ''}
-                    ${evento.status === 'sucesso' || evento.status === 'processando' ? `
-                        <button class="btn btn-outline-danger btn-cancelar-evento" data-id="${evento.id}">
-                            <i class="fas fa-ban"></i>
-                        </button>
-                    ` : ''}
-                    <button class="btn btn-outline-info btn-ver-xml" data-id="${evento.id}">
-                        <i class="fas fa-code"></i>
-                    </button>
-                </div>
-            </td>
-        </tr>`;
-    });
-    
-    tbody.innerHTML = html;
-    
-    const totalPaginas = Math.ceil(eventosData.length / registrosPorPaginaEventos);
-    atualizarPaginacaoESocial(totalPaginas);
-    
-    document.querySelectorAll('.btn-detalhes-evento').forEach(btn => {
-        btn.addEventListener('click', () => verDetalhesEventoESocial(btn.dataset.id));
-    });
-    
-    document.querySelectorAll('.btn-enviar-evento').forEach(btn => {
-        btn.addEventListener('click', () => enviarEventoESocial(btn.dataset.id));
-    });
-    
-    document.querySelectorAll('.btn-cancelar-evento').forEach(btn => {
-        btn.addEventListener('click', () => cancelarEventoESocial(btn.dataset.id));
-    });
-    
-    document.querySelectorAll('.btn-ver-xml').forEach(btn => {
-        btn.addEventListener('click', () => verXMLEsocial(btn.dataset.id));
-    });
-}
-
-// ============================================================
-// ATUALIZAR PAGINAÇÃO
-// ============================================================
-
-function atualizarPaginacaoESocial(totalPaginas) {
-    const container = document.getElementById('paginacaoEventos');
-    const prevBtn = document.getElementById('prevPageEventos');
-    const nextBtn = document.getElementById('nextPageEventos');
-    
-    const items = container.querySelectorAll('.page-item:not(#prevPageEventos):not(#nextPageEventos)');
-    items.forEach(el => el.remove());
-    
-    prevBtn.className = `page-item ${paginaAtualEventos <= 1 ? 'disabled' : ''}`;
-    nextBtn.className = `page-item ${paginaAtualEventos >= totalPaginas ? 'disabled' : ''}`;
-    
-    prevBtn.querySelector('a').onclick = (e) => {
-        e.preventDefault();
-        if (paginaAtualEventos > 1) {
-            paginaAtualEventos--;
-            renderizarTabelaEventosESocial();
-        }
-    };
-    
-    nextBtn.querySelector('a').onclick = (e) => {
-        e.preventDefault();
-        if (paginaAtualEventos < totalPaginas) {
-            paginaAtualEventos++;
-            renderizarTabelaEventosESocial();
-        }
-    };
-    
-    let startPage = Math.max(1, paginaAtualEventos - 4);
-    let endPage = Math.min(totalPaginas, startPage + 9);
-    
-    if (endPage - startPage < 9) {
-        startPage = Math.max(1, endPage - 9);
-    }
-    
-    for (let i = startPage; i <= endPage; i++) {
-        const li = document.createElement('li');
-        li.className = `page-item ${i === paginaAtualEventos ? 'active' : ''}`;
-        li.innerHTML = `<a class="page-link" href="#" data-page="${i}">${i}</a>`;
-        container.insertBefore(li, nextBtn);
-        
-        li.querySelector('a').addEventListener('click', function(e) {
-            e.preventDefault();
-            paginaAtualEventos = parseInt(this.dataset.page);
-            renderizarTabelaEventosESocial();
-        });
-    }
-    
-    const info = document.getElementById('paginacaoInfoEventos');
-    const inicio = (paginaAtualEventos - 1) * registrosPorPaginaEventos + 1;
-    const fim = Math.min(paginaAtualEventos * registrosPorPaginaEventos, eventosData.length);
-    info.textContent = `Mostrando ${inicio} a ${fim} de ${eventosData.length} eventos`;
-}
-
-// ============================================================
-// FILTROS E-SOCIAL
-// ============================================================
-
-function aplicarFiltrosESocial() {
-    const filtros = {
-        tipo: document.getElementById('filtroTipoEvento')?.value || '',
-        status: document.getElementById('filtroStatusEvento')?.value || '',
-        empresa: document.getElementById('filtroEmpresaEvento')?.value || '',
-        data_inicio: document.getElementById('filtroDataInicio')?.value || '',
-        data_fim: document.getElementById('filtroDataFim')?.value || ''
-    };
-    paginaAtualEventos = 1;
-    carregarEventosESocial(filtros);
-}
-
-function limparFiltrosESocial() {
-    document.getElementById('filtroTipoEvento').value = '';
-    document.getElementById('filtroStatusEvento').value = '';
-    document.getElementById('filtroEmpresaEvento').value = '';
-    document.getElementById('filtroDataInicio').value = '';
-    document.getElementById('filtroDataFim').value = '';
-    paginaAtualEventos = 1;
-    carregarEventosESocial();
-}
-
-// ============================================================
-// MODAL NOVO EVENTO
-// ============================================================
-
-function abrirModalNovoEventoESocial() {
-    document.getElementById('novoEventoForm').reset();
-    document.getElementById('eventoDadosDinamicos').innerHTML = '';
-    document.getElementById('eventoData').value = new Date().toISOString().split('T')[0];
-    document.getElementById('eventoPeriodo').value = new Date().toISOString().slice(0, 7);
-    carregarEmpresasESocial();
-    const modal = new bootstrap.Modal(document.getElementById('novoEventoModal'));
-    modal.show();
-}
-
-function carregarCamposDinamicosESocial() {
-    const tipo = document.getElementById('eventoTipo')?.value;
-    const container = document.getElementById('eventoDadosDinamicos');
-    
-    if (!tipo) {
-        container.innerHTML = '';
-        return;
-    }
-    
-    let html = '<hr><h6 class="fw-bold">Dados do Evento</h6><div class="row g-3">';
-    
-    switch (tipo) {
-        case 'S-1200':
-            html += `
-                <div class="col-md-4">
-                    <label class="form-label">Código da Demanda</label>
-                    <input type="text" id="eventoCodDemanda" class="form-control" value="0001" />
-                </div>
-                <div class="col-md-4">
-                    <label class="form-label">Apurar IR</label>
-                    <select id="eventoApurarIR" class="form-select">
-                        <option value="1">Sim</option>
-                        <option value="0">Não</option>
-                    </select>
-                </div>
-                <div class="col-md-4">
-                    <label class="form-label">Apurar FGTS</label>
-                    <select id="eventoApurarFGTS" class="form-select">
-                        <option value="1">Sim</option>
-                        <option value="0">Não</option>
-                    </select>
-                </div>
-                <div class="col-12">
-                    <label class="form-label">Remunerações (JSON)</label>
-                    <textarea id="eventoRemuneracoes" class="form-control" rows="3" placeholder='[{"codigo": "0100", "valor": 1500.00}]'></textarea>
-                </div>
-            `;
-            break;
-        case 'S-2200':
-            html += `
-                <div class="col-md-4">
-                    <label class="form-label">Matrícula</label>
-                    <input type="text" id="eventoMatricula" class="form-control" />
-                </div>
-                <div class="col-md-4">
-                    <label class="form-label">Data Admissão</label>
-                    <input type="date" id="eventoDataAdmissao" class="form-control" />
-                </div>
-                <div class="col-md-4">
-                    <label class="form-label">Salário Base</label>
-                    <input type="number" step="0.01" id="eventoSalario" class="form-control" />
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label">Cargo</label>
-                    <input type="text" id="eventoCargo" class="form-control" />
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label">CBO</label>
-                    <input type="text" id="eventoCBO" class="form-control" placeholder="Código CBO" />
-                </div>
-            `;
-            break;
-        case 'S-2400':
-            html += `
-                <div class="col-md-6">
-                    <label class="form-label">Data Desligamento</label>
-                    <input type="date" id="eventoDataDesligamento" class="form-control" />
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label">Motivo Desligamento</label>
-                    <select id="eventoMotivoDesligamento" class="form-select">
-                        <option value="10">Rescisão sem justa causa</option>
-                        <option value="11">Rescisão com justa causa</option>
-                        <option value="12">Pedido de demissão</option>
-                        <option value="13">Término de contrato</option>
-                        <option value="14">Aposentadoria</option>
-                    </select>
-                </div>
-            `;
-            break;
-        default:
-            html = '<div class="alert alert-info">Nenhum dado adicional necessário para este tipo de evento.</div>';
-            break;
-    }
-    
-    html += '</div>';
-    container.innerHTML = html;
-}
-
-async function salvarEventoESocial() {
-    try {
-        const tipo = document.getElementById('eventoTipo').value;
-        const empresa_id = document.getElementById('eventoEmpresa').value;
-        const funcionario_id = document.getElementById('eventoFuncionario').value;
-        const periodo_apuracao = document.getElementById('eventoPeriodo').value;
-        const data_evento = document.getElementById('eventoData').value;
-        const enviarImediato = document.getElementById('eventoEnviarImediato').checked;
-        
-        if (!tipo || !empresa_id) {
-            mostrarAlerta('Preencha o tipo de evento e a empresa.', 'warning');
-            return;
-        }
-        
-        const dados_evento = {};
-        
-        switch (tipo) {
-            case 'S-1200':
-                dados_evento.codigo_demanda = document.getElementById('eventoCodDemanda')?.value || '0001';
-                dados_evento.apurar_ir = document.getElementById('eventoApurarIR')?.value === '1';
-                dados_evento.apurar_fgts = document.getElementById('eventoApurarFGTS')?.value === '1';
-                dados_evento.remuneracao = [];
-                try {
-                    const remunText = document.getElementById('eventoRemuneracoes')?.value;
-                    if (remunText) {
-                        dados_evento.remuneracao = JSON.parse(remunText);
-                    }
-                } catch (e) {
-                    mostrarAlerta('Formato de remunerações inválido.', 'warning');
-                    return;
-                }
-                break;
-            case 'S-2200':
-                dados_evento.matricula = document.getElementById('eventoMatricula')?.value || '';
-                dados_evento.data_admissao = document.getElementById('eventoDataAdmissao')?.value || data_evento;
-                dados_evento.salario_base = parseFloat(document.getElementById('eventoSalario')?.value) || 0;
-                dados_evento.cargo = document.getElementById('eventoCargo')?.value || '';
-                dados_evento.codigo_cbo = document.getElementById('eventoCBO')?.value || '';
-                break;
-            case 'S-2400':
-                dados_evento.data_desligamento = document.getElementById('eventoDataDesligamento')?.value || data_evento;
-                dados_evento.motivo_desligamento = document.getElementById('eventoMotivoDesligamento')?.value || '10';
-                break;
-        }
-        
-        dados_evento.ambiente = 'homologacao';
-        dados_evento.periodo_apuracao = periodo_apuracao;
-        dados_evento.data_evento = data_evento;
-        
-        const token = localStorage.getItem('token') || (await supabaseClient.auth.getSession()).data.session?.access_token;
-        
-        const response = await fetch(`${ESOCIAL_API_URL}/esocial/eventos`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({
-                empresa_id,
-                funcionario_id: funcionario_id || null,
-                tipo_evento: tipo,
-                dados_evento,
-                data_evento,
-                periodo_apuracao
-            })
-        });
-        
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.message || 'Erro ao criar evento');
-        }
-        
-        const evento = await response.json();
-        
-        mostrarAlerta(`✅ Evento ${evento.codigo_evento} criado com sucesso!`, 'success');
-        
-        bootstrap.Modal.getInstance(document.getElementById('novoEventoModal')).hide();
-        carregarEventosESocial();
-        carregarEstatisticasESocial();
-        
-    } catch (error) {
-        console.error('❌ Erro ao salvar evento:', error);
-        mostrarAlerta('Erro ao salvar evento: ' + error.message, 'danger');
-    }
-}
-
-// ============================================================
-// AÇÕES DOS EVENTOS
-// ============================================================
-
-async function enviarEventoESocial(id) {
-    if (!confirm('Deseja enviar este evento para o eSocial?')) return;
-    
-    try {
-        const token = localStorage.getItem('token') || (await supabaseClient.auth.getSession()).data.session?.access_token;
-        
-        const response = await fetch(`${ESOCIAL_API_URL}/esocial/eventos/${id}/enviar`, {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.message || 'Erro ao enviar evento');
-        }
-        
-        mostrarAlerta('✅ Evento adicionado à fila de envio!', 'success');
-        setTimeout(() => {
-            carregarEventosESocial();
-            carregarEstatisticasESocial();
-        }, 1000);
-        
-    } catch (error) {
-        console.error('❌ Erro ao enviar evento:', error);
-        mostrarAlerta('Erro ao enviar evento: ' + error.message, 'danger');
-    }
-}
-
-async function cancelarEventoESocial(id) {
-    if (!confirm('Deseja cancelar este evento no eSocial?')) return;
-    
-    try {
-        const token = localStorage.getItem('token') || (await supabaseClient.auth.getSession()).data.session?.access_token;
-        
-        const response = await fetch(`${ESOCIAL_API_URL}/esocial/eventos/${id}/cancelar`, {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.message || 'Erro ao cancelar evento');
-        }
-        
-        mostrarAlerta('✅ Evento adicionado à fila de cancelamento!', 'success');
-        setTimeout(() => {
-            carregarEventosESocial();
-            carregarEstatisticasESocial();
-        }, 1000);
-        
-    } catch (error) {
-        console.error('❌ Erro ao cancelar evento:', error);
-        mostrarAlerta('Erro ao cancelar evento: ' + error.message, 'danger');
-    }
-}
-
-async function verDetalhesEventoESocial(id) {
-    try {
-        const token = localStorage.getItem('token') || (await supabaseClient.auth.getSession()).data.session?.access_token;
-        
-        const response = await fetch(`${ESOCIAL_API_URL}/esocial/eventos/${id}/status`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        
-        if (!response.ok) throw new Error('Erro ao carregar detalhes');
-        
-        const data = await response.json();
-        const container = document.getElementById('detalhesEventoConteudo');
-        
-        let html = `
-            <div class="row g-3">
-                <div class="col-md-6">
-                    <div class="card bg-light">
-                        <div class="card-body">
-                            <h6 class="fw-bold">Informações Gerais</h6>
-                            <table class="table table-sm table-borderless">
-                                <tr><td><strong>Código:</strong></td><td>${data.evento.codigo_evento || data.evento.id}</td></tr>
-                                <tr><td><strong>Tipo:</strong></td><td>${data.evento.tipo_evento}</td></tr>
-                                <tr><td><strong>Status:</strong></td><td><span class="badge bg-${data.evento.status === 'sucesso' ? 'success' : data.evento.status === 'erro' ? 'danger' : 'warning'}">${data.evento.status}</span></td></tr>
-                                <tr><td><strong>Empresa:</strong></td><td>${data.evento.empresa_nome}</td></tr>
-                                <tr><td><strong>Funcionário:</strong></td><td>${data.evento.funcionario_nome || '—'}</td></tr>
-                                <tr><td><strong>Período:</strong></td><td>${data.evento.periodo_apuracao || '—'}</td></tr>
-                                <tr><td><strong>Data Evento:</strong></td><td>${data.evento.data_evento ? new Date(data.evento.data_evento).toLocaleDateString('pt-BR') : '—'}</td></tr>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-6">
-                    <div class="card bg-light">
-                        <div class="card-body">
-                            <h6 class="fw-bold">Retorno do eSocial</h6>
-                            <table class="table table-sm table-borderless">
-                                <tr><td><strong>Número Recibo:</strong></td><td><code>${data.evento.numero_recibo || '—'}</code></td></tr>
-                                <tr><td><strong>Protocolo:</strong></td><td><code>${data.evento.protocolo || '—'}</code></td></tr>
-                                <tr><td><strong>Código Retorno:</strong></td><td>${data.evento.codigo_retorno || '—'}</td></tr>
-                                <tr><td><strong>Mensagem:</strong></td><td>${data.evento.mensagem_retorno || '—'}</td></tr>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-        
-        if (data.logs && data.logs.length > 0) {
-            html += `
-                <div class="card bg-light mt-3">
-                    <div class="card-body">
-                        <h6 class="fw-bold">Logs</h6>
-                        <div style="max-height: 200px; overflow-y: auto;">
-                            <table class="table table-sm table-borderless">
-                    `;
-            data.logs.forEach(log => {
-                const tipoClass = log.tipo === 'success' ? 'success' : log.tipo === 'error' ? 'danger' : 'info';
-                html += `
-                    <tr>
-                        <td><span class="badge bg-${tipoClass}">${log.tipo}</span></td>
-                        <td>${log.mensagem}</td>
-                        <td class="text-muted small">${new Date(log.created_at).toLocaleString('pt-BR')}</td>
-                    </tr>
-                `;
-            });
-            html += `</table></div></div></div>`;
-        }
-        
-        container.innerHTML = html;
-        const modal = new bootstrap.Modal(document.getElementById('detalhesEventoModal'));
-        modal.show();
-        
-    } catch (error) {
-        console.error('❌ Erro ao ver detalhes:', error);
-        mostrarAlerta('Erro ao carregar detalhes: ' + error.message, 'danger');
-    }
-}
-
-async function verXMLEsocial(id) {
-    try {
-        const token = localStorage.getItem('token') || (await supabaseClient.auth.getSession()).data.session?.access_token;
-        
-        const response = await fetch(`${ESOCIAL_API_URL}/esocial/eventos/${id}/xml`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        
-        if (!response.ok) throw new Error('Erro ao carregar XML');
-        
-        const data = await response.json();
-        
-        if (data.xml) {
-            const container = document.getElementById('detalhesEventoConteudo');
-            container.innerHTML = `
-                <div class="card bg-light">
-                    <div class="card-body">
-                        <h6 class="fw-bold">XML do Evento</h6>
-                        <pre style="max-height: 500px; overflow-y: auto; background: #f8f9fa; padding: 15px; border-radius: 6px; font-size: 0.75rem; white-space: pre-wrap; word-wrap: break-word;">${data.xml}</pre>
-                    </div>
-                </div>
-            `;
-            window._xmlAtual = data.xml;
-            const modal = new bootstrap.Modal(document.getElementById('detalhesEventoModal'));
-            modal.show();
-        } else {
-            mostrarAlerta('XML não disponível para este evento.', 'warning');
-        }
-    } catch (error) {
-        console.error('❌ Erro ao carregar XML:', error);
-        mostrarAlerta('Erro ao carregar XML: ' + error.message, 'danger');
-    }
-}
-
-function copiarXMLEsocial() {
-    if (window._xmlAtual) {
-        navigator.clipboard.writeText(window._xmlAtual).then(() => {
-            mostrarAlerta('XML copiado para a área de transferência!', 'success');
-        }).catch(() => {
-            const textarea = document.createElement('textarea');
-            textarea.value = window._xmlAtual;
-            document.body.appendChild(textarea);
-            textarea.select();
-            document.execCommand('copy');
-            document.body.removeChild(textarea);
-            mostrarAlerta('XML copiado para a área de transferência!', 'success');
-        });
-    }
-}
-
-// ============================================================
-// CERTIFICADO
-// ============================================================
-
-async function uploadCertificadoESocial() {
-    try {
-        const nome = document.getElementById('certificadoNomeInput').value;
-        const cnpj = document.getElementById('certificadoCnpj').value;
-        const arquivo = document.getElementById('certificadoArquivo').files[0];
-        const senha = document.getElementById('certificadoSenha').value;
-        const ativo = document.getElementById('certificadoAtivo').checked;
-        
-        if (!nome || !cnpj || !arquivo || !senha) {
-            mostrarAlerta('Preencha todos os campos.', 'warning');
-            return;
-        }
-        
-        const reader = new FileReader();
-        reader.readAsDataURL(arquivo);
-        
-        reader.onload = async function() {
-            try {
-                const token = localStorage.getItem('token') || (await supabaseClient.auth.getSession()).data.session?.access_token;
-                const arquivoBase64 = reader.result;
-                
-                const response = await fetch(`${ESOCIAL_API_URL}/esocial/certificados`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
-                    },
-                    body: JSON.stringify({
-                        nome,
-                        cnpj_cpf: cnpj,
-                        arquivo_certificado: arquivoBase64,
-                        senha
-                    })
-                });
-                
-                if (!response.ok) {
-                    const error = await response.json();
-                    throw new Error(error.message || 'Erro ao enviar certificado');
-                }
-                
-                const result = await response.json();
-                
-                if (ativo && result.certificado) {
-                    await fetch(`${ESOCIAL_API_URL}/esocial/certificado/ativo/${result.certificado.id}`, {
-                        method: 'PUT',
-                        headers: { 'Authorization': `Bearer ${token}` }
-                    });
-                }
-                
-                mostrarAlerta('✅ Certificado enviado com sucesso!', 'success');
-                bootstrap.Modal.getInstance(document.getElementById('certificadoModal')).hide();
-                carregarCertificadoAtivoESocial();
-                
-            } catch (error) {
-                console.error('❌ Erro ao enviar certificado:', error);
-                mostrarAlerta('Erro ao enviar certificado: ' + error.message, 'danger');
-            }
-        };
-        
-        reader.onerror = function() {
-            mostrarAlerta('Erro ao ler o arquivo.', 'danger');
-        };
-        
-    } catch (error) {
-        console.error('❌ Erro ao enviar certificado:', error);
-        mostrarAlerta('Erro ao enviar certificado: ' + error.message, 'danger');
-    }
-}
-
-async function testarCertificadoESocial() {
-    try {
-        mostrarAlerta('🔄 Testando certificado...', 'info');
-        const token = localStorage.getItem('token') || (await supabaseClient.auth.getSession()).data.session?.access_token;
-        
-        const response = await fetch(`${ESOCIAL_API_URL}/esocial/certificado/testar`, {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        
-        const result = await response.json();
-        
-        if (response.ok && result.success) {
-            mostrarAlerta('✅ Certificado válido e funcionando!', 'success');
-        } else {
-            mostrarAlerta('❌ ' + (result.error || 'Certificado inválido'), 'danger');
-        }
-    } catch (error) {
-        console.error('❌ Erro ao testar certificado:', error);
-        mostrarAlerta('Erro ao testar certificado: ' + error.message, 'danger');
-    }
-}
-
-// ============================================================
-// INTEGRAÇÃO SOC E PROCESSAR LOTE
-// ============================================================
-
-async function sincronizarSOCESocial() {
-    if (!confirm('Deseja sincronizar os dados do SOC?')) return;
-    
-    try {
-        mostrarAlerta('🔄 Sincronizando com o SOC...', 'info');
-        const token = localStorage.getItem('token') || (await supabaseClient.auth.getSession()).data.session?.access_token;
-        
-        const response = await fetch(`${ESOCIAL_API_URL}/esocial/integracao/sync`, {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        
-        const result = await response.json();
-        
-        if (response.ok) {
-            mostrarAlerta(`✅ Sincronização concluída! ${result.criados || 0} novos, ${result.atualizados || 0} atualizados.`, 'success');
-            carregarEmpresasESocial();
-            carregarEventosESocial();
-        } else {
-            mostrarAlerta('❌ Erro na sincronização: ' + (result.error || 'Erro desconhecido'), 'danger');
-        }
-    } catch (error) {
-        console.error('❌ Erro na sincronização:', error);
-        mostrarAlerta('Erro na sincronização: ' + error.message, 'danger');
-    }
-}
-
-async function processarLoteESocial() {
-    try {
-        const token = localStorage.getItem('token') || (await supabaseClient.auth.getSession()).data.session?.access_token;
-        
-        const response = await fetch(`${ESOCIAL_API_URL}/esocial/eventos?status=pendente&limit=100`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        
-        if (!response.ok) throw new Error('Erro ao buscar eventos');
-        
-        const eventos = await response.json();
-        
-        if (eventos.length === 0) {
-            mostrarAlerta('Nenhum evento pendente para processar.', 'info');
-            return;
-        }
-        
-        if (!confirm(`Deseja processar ${eventos.length} eventos pendentes?`)) return;
-        
-        let enviados = 0, erros = 0;
-        
-        for (const evento of eventos) {
-            try {
-                const resp = await fetch(`${ESOCIAL_API_URL}/esocial/eventos/${evento.id}/enviar`, {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                if (resp.ok) enviados++; else erros++;
-            } catch (e) { erros++; }
-        }
-        
-        mostrarAlerta(`✅ ${enviados} eventos enviados, ${erros} erros.`, enviados > 0 ? 'success' : 'warning');
-        carregarEventosESocial();
-        carregarEstatisticasESocial();
-        
-    } catch (error) {
-        console.error('❌ Erro ao processar lote:', error);
-        mostrarAlerta('Erro ao processar lote: ' + error.message, 'danger');
-    }
+  if (typeof window.initESocial === 'function') {
+    window.initESocial();
+  } else {
+    console.error('❌ window.initESocial não encontrado. Confirme o carregamento de esocial.js.');
+  }
 }
 
 // ================================================================
@@ -8304,6 +7288,7 @@ document.addEventListener('DOMContentLoaded', function () {
   const loginPage = document.getElementById('loginPage');
   const menuPage = document.getElementById('menuPage');
   const dashboardPage = document.getElementById('dashboardPage');
+  const esocialPage = document.getElementById('esocialPage');
   const loginForm = document.getElementById('loginForm');
   const registerForm = document.getElementById('registerForm');
   const showRegister = document.getElementById('showRegister');
@@ -8352,12 +7337,14 @@ document.addEventListener('DOMContentLoaded', function () {
     loginPage.classList.remove('hidden');
     menuPage.classList.add('hidden');
     dashboardPage.classList.add('hidden');
+    esocialPage?.classList.add('hidden');
   }
 
   function mostrarMenu(user) {
     loginPage.classList.add('hidden');
     menuPage.classList.remove('hidden');
     dashboardPage.classList.add('hidden');
+    esocialPage?.classList.add('hidden');
     userEmailSpan.textContent = user.email;
     statusFiltroAtual = 'todos';
     document.querySelectorAll('[data-status]').forEach(b => b.classList.remove('active'));
@@ -8368,6 +7355,7 @@ document.addEventListener('DOMContentLoaded', function () {
   function mostrarDashboard(user) {
     loginPage.classList.add('hidden');
     menuPage.classList.add('hidden');
+    esocialPage?.classList.add('hidden');
     dashboardPage.classList.remove('hidden');
     document.getElementById('userEmail').textContent = user.email;
     document.querySelector('#tab-relatorio').click();
@@ -8382,6 +7370,12 @@ document.addEventListener('DOMContentLoaded', function () {
     
     popularAnosBoletos();
   }
+
+  // Navegação compartilhada entre os módulos
+  window.mostrarPaginaLogin = mostrarPaginaLogin;
+  window.mostrarMenu = mostrarMenu;
+  window.mostrarDashboard = mostrarDashboard;
+  window.mostrarPaginaESocial = mostrarPaginaESocial;
 
   // ========================= EVENTOS DO MENU =========================
   document.querySelectorAll('.menu-card').forEach(card => {
@@ -8431,15 +7425,57 @@ document.addEventListener('DOMContentLoaded', function () {
 
   registerForm.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const email = document.getElementById('regEmail').value;
+
+    const email = document.getElementById('regEmail').value.trim();
     const password = document.getElementById('regPassword').value;
+    const submit = registerForm.querySelector('button[type="submit"]');
+
     try {
-      await fazerCadastro(email, password);
-      loginMessage.innerHTML = `<div class="alert alert-success">Cadastro realizado! Faça login.</div>`;
+      if (submit) {
+        submit.disabled = true;
+        submit.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Criando acesso...';
+      }
+
+      const cadastro = await fazerCadastro(email, password);
+
+      // Com "Confirm email" desativado no Supabase, signUp já devolve
+      // uma sessão e o usuário entra imediatamente no sistema.
+      let user = cadastro?.user || cadastro?.session?.user || null;
+      let session = cadastro?.session || null;
+
+      if (!session) {
+        const sessaoAtual = await supabaseClient.auth.getSession();
+        session = sessaoAtual?.data?.session || null;
+        user = session?.user || user;
+      }
+
+      if (session && user) {
+        loginMessage.innerHTML = '';
+        registerForm.reset();
+        mostrarMenu(user);
+        return;
+      }
+
+      // Esta mensagem só aparece se a confirmação de e-mail ainda estiver
+      // ligada no projeto Supabase. O sistema não finge que a conta já pode
+      // entrar quando o provedor ainda bloqueia a sessão.
+      loginMessage.innerHTML = `
+        <div class="alert alert-warning text-start">
+          <strong>Conta criada, mas o Supabase ainda está exigindo confirmação por e-mail.</strong><br>
+          Desative <em>Confirm email</em> nas configurações de autenticação do projeto para o acesso ser imediato.
+        </div>`;
       registerForm.classList.add('hidden');
       loginForm.classList.remove('hidden');
+      document.getElementById('email').value = email;
+
     } catch (err) {
       loginMessage.innerHTML = `<div class="alert alert-danger">${err.message}</div>`;
+
+    } finally {
+      if (submit) {
+        submit.disabled = false;
+        submit.innerHTML = '<i class="fas fa-user-plus me-2"></i>Criar acesso';
+      }
     }
   });
 

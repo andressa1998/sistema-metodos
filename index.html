@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <link rel="icon" type="image/png" href="/favicon.png">
+  <link rel="icon" type="image/png" href="favicon.png">
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Métodos - Gestão Ocupacional</title>
+  <title>ANDRA • MÉTODOS</title>
   <!-- Google Fonts (Montserrat) -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -558,46 +558,2150 @@
       border-color: #ffffff;
       color: #ffffff;
     }
-  </style>
+
+
+    /* ==========================================================
+       IDENTIDADE ANDRA
+       ANDRA = plataforma / desenvolvedora
+       MÉTODOS = empresa usuária deste ambiente
+       ========================================================== */
+    :root {
+      --andra-bg: #0D0D12;
+      --andra-night: #181630;
+      --andra-purple: #7B61FF;
+      --andra-lilac: #D6A4FF;
+      --andra-soft: #F5F5F7;
+      --andra-ink: #1a1725;
+    }
+
+    .login-wrapper {
+      position: relative;
+      overflow: hidden;
+      min-height: 100vh;
+      padding: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background:
+        linear-gradient(rgba(7, 3, 28, .22), rgba(12, 4, 34, .34)),
+        url('favicon2.png') center center / cover no-repeat fixed;
+    }
+    .login-wrapper::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at 50% 45%, rgba(122, 63, 214, .10), transparent 42%);
+      pointer-events: none;
+    }
+    .login-wrapper::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, rgba(7,3,28,.05) 0%, rgba(7,3,28,.08) 48%, rgba(7,3,28,.22) 100%);
+      pointer-events: none;
+    }
+    .login-shell {
+      position: relative;
+      z-index: 2;
+      width: min(1320px, 100%);
+      min-height: 760px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1.15fr .85fr;
+      gap: 36px;
+      align-items: stretch;
+    }
+    .login-visual-panel {
+      position: relative;
+      padding: 56px 34px 40px 34px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #ffffff;
+      background: rgba(14, 5, 41, .08);
+      border-radius: 34px;
+      overflow: hidden;
+    }
+    .login-visual-panel::before {
+      content: '';
+      position: absolute;
+      inset: auto -12% -10% -16%;
+      height: 48%;
+      background:
+        radial-gradient(circle at 78% 88%, rgba(255, 206, 245, .38), transparent 10%),
+        linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(86, 26, 142, .16) 24%, rgba(44, 11, 84, .42) 100%);
+      clip-path: polygon(0% 56%, 7% 52%, 14% 57%, 21% 49%, 30% 61%, 39% 53%, 48% 63%, 56% 58%, 63% 67%, 71% 59%, 78% 66%, 86% 54%, 93% 58%, 100% 49%, 100% 100%, 0% 100%);
+      pointer-events: none;
+    }
+    .login-visual-panel::after {
+      content: '';
+      position: absolute;
+      left: -10%;
+      bottom: 3%;
+      width: 78%;
+      height: 28%;
+      opacity: .8;
+      background: repeating-linear-gradient(170deg, rgba(218, 159, 255, .22) 0 1px, transparent 1px 13px);
+      transform: perspective(420px) rotateX(72deg) rotateZ(-11deg);
+      border-radius: 50%;
+      filter: drop-shadow(0 0 8px rgba(213,160,255,.35));
+      pointer-events: none;
+    }
+    .visual-copy {
+      position: relative;
+      z-index: 2;
+      max-width: 560px;
+      text-align: center;
+    }
+    .visual-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 18px;
+      margin-bottom: 24px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.08);
+      border: 1px solid rgba(255,255,255,.18);
+      font-size: .82rem;
+      font-weight: 600;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: #f1e4ff;
+    }
+    .hero-andra-logo {
+      width: 340px;
+      max-width: 72%;
+      display: block;
+      margin: 0 auto 18px;
+      filter: drop-shadow(0 16px 24px rgba(16, 0, 40, .45));
+    }
+    .andra-hero-wordmark {
+      margin: 0;
+      color: #ffffff;
+      font-weight: 400;
+      letter-spacing: .42em;
+      text-indent: .42em;
+      font-size: clamp(3.8rem, 8vw, 5.4rem);
+    }
+    .andra-hero-tagline {
+      margin: 10px 0 24px;
+      color: rgba(255,255,255,.92);
+      font-size: 1.05rem;
+      letter-spacing: .34em;
+      text-transform: uppercase;
+      line-height: 1.9;
+    }
+    .brand-divider {
+      width: 320px;
+      max-width: 80%;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,.30), rgba(236,176,255,.85), rgba(255,255,255,.30), transparent);
+      margin: 0 auto 24px;
+      position: relative;
+    }
+    .brand-divider::after {
+      content: '';
+      position: absolute;
+      top: 50%; left: 50%; transform: translate(-50%, -50%);
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #f5caff;
+      box-shadow: 0 0 16px rgba(245,202,255,.9);
+    }
+    .brand-quote {
+      margin: 0;
+      color: #f5eefc;
+      font-size: 1rem;
+      line-height: 1.65;
+    }
+    .login-card {
+      position: relative;
+      z-index: 2;
+      width: 100%;
+      min-height: 760px;
+      padding: 58px 56px 44px;
+      border-radius: 34px;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      background: linear-gradient(180deg, rgba(22, 8, 61, .86), rgba(35, 10, 73, .80));
+      border: 1px solid rgba(212, 147, 255, .24);
+      box-shadow: 0 26px 60px rgba(12, 3, 38, .42), inset 0 1px 0 rgba(255,255,255,.04);
+      backdrop-filter: blur(16px);
+    }
+    .login-card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      background: linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,0));
+      pointer-events: none;
+    }
+    .andra-brand-lockup { display:none; }
+    .login-card-head { margin-bottom: 34px; }
+    .login-card-head h3 {
+      margin: 0;
+      font-size: 3.3rem;
+      color: #c889ff;
+      font-weight: 700;
+    }
+    .login-card-head p {
+      margin: 10px 0 0;
+      font-size: 1rem;
+      color: rgba(255,255,255,.90);
+    }
+    .login-card .form-label {
+      color:#ffffff;
+      font-size:1rem;
+      font-weight:700;
+      margin-bottom: 12px;
+    }
+    .login-field {
+      position: relative;
+      margin-bottom: 28px;
+    }
+    .login-field .field-icon {
+      position: absolute;
+      left: 20px;
+      top: 54px;
+      transform: translateY(-50%);
+      color: rgba(239,223,255,.82);
+      font-size: 1.1rem;
+      pointer-events: none;
+    }
+    .login-card .form-control {
+      border-radius: 999px;
+      min-height: 64px;
+      color:#fff;
+      background:rgba(255,255,255,.05);
+      border:1px solid rgba(226, 183, 255, .28);
+      padding: 16px 22px 16px 58px;
+      font-size: 1rem;
+    }
+    .login-card .form-control::placeholder { color:#d5bbef; opacity: .78; }
+    .login-card .form-control:focus {
+      color:#fff;
+      background:rgba(255,255,255,.07);
+      border-color:#cf91ff;
+      box-shadow:0 0 0 4px rgba(205, 132, 255, .12), 0 10px 30px rgba(65,14,110,.18);
+    }
+    .login-help-row {
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap: 16px;
+      margin: 6px 0 28px;
+      color: #efe3ff;
+      flex-wrap: wrap;
+    }
+    .remember-check {
+      display:inline-flex;
+      align-items:center;
+      gap:10px;
+      font-size: .96rem;
+    }
+    .remember-check input {
+      width: 19px; height: 19px; accent-color: #c071ff;
+    }
+    .helper-link {
+      color:#c889ff;
+      text-decoration:none !important;
+      font-weight:600;
+    }
+    .helper-link:hover { color:#dfb0ff; }
+    .login-card .btn-primary,
+    .login-card .btn-success {
+      min-height:70px;
+      border-radius:999px;
+      background:linear-gradient(90deg,#bb80ff,#7e29f4);
+      border: none;
+      box-shadow:0 18px 34px rgba(109, 28, 194, .30);
+      font-weight: 700;
+      font-size: 1.08rem;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+    }
+    .login-card .btn-primary:hover,
+    .login-card .btn-success:hover {
+      background:linear-gradient(90deg,#c995ff,#8d3bff);
+      transform:translateY(-2px) scale(1.01);
+      box-shadow:0 22px 42px rgba(123,0,199,.38);
+    }
+    .login-card a { color:#ffffff; text-decoration: underline; text-decoration-thickness: 1.5px; }
+    .login-card .text-muted { color:#eadfff !important; }
+    .register-switch,
+    .register-switch a { font-size: .98rem; }
+    .navbar-custom {
+      background: linear-gradient(90deg, #213b7c 0%, #41bae8 100%);
+      padding: 14px 0;
+      box-shadow: 0 4px 20px rgba(33, 59, 124, 0.20);
+    }
+    .navbar-custom .brand {
+      font-weight: 700;
+      font-size: 1.3rem;
+      color: #ffffff;
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .navbar-custom .brand i {
+      font-size: 1.8rem;
+      color: #ffffff;
+    }
+    .navbar-custom .brand .brand-text {
+      display: flex;
+      flex-direction: column;
+      line-height: 1.2;
+    }
+    .navbar-custom .brand .brand-text .name {
+      font-weight: 800;
+      font-size: 1.4rem;
+      letter-spacing: -0.5px;
+    }
+    .navbar-custom .brand .brand-text .slogan-nav {
+      font-size: 0.6rem;
+      font-weight: 400;
+      opacity: 0.85;
+      letter-spacing: 0.8px;
+    }
+    .navbar-custom .user-info {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+    }
+    .navbar-custom .user-email {
+      font-weight: 500;
+      color: #ffffff;
+      font-size: 0.9rem;
+      opacity: 0.9;
+    }
+    .navbar-custom .btn-logout {
+      border-radius: 40px;
+      padding: 8px 22px;
+      font-weight: 500;
+      background: rgba(255,255,255,0.15);
+      border: 1px solid rgba(255,255,255,0.25);
+      color: #ffffff;
+      transition: 0.2s;
+      font-family: 'Montserrat', sans-serif;
+    }
+    .navbar-custom .btn-logout:hover {
+      background: rgba(255,255,255,0.25);
+      border-color: #ffffff;
+    }
+
+    .dashboard-content {
+      padding: 28px 24px 40px;
+    }
+
+    /* Tabs do Faturamento */
+    .nav-tabs-custom {
+      border-bottom: 2px solid #e2e8f0;
+      margin-bottom: 28px;
+    }
+    .nav-tabs-custom .nav-link {
+      border: none;
+      font-weight: 600;
+      color: #64748b;
+      padding: 12px 28px;
+      border-radius: 0;
+      position: relative;
+      transition: 0.2s;
+      font-size: 1rem;
+      font-family: 'Montserrat', sans-serif;
+    }
+    .nav-tabs-custom .nav-link i {
+      margin-right: 10px;
+    }
+    .nav-tabs-custom .nav-link.active {
+      color: #213b7c;
+      background: transparent;
+    }
+    .nav-tabs-custom .nav-link.active::after {
+      content: '';
+      position: absolute;
+      bottom: -2px;
+      left: 0;
+      width: 100%;
+      height: 4px;
+      background: #213b7c;
+      border-radius: 4px 4px 0 0;
+    }
+    .nav-tabs-custom .nav-link:hover:not(.active) {
+      color: #213b7c;
+      background: #f1f5f9;
+    }
+
+    /* Cards */
+    .card-modern {
+      background: #ffffff;
+      border: none;
+      border-radius: 24px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
+      transition: 0.3s ease;
+    }
+    .card-modern:hover {
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.08);
+    }
+    .card-modern .card-header {
+      background: transparent;
+      border-bottom: 1px solid #f1f5f9;
+      padding: 18px 24px;
+      font-weight: 600;
+      color: #213b7c;
+      font-size: 1.05rem;
+      font-family: 'Montserrat', sans-serif;
+    }
+    .card-modern .card-body {
+      padding: 24px;
+    }
+
+    /* Botões */
+    .btn-soft-primary {
+      background: #e8edf9;
+      color: #213b7c;
+      border: none;
+      border-radius: 30px;
+      padding: 8px 20px;
+      font-weight: 500;
+      transition: 0.2s;
+      font-family: 'Montserrat', sans-serif;
+    }
+    .btn-soft-primary:hover {
+      background: #d0dbf0;
+      color: #152b5a;
+    }
+    .btn-soft-success {
+      background: #e1f5fe;
+      color: #41bae8;
+      border: none;
+      border-radius: 30px;
+      padding: 8px 20px;
+      font-weight: 500;
+      transition: 0.2s;
+      font-family: 'Montserrat', sans-serif;
+    }
+    .btn-soft-success:hover {
+      background: #b3e0f7;
+      color: #2a9fd1;
+    }
+    .btn-soft-danger {
+      background: #fee2e2;
+      color: #dc2626;
+      border: none;
+      border-radius: 30px;
+      padding: 6px 16px;
+      font-weight: 500;
+      font-family: 'Montserrat', sans-serif;
+    }
+    .btn-soft-danger:hover {
+      background: #fca5a5;
+      color: #991b1b;
+    }
+    .btn-primary-custom {
+      background: #213b7c;
+      border: none;
+      border-radius: 30px;
+      padding: 10px 28px;
+      font-weight: 600;
+      color: #fff;
+      transition: 0.25s;
+      font-family: 'Montserrat', sans-serif;
+    }
+    .btn-primary-custom:hover {
+      background: #152b5a;
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px rgba(33, 59, 124, 0.30);
+    }
+
+    /* Tabelas */
+    .table-modern {
+      border-collapse: separate;
+      border-spacing: 0 8px;
+    }
+    .table-modern thead th {
+      background: #f8fafc;
+      color: #213b7c;
+      font-weight: 600;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      border: none;
+      padding: 14px 18px;
+      font-family: 'Montserrat', sans-serif;
+    }
+    .table-modern tbody td {
+      background: #ffffff;
+      border: none;
+      padding: 16px 18px;
+      vertical-align: middle;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.02);
+      font-family: 'Montserrat', sans-serif;
+    }
+    .table-modern tbody tr:hover td {
+      background: #f8fafc;
+    }
+    .table-modern tbody tr td:first-child {
+      border-radius: 12px 0 0 12px;
+    }
+    .table-modern tbody tr td:last-child {
+      border-radius: 0 12px 12px 0;
+    }
+
+    /* Campo de busca */
+    .search-box {
+      position: relative;
+      max-width: 350px;
+    }
+    .search-box i {
+      position: absolute;
+      left: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #94a3b8;
+      font-size: 1rem;
+    }
+    .search-box input {
+      padding-left: 44px;
+      border-radius: 40px;
+      border: 1px solid #e2e8f0;
+      height: 48px;
+      font-size: 0.95rem;
+      width: 100%;
+      transition: 0.2s;
+      background: #fff;
+      font-family: 'Montserrat', sans-serif;
+    }
+    .search-box input:focus {
+      border-color: #41bae8;
+      box-shadow: 0 0 0 3px rgba(65, 186, 232, 0.15);
+      outline: none;
+    }
+
+    /* Menu Principal */
+    .menu-wrapper {
+      min-height: 80vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 40px 20px;
+      background: linear-gradient(135deg, #f4f7fc 0%, #e8edf9 100%);
+    }
+    .menu-header {
+      margin-bottom: 50px;
+    }
+    .menu-icon {
+      font-size: 4rem;
+      color: #213b7c;
+      background: rgba(33, 59, 124, 0.08);
+      padding: 20px;
+      border-radius: 50%;
+      margin-bottom: 10px;
+    }
+    .menu-title {
+      font-weight: 800;
+      font-size: 2.8rem;
+      color: #213b7c;
+      letter-spacing: -1px;
+      margin: 0;
+    }
+    .menu-slogan {
+      font-size: 1rem;
+      color: #41bae8;
+      font-weight: 600;
+      letter-spacing: 2px;
+      margin-top: 4px;
+    }
+    .menu-cards-container {
+      width: 100%;
+      max-width: 800px;
+    }
+    .menu-card {
+      cursor: pointer;
+      border: none;
+      border-radius: 24px;
+      box-shadow: 0 8px 30px rgba(33, 59, 124, 0.08);
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+      height: 100%;
+      padding: 20px;
+      background: #ffffff;
+    }
+    .menu-card:hover {
+      transform: translateY(-8px);
+      box-shadow: 0 20px 50px rgba(33, 59, 124, 0.12);
+    }
+    .menu-card-icon {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      background: #e8edf9;
+      color: #213b7c;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 16px;
+      font-size: 2.2rem;
+      transition: 0.3s;
+    }
+    .menu-card:hover .menu-card-icon {
+      background: #213b7c;
+      color: #fff;
+    }
+    .menu-card .card-title {
+      font-weight: 700;
+      color: #1e293b;
+      font-size: 1.3rem;
+    }
+    .menu-card .card-text {
+      color: #64748b;
+      font-size: 0.95rem;
+      margin-bottom: 16px;
+    }
+    .menu-card .badge {
+      font-weight: 600;
+      padding: 6px 20px;
+      border-radius: 30px;
+      font-size: 0.8rem;
+    }
+    .bg-primary-custom {
+      background: #213b7c;
+      color: #fff;
+    }
+
+    /* Responsivo */
+    @media (max-width: 768px) {
+      .login-card { padding: 30px 20px; }
+      .dashboard-content { padding: 16px; }
+      .search-box { max-width: 100%; }
+      .navbar-custom .brand .brand-text .name { font-size: 1.1rem; }
+      .navbar-custom .brand .brand-text .slogan-nav { font-size: 0.5rem; }
+      .menu-title { font-size: 2rem; }
+      .menu-icon { font-size: 3rem; padding: 16px; }
+      .menu-card-icon { width: 60px; height: 60px; font-size: 1.6rem; }
+    }
+
+    /* Estilos para as janelas do lote */
+    #loteJanelasContainer .card {
+      transition: all 0.3s ease;
+      cursor: default;
+    }
+    #loteJanelasContainer .card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    #loteJanelasContainer .card-header strong {
+      font-size: 0.8rem;
+    }
+    #criarOSLoteModal .modal-body::-webkit-scrollbar {
+      width: 6px;
+    }
+    #criarOSLoteModal .modal-body::-webkit-scrollbar-track {
+      background: #f1f1f1;
+      border-radius: 10px;
+    }
+    #criarOSLoteModal .modal-body::-webkit-scrollbar-thumb {
+      background: #213b7c;
+      border-radius: 10px;
+    }
+    #criarOSLoteModal .modal-body::-webkit-scrollbar-thumb:hover {
+      background: #152b5a;
+    }
+    #descricaoModalBody {
+      tab-size: 2;
+      line-height: 1.6;
+    }
+    #descricaoModalBody::-webkit-scrollbar {
+      width: 6px;
+    }
+    #descricaoModalBody::-webkit-scrollbar-track {
+      background: #f1f1f1;
+      border-radius: 10px;
+    }
+    #descricaoModalBody::-webkit-scrollbar-thumb {
+      background: #213b7c;
+      border-radius: 10px;
+    }
+    #descricaoModalBody::-webkit-scrollbar-thumb:hover {
+      background: #152b5a;
+    }
+
+    /* Cards de boletos */
+    .card-boleto {
+      border-radius: 16px;
+      padding: 16px 20px;
+      color: #fff;
+    }
+    .card-boleto h2 {
+      font-weight: 700;
+      margin: 0;
+    }
+    .card-boleto small {
+      opacity: 0.9;
+    }
+    .card-boleto .icon {
+      font-size: 2rem;
+      opacity: 0.6;
+    }
+
+    /* e-Social - Página independente */
+    .esocial-wrapper {
+      min-height: 100vh;
+      background: #f4f7fc;
+    }
+    #eventosBody tr td {
+      font-size: 0.9rem;
+    }
+    #eventosBody .badge {
+      font-size: 0.75rem;
+      padding: 4px 10px;
+    }
+
+    /* Botão Voltar no e-Social */
+    .btn-back-menu {
+      border-radius: 40px;
+      padding: 8px 22px;
+      font-weight: 500;
+      background: rgba(255,255,255,0.15);
+      border: 1px solid rgba(255,255,255,0.25);
+      color: #ffffff;
+      transition: 0.2s;
+      font-family: 'Montserrat', sans-serif;
+    }
+    .btn-back-menu:hover {
+      background: rgba(255,255,255,0.25);
+      border-color: #ffffff;
+      color: #ffffff;
+    }
+
+
+    /* ==========================================================
+       IDENTIDADE ANDRA
+       ANDRA = plataforma / desenvolvedora
+       MÉTODOS = empresa usuária deste ambiente
+       ========================================================== */
+    :root {
+      --andra-bg: #0D0D12;
+      --andra-night: #181630;
+      --andra-purple: #7B61FF;
+      --andra-lilac: #D6A4FF;
+      --andra-soft: #F5F5F7;
+      --andra-ink: #1a1725;
+    }
+
+    .login-wrapper {
+      position: relative;
+      overflow: hidden;
+      min-height: 100vh;
+      padding: 28px;
+      background: #D6A4FF;
+      background-image:
+        radial-gradient(circle at 12% 12%, rgba(255,255,255,.35), transparent 22%),
+        radial-gradient(circle at 82% 16%, rgba(123,97,255,.22), transparent 20%),
+        radial-gradient(circle at 22% 86%, rgba(123,97,255,.18), transparent 24%),
+        linear-gradient(135deg, rgba(214,164,255,1) 0%, rgba(185,117,255,1) 52%, rgba(127,84,226,1) 100%);
+    }
+    .login-wrapper::before,
+    .login-wrapper::after {
+      content: '';
+      position: absolute;
+      border-radius: 50%;
+      pointer-events: none;
+      border: 10px solid rgba(255,255,255,.18);
+    }
+    .login-wrapper::before {
+      width: 180px; height: 180px; left: -50px; bottom: 36px;
+    }
+    .login-wrapper::after {
+      width: 110px; height: 110px; right: 64px; top: 32px;
+    }
+    .login-shell {
+      position: relative;
+      z-index: 2;
+      width: min(1120px, 100%);
+      min-height: 680px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1.1fr .9fr;
+      border-radius: 42px;
+      overflow: hidden;
+      background: rgba(72, 24, 122, 0.20);
+      box-shadow: 0 40px 100px rgba(72, 24, 122, 0.28);
+      backdrop-filter: blur(6px);
+    }
+    .login-visual-panel {
+      position: relative;
+      padding: 56px 56px 48px;
+      display: flex;
+      align-items: flex-end;
+      min-height: 680px;
+      color: #ffffff;
+      background:
+        radial-gradient(circle at 60% 30%, rgba(255,255,255,.10), transparent 18%),
+        radial-gradient(circle at 35% 35%, rgba(160,73,255,.26), transparent 22%),
+        linear-gradient(180deg, rgba(132,53,206,.30), rgba(104,27,168,.24));
+    }
+    .login-visual-panel::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(circle at 25% 45%, rgba(255,255,255,.12), transparent 24%),
+        radial-gradient(circle at 72% 72%, rgba(255,255,255,.06), transparent 20%);
+      pointer-events: none;
+    }
+    .login-visual-panel::after {
+      content: '';
+      position: absolute;
+      inset: auto 0 0 0;
+      height: 36%;
+      background: linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(128,38,190,.18) 32%, rgba(106,34,162,.35) 100%);
+      pointer-events: none;
+    }
+    .visual-copy {
+      position: relative;
+      z-index: 2;
+      max-width: 480px;
+    }
+    .visual-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 18px;
+      margin-bottom: 24px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.18);
+      border: 1px solid rgba(255,255,255,.24);
+      font-size: .84rem;
+      font-weight: 600;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    .visual-copy h2 {
+      margin: 0 0 10px;
+      font-size: clamp(3.2rem, 8vw, 5rem);
+      line-height: .95;
+      font-weight: 800;
+      letter-spacing: .02em;
+    }
+    .visual-copy p {
+      margin: 0;
+      max-width: 420px;
+      font-size: 1.15rem;
+      color: rgba(255,255,255,.90);
+      letter-spacing: .14em;
+    }
+    .login-card {
+      position: relative;
+      z-index: 2;
+      max-width: none;
+      width: 100%;
+      min-height: 680px;
+      padding: 54px 44px 42px;
+      border-radius: 0;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      background: linear-gradient(180deg, rgba(103,34,164,.72), rgba(78,12,132,.82));
+      border-left: 1px solid rgba(255,255,255,.14);
+      box-shadow: none;
+      backdrop-filter: blur(16px);
+    }
+    .andra-brand-lockup { text-align:center; margin-bottom: 28px; }
+    .andra-mark,
+    .menu-icon,
+    .andra-mini-mark {
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      background: rgba(255,255,255,.16);
+      box-shadow: 0 18px 45px rgba(123,97,255,.18), inset 0 1px 0 rgba(255,255,255,.32);
+      overflow: hidden;
+    }
+    .andra-mark {
+      width: 96px; height: 96px; margin: 0 auto 14px;
+      border-radius: 30px;
+      border: 1px solid rgba(255,255,255,.25);
+    }
+    .andra-logo-img {
+      display: block;
+      width: 72%;
+      height: 72%;
+      object-fit: contain;
+    }
+    .andra-wordmark {
+      margin:0;
+      letter-spacing:.42em;
+      text-indent:.42em;
+      font-weight:600;
+      font-size:2rem;
+      color:#F5F5F7;
+    }
+    .andra-tagline {
+      margin-top:8px;
+      color:#f2dfff;
+      font-size:.68rem;
+      letter-spacing:.16em;
+      text-transform:uppercase;
+    }
+    .client-environment {
+      display:inline-flex; align-items:center; gap:8px;
+      margin-top:18px; padding:10px 16px;
+      border-radius:999px;
+      border:1px solid rgba(255,255,255,.22);
+      background:rgba(255,255,255,.10);
+      color:#ffffff;
+      font-size:.80rem;
+    }
+    .client-environment strong { color:#ffffff; letter-spacing:.08em; }
+    .login-card .form-label { color:#f8efff; font-size:.85rem; font-weight:600; }
+    .login-card .form-control {
+      border-radius: 999px;
+      min-height: 56px;
+      color:#fff;
+      background:rgba(255,255,255,.22);
+      border:1px solid rgba(255,255,255,.16);
+      padding: 14px 20px;
+    }
+    .login-card .form-control::placeholder { color:#efe7ff; opacity: .72; }
+    .login-card .form-control:focus {
+      color:#fff;
+      background:rgba(255,255,255,.26);
+      border-color:#fff;
+      box-shadow:0 0 0 4px rgba(255,255,255,.14), 0 10px 30px rgba(65,14,110,.18);
+    }
+    .login-card .btn-primary,
+    .login-card .btn-success {
+      min-height:56px;
+      border-radius:999px;
+      background:linear-gradient(90deg,#C466FF,#7B00C7);
+      border: none;
+      box-shadow:0 14px 34px rgba(123,0,199,.28);
+      font-weight: 700;
+      letter-spacing: .05em;
+    }
+    .login-card .btn-primary:hover,
+    .login-card .btn-success:hover {
+      background:linear-gradient(90deg,#d37dff,#8e1be0);
+      transform:translateY(-2px) scale(1.01);
+      box-shadow:0 18px 42px rgba(123,0,199,.38);
+    }
+    .login-card a { color:#fff; text-decoration: underline; text-decoration-thickness: 1.5px; }
+    .login-card .text-muted { color:#eadfff !important; }
+
+    .navbar-custom {
+      background:linear-gradient(92deg,#7d39ce 0%,#a55aed 46%,#7b37ca 100%);
+      box-shadow:0 8px 28px rgba(125,57,206,.22);
+    }
+    .andra-mini-mark {
+      width:38px;height:38px;border-radius:14px;
+      border: 1px solid rgba(255,255,255,.22);
+      flex-shrink: 0;
+    }
+    .andra-mini-mark .andra-logo-img { width: 76%; height: 76%; }
+    .navbar-custom .brand .brand-text .name { letter-spacing:.22em; font-weight:500; }
+    .navbar-custom .brand .brand-text .slogan-nav { color:#f6ebff; opacity:1; }
+    .andra-client-badge {
+      margin-left:10px;padding:5px 10px;border-radius:999px;
+      background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.16);
+      font-size:.66rem;letter-spacing:.08em;color:#fff;
+    }
+
+    .menu-wrapper {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px;
+
+  background:
+    linear-gradient(
+      90deg,
+      rgba(9, 4, 33, 0.35) 0%,
+      rgba(16, 8, 48, 0.22) 45%,
+      rgba(17, 7, 46, 0.38) 100%
+    ),
+    url('favicon2.png') center center / cover no-repeat;
+
+  background-attachment: fixed;
+}
+    .menu-shell {
+      width:min(1120px,100%);
+      min-height:680px;
+      display:grid;
+      grid-template-columns: 1.05fr .95fr;
+      border-radius:42px;
+      overflow:hidden;
+      background: rgba(120, 47, 192, .18);
+      box-shadow: 0 42px 100px rgba(93, 34, 150, .28);
+      backdrop-filter: blur(6px);
+    }
+    .menu-hero {
+      position:relative;
+      padding:56px 54px 46px;
+      display:flex;
+      align-items:flex-end;
+      color:#fff;
+      background:
+        radial-gradient(circle at 28% 26%, rgba(255,255,255,.12), transparent 20%),
+        radial-gradient(circle at 72% 32%, rgba(144,68,230,.30), transparent 22%),
+        linear-gradient(180deg, rgba(179,98,255,.18), rgba(126,35,190,.20));
+    }
+    .menu-hero::before,
+    .menu-hero::after {
+      content:'';
+      position:absolute;
+      border-radius:50%;
+      border:8px solid rgba(255,255,255,.14);
+      pointer-events:none;
+    }
+    .menu-hero::before { width:120px; height:120px; left:28px; top:24px; }
+    .menu-hero::after { width:90px; height:90px; right:34px; bottom:46px; }
+    .menu-hero-copy { position:relative; z-index:2; max-width:450px; }
+    .menu-hero-copy h2 {
+      margin:0 0 12px;
+      font-size: clamp(3rem, 7vw, 4.8rem);
+      line-height:.94;
+      font-weight:800;
+      letter-spacing:.02em;
+    }
+    .menu-hero-copy p {
+      margin:0;
+      color:rgba(255,255,255,.90);
+      font-size:1.08rem;
+      letter-spacing:.12em;
+    }
+    .menu-panel {
+      padding:46px 34px 40px;
+      background: linear-gradient(180deg, rgba(103,34,164,.72), rgba(78,12,132,.82));
+      border-left:1px solid rgba(255,255,255,.14);
+      backdrop-filter: blur(16px);
+      display:flex;
+      flex-direction:column;
+      justify-content:center;
+    }
+    .menu-header { margin-bottom: 28px; }
+    .menu-title { color:#ffffff; letter-spacing:.30em; text-indent:.30em; font-weight:500; font-size: 2.5rem; }
+    .menu-slogan { color:#fff7ff; font-weight: 600; letter-spacing: .10em; }
+    .menu-icon {
+      width:104px; height:104px;
+      margin: 0 auto 14px;
+      border-radius: 34px;
+      border: 1px solid rgba(255,255,255,.25);
+      background: rgba(255,255,255,.16);
+      box-shadow: 0 20px 50px rgba(123,97,255,.22);
+    }
+    .menu-icon .andra-logo-img { width: 74%; height: 74%; }
+    .menu-cards-container { max-width: none; }
+    .menu-card {
+      background:linear-gradient(145deg,rgba(255,255,255,.95),rgba(250,245,255,.95));
+      border:1px solid rgba(123,97,255,.12);
+      box-shadow:0 18px 50px rgba(104,38,147,.16);
+      border-radius: 34px;
+      min-height: 100%;
+    }
+    .menu-card:hover { box-shadow:0 24px 60px rgba(123,97,255,.22); transform: translateY(-6px); }
+    .menu-card-icon { background:#f0ebff; color:#7B61FF; }
+    .bg-primary-custom, .btn-primary-custom { background:#8b39e8 !important; }
+    .btn-primary-custom:hover { background:#7d2fd6 !important; box-shadow:0 8px 25px rgba(123,97,255,.28); }
+    .nav-tabs-custom .nav-link.active { color:#6b50e8; }
+    .nav-tabs-custom .nav-link.active::after { background:#7B61FF; }
+    .card-modern .card-header { color:#5d46c7; }
+
+    @media (max-width: 991.98px) {
+      .login-shell {
+        grid-template-columns: 1fr;
+        min-height: auto;
+      }
+      .login-visual-panel {
+        min-height: 360px;
+        padding: 42px 28px 28px;
+      }
+      .hero-andra-logo { width: 240px; }
+      .login-card {
+        min-height: auto;
+        padding: 46px 34px 34px;
+      }
+      .menu-shell {
+        grid-template-columns: 1fr;
+        min-height: auto;
+      }
+      .menu-hero {
+        min-height: 260px;
+        padding: 42px 32px 24px;
+        align-items: flex-end;
+      }
+      .menu-panel {
+        border-left: none;
+        border-top: 1px solid rgba(255,255,255,.16);
+      }
+    }
+    @media (max-width: 767.98px) {
+      .login-wrapper { padding: 14px; }
+      .login-shell { gap: 20px; }
+      .login-visual-panel { min-height: 300px; padding: 28px 18px 24px; border-radius: 24px; }
+      .hero-andra-logo { width: 170px; max-width: 58%; }
+      .andra-hero-wordmark { font-size: 2.7rem; }
+      .andra-hero-tagline { font-size: .72rem; letter-spacing: .18em; }
+      .brand-quote { font-size: .9rem; }
+      .login-card { min-height: auto; padding: 34px 20px 26px; border-radius: 24px; }
+      .login-card-head h3 { font-size: 2.4rem; }
+      .login-card .btn-primary,
+      .login-card .btn-success { min-height: 60px; }
+      .menu-wrapper { padding: 16px; }
+      .menu-shell { grid-template-columns: 1fr; min-height: auto; border-radius: 28px; }
+      .menu-hero { min-height: 220px; padding: 34px 24px 20px; align-items: flex-end; }
+      .menu-panel { padding: 28px 18px 26px; border-left: none; border-top: 1px solid rgba(255,255,255,.16); }
+      .menu-title { font-size: 2rem; }
+    }
+
+    /* Painel eSocial mais informativo */
+    /* Painel eSocial mais informativo */
+    #eventosTable { min-width: 1900px; }
+    #eventosTable th { white-space:nowrap; }
+    #eventosTable td { min-width:110px; }
+    #eventosTable td.esocial-vinculo-cell { min-width:245px; }
+    .esocial-status-chip { white-space:nowrap; padding:.55em .7em; }
+    .esocial-next-action { white-space:normal; line-height:1.25; max-width:170px; }
+    .esocial-last-check { color:#7d758a; font-size:.72rem; }
+    .esocial-filter-card {
+      background:#fff;border:1px solid #eee9fb;border-radius:22px;padding:18px;
+      box-shadow:0 8px 26px rgba(48,35,83,.05);
+    }
+
+
+
+    /* AJUSTE FINAL DO LOGIN ANDRA */
+    #loginPage .login-wrapper {
+      background:
+        linear-gradient(90deg, rgba(9,4,33,.42) 0%, rgba(16,8,48,.28) 42%, rgba(17,7,46,.58) 100%),
+        url('favicon2.png') center center / cover no-repeat !important;
+      min-height: 100vh !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      padding: 24px !important;
+    }
+    #loginPage .login-wrapper::before {
+      background: radial-gradient(circle at 14% 18%, rgba(255,255,255,.10), transparent 16%) !important;
+      opacity: 1 !important;
+    }
+    #loginPage .login-wrapper::after {
+      background:
+        linear-gradient(180deg, rgba(6,3,24,.14) 0%, rgba(6,3,24,.16) 52%, rgba(6,3,24,.48) 100%),
+        radial-gradient(circle at 50% 100%, rgba(214, 126, 255, .18), transparent 24%) !important;
+      height: 100% !important;
+    }
+    #loginPage .login-shell {
+      position: relative !important;
+      z-index: 2 !important;
+      width: min(1320px, 100%) !important;
+      min-height: 760px !important;
+      display: grid !important;
+      grid-template-columns: 1.15fr .85fr !important;
+      gap: 36px !important;
+      align-items: stretch !important;
+    }
+    #loginPage .login-visual-panel {
+      background:
+        linear-gradient(180deg, rgba(18,8,54,.18), rgba(18,8,54,.06)) !important;
+      border-radius: 34px !important;
+      overflow: hidden !important;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.04) !important;
+    }
+    #loginPage .login-card {
+      min-height: 760px !important;
+      border-radius: 34px !important;
+      background: linear-gradient(180deg, rgba(61, 15, 124, .82), rgba(81, 20, 145, .84)) !important;
+      border: 1px solid rgba(212, 147, 255, .18) !important;
+      box-shadow: 0 26px 60px rgba(12, 3, 38, .42), inset 0 1px 0 rgba(255,255,255,.04) !important;
+      backdrop-filter: blur(14px) !important;
+    }
+    #loginPage .login-card-head h3 {
+      color: #d29bff !important;
+    }
+    #loginPage .login-card .form-control {
+      background: rgba(240, 243, 252, .92) !important;
+      color: #2f2347 !important;
+      border: 1px solid rgba(255,255,255,.16) !important;
+    }
+    #loginPage .login-card .form-control::placeholder {
+      color: #8e86a1 !important;
+    }
+    #loginPage .login-card .form-control:focus {
+      background: rgba(255,255,255,.98) !important;
+      color: #241b36 !important;
+    }
+    #loginPage .login-card .field-icon {
+      color: rgba(125, 101, 168, .72) !important;
+    }
+    #loginPage .login-card .btn-primary,
+    #loginPage .login-card .btn-success {
+      background: linear-gradient(90deg, #c585ff, #9507e7) !important;
+    }
+    @media (max-width: 991.98px) {
+      #loginPage .login-shell {
+        grid-template-columns: 1fr !important;
+        min-height: auto !important;
+        gap: 18px !important;
+      }
+      #loginPage .login-visual-panel {
+        min-height: 320px !important;
+      }
+      #loginPage .login-card {
+        min-height: auto !important;
+      }
+    }
+
+    #loginPage .company-using-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 20px;
+      padding: 10px 16px;
+      border-radius: 999px;
+      background: rgba(214, 164, 255, .12);
+      border: 1px solid rgba(214, 164, 255, .30);
+      color: #ffffff;
+      font-size: .82rem;
+      letter-spacing: .04em;
+    }
+    #loginPage .company-using-label {
+      color: rgba(255,255,255,.72);
+      font-weight: 500;
+    }
+    #loginPage .company-using-badge strong {
+      color: #e3bbff;
+      letter-spacing: .12em;
+      font-weight: 800;
+    }
+    /* =========================================================
+   FUNDO DOS MÓDULOS ANDRA
+   Imagem favicon2.png + película branca
+   ========================================================= */
+
+#dashboardPage.dashboard-wrapper,
+#esocialPage.esocial-wrapper {
+    min-height: 100vh;
+
+    background:
+        linear-gradient(
+            rgba(255, 255, 255, 0.24),
+            rgba(255, 255, 255, 0.24)
+        ),
+        url('favicon2.png') center center / cover no-repeat fixed !important;
+}
+/* =========================================================
+   CORES INTERNAS DOS MÓDULOS - ANDRA
+   Compatível com fundo favicon2.png
+   ========================================================= */
+
+:root {
+    --andra-branco: #ffffff;
+    --andra-lilas: #D6A4FF;
+    --andra-roxo: #8B39E8;
+    --andra-roxo-escuro: #4B176F;
+    --andra-texto: #2B2138;
+}
+
+/* ---------------------------------------------------------
+   TÍTULOS E LABELS SOBRE O FUNDO
+   --------------------------------------------------------- */
+
+#dashboardPage .dashboard-content > .row label,
+#dashboardPage .dashboard-content > .row .form-label,
+#dashboardPage .dashboard-content > div > label,
+#dashboardPage .dashboard-content .fw-semibold,
+#esocialPage .dashboard-content > .row label,
+#esocialPage .dashboard-content .form-label {
+    color: #ffffff !important;
+    text-shadow: 0 1px 4px rgba(0,0,0,.30);
+}
+
+
+/* ---------------------------------------------------------
+   ABAS SUPERIORES
+   --------------------------------------------------------- */
+
+#dashboardPage .nav-tabs-custom {
+    border-bottom: 1px solid rgba(255,255,255,.35);
+}
+
+#dashboardPage .nav-tabs-custom .nav-link {
+    color: rgba(255,255,255,.72) !important;
+    border-radius: 14px 14px 0 0;
+}
+
+#dashboardPage .nav-tabs-custom .nav-link:hover {
+    color: #ffffff !important;
+    background: rgba(255,255,255,.10) !important;
+}
+
+#dashboardPage .nav-tabs-custom .nav-link.active {
+    color: #ffffff !important;
+    background: rgba(255,255,255,.16) !important;
+    backdrop-filter: blur(12px);
+}
+
+#dashboardPage .nav-tabs-custom .nav-link.active::after {
+    background: #D6A4FF !important;
+}
+
+
+/* ---------------------------------------------------------
+   CAMPOS DE FILTRO
+   --------------------------------------------------------- */
+
+#dashboardPage .form-control,
+#dashboardPage .form-select,
+#esocialPage .form-control,
+#esocialPage .form-select {
+    background: rgba(255,255,255,.93) !important;
+    color: #2B2138 !important;
+
+    border: 1px solid rgba(255,255,255,.45) !important;
+    border-radius: 12px;
+
+    box-shadow:
+        0 5px 18px rgba(22,8,55,.10);
+}
+
+#dashboardPage .form-control::placeholder,
+#esocialPage .form-control::placeholder {
+    color: #84778F !important;
+}
+
+#dashboardPage .form-control:focus,
+#dashboardPage .form-select:focus,
+#esocialPage .form-control:focus,
+#esocialPage .form-select:focus {
+    background: #ffffff !important;
+
+    border-color: #D6A4FF !important;
+
+    box-shadow:
+        0 0 0 3px rgba(214,164,255,.22),
+        0 8px 22px rgba(41,16,77,.16) !important;
+}
+
+
+/* ---------------------------------------------------------
+   STATUS DA OS
+   --------------------------------------------------------- */
+
+#dashboardPage .dashboard-content strong,
+#dashboardPage .dashboard-content > div {
+    color: inherit;
+}
+
+#dashboardPage .btn-group .btn-outline-secondary {
+    color: #ffffff;
+    border-color: rgba(255,255,255,.45);
+    background: rgba(255,255,255,.08);
+}
+
+#dashboardPage .btn-group .btn-outline-secondary:hover {
+    background: rgba(255,255,255,.18);
+}
+
+
+/* ---------------------------------------------------------
+   CARDS
+   --------------------------------------------------------- */
+
+#dashboardPage .card-modern,
+#dashboardPage .card,
+#esocialPage .card-modern,
+#esocialPage .card {
+    background: rgba(255,255,255,.94) !important;
+
+    border: 1px solid rgba(255,255,255,.55) !important;
+
+    box-shadow:
+        0 15px 45px rgba(25,7,60,.14) !important;
+
+    backdrop-filter: blur(16px);
+}
+
+#dashboardPage .card-modern .card-header,
+#esocialPage .card-modern .card-header {
+    color: #5B2A86 !important;
+}
+
+
+/* ---------------------------------------------------------
+   BLOCO PROCESSAR EXAMES
+   --------------------------------------------------------- */
+
+#dashboardPage .card h5,
+#dashboardPage .card h6,
+#dashboardPage .card p,
+#dashboardPage .card label {
+    color: #2B2138;
+}
+
+
+/* ---------------------------------------------------------
+   TABELAS
+   --------------------------------------------------------- */
+
+#dashboardPage .table-modern thead th,
+#esocialPage .table-modern thead th {
+    background: rgba(244,239,251,.96) !important;
+    color: #59327A !important;
+}
+
+#dashboardPage .table-modern tbody td,
+#esocialPage .table-modern tbody td {
+    background: rgba(255,255,255,.96) !important;
+    color: #292132;
+}
+
+#dashboardPage .table-modern tbody tr:hover td,
+#esocialPage .table-modern tbody tr:hover td {
+    background: #F7F1FC !important;
+}
+
+
+/* ---------------------------------------------------------
+   TEXTO GERAL QUE FICA DIRETAMENTE SOBRE O FUNDO
+   --------------------------------------------------------- */
+
+#dashboardPage .dashboard-content > h1,
+#dashboardPage .dashboard-content > h2,
+#dashboardPage .dashboard-content > h3,
+#dashboardPage .dashboard-content > h4,
+#dashboardPage .dashboard-content > h5,
+#dashboardPage .dashboard-content > p,
+#esocialPage .dashboard-content > h1,
+#esocialPage .dashboard-content > h2,
+#esocialPage .dashboard-content > h3 {
+    color: #ffffff !important;
+}
+
+
+/* ---------------------------------------------------------
+   BOTÃO LIMPAR FILTROS
+   --------------------------------------------------------- */
+
+#dashboardPage #btnLimparFiltros,
+#dashboardPage .btn-outline-secondary {
+    color: #ffffff;
+    border-color: rgba(255,255,255,.55);
+    background: rgba(255,255,255,.08);
+}
+
+#dashboardPage #btnLimparFiltros:hover,
+#dashboardPage .btn-outline-secondary:hover {
+    color: #4B176F;
+    background: rgba(255,255,255,.90);
+}
+/* =========================================================
+   BOTÕES DOS MÓDULOS - PADRÃO VISUAL ANDRA
+   ========================================================= */
+
+/* Botões principais de ação */
+#dashboardPage .dashboard-content .btn-primary,
+#dashboardPage .dashboard-content .btn-info,
+#dashboardPage .dashboard-content .btn-warning,
+#dashboardPage .dashboard-content .btn-success,
+#esocialPage .dashboard-content .btn-primary,
+#esocialPage .dashboard-content .btn-info,
+#esocialPage .dashboard-content .btn-warning,
+#esocialPage .dashboard-content .btn-success {
+    background: rgba(108, 44, 176, 0.92) !important;
+    border-color: rgba(214, 164, 255, 0.55) !important;
+    color: #ffffff !important;
+
+    border-radius: 12px !important;
+
+    box-shadow:
+        0 6px 18px rgba(44, 15, 78, 0.18) !important;
+
+    transition: 0.2s ease;
+}
+
+
+/* Hover */
+#dashboardPage .dashboard-content .btn-primary:hover,
+#dashboardPage .dashboard-content .btn-info:hover,
+#dashboardPage .dashboard-content .btn-warning:hover,
+#dashboardPage .dashboard-content .btn-success:hover,
+#esocialPage .dashboard-content .btn-primary:hover,
+#esocialPage .dashboard-content .btn-info:hover,
+#esocialPage .dashboard-content .btn-warning:hover,
+#esocialPage .dashboard-content .btn-success:hover {
+    background: #8B39E8 !important;
+    border-color: #D6A4FF !important;
+    color: #ffffff !important;
+
+    transform: translateY(-1px);
+
+    box-shadow:
+        0 9px 24px rgba(70, 24, 120, 0.28) !important;
+}
+
+
+/* =========================================================
+   BOTÕES OUTLINE
+   ========================================================= */
+
+#dashboardPage .dashboard-content .btn-outline-primary,
+#dashboardPage .dashboard-content .btn-outline-info,
+#dashboardPage .dashboard-content .btn-outline-warning,
+#dashboardPage .dashboard-content .btn-outline-success,
+#esocialPage .dashboard-content .btn-outline-primary,
+#esocialPage .dashboard-content .btn-outline-info,
+#esocialPage .dashboard-content .btn-outline-warning,
+#esocialPage .dashboard-content .btn-outline-success {
+    background: rgba(255, 255, 255, 0.10) !important;
+
+    border-color: rgba(255, 255, 255, 0.55) !important;
+
+    color: #ffffff !important;
+
+    border-radius: 12px !important;
+}
+
+
+#dashboardPage .dashboard-content .btn-outline-primary:hover,
+#dashboardPage .dashboard-content .btn-outline-info:hover,
+#dashboardPage .dashboard-content .btn-outline-warning:hover,
+#dashboardPage .dashboard-content .btn-outline-success:hover,
+#esocialPage .dashboard-content .btn-outline-primary:hover,
+#esocialPage .dashboard-content .btn-outline-info:hover,
+#esocialPage .dashboard-content .btn-outline-warning:hover,
+#esocialPage .dashboard-content .btn-outline-success:hover {
+    background: rgba(255, 255, 255, 0.90) !important;
+
+    color: #5B2384 !important;
+
+    border-color: #ffffff !important;
+}
+
+
+/* =========================================================
+   EXCLUIR / CANCELAR
+   ÚNICA COR FORA DA IDENTIDADE ROXA
+   ========================================================= */
+
+#dashboardPage .dashboard-content .btn-danger,
+#dashboardPage .dashboard-content .btn-outline-danger,
+#esocialPage .dashboard-content .btn-danger,
+#esocialPage .dashboard-content .btn-outline-danger {
+    background: rgba(125, 39, 76, 0.78) !important;
+
+    border-color: rgba(255, 180, 205, 0.55) !important;
+
+    color: #ffffff !important;
+
+    border-radius: 12px !important;
+}
+
+
+#dashboardPage .dashboard-content .btn-danger:hover,
+#dashboardPage .dashboard-content .btn-outline-danger:hover,
+#esocialPage .dashboard-content .btn-danger:hover,
+#esocialPage .dashboard-content .btn-outline-danger:hover {
+    background: #9E315B !important;
+    color: #ffffff !important;
+}
+
+
+/* =========================================================
+   BOTÃO APLICAR FILTROS
+   ========================================================= */
+
+#dashboardPage #btnAplicarFiltros,
+#dashboardPage .btn-primary-custom,
+#esocialPage .btn-primary-custom {
+    background: linear-gradient(
+        90deg,
+        #9C54E8,
+        #7425C5
+    ) !important;
+
+    border: none !important;
+
+    color: #ffffff !important;
+
+    border-radius: 999px !important;
+
+    box-shadow:
+        0 8px 22px rgba(78, 24, 129, 0.25) !important;
+}
+
+
+/* =========================================================
+   STATUS DA OS
+   MAIS SÓBRIOS
+   ========================================================= */
+
+#dashboardPage .btn-group .btn {
+    background: rgba(255, 255, 255, 0.10) !important;
+    border-color: rgba(255, 255, 255, 0.45) !important;
+    color: #ffffff !important;
+}
+
+
+#dashboardPage .btn-group .btn.active,
+#dashboardPage .btn-group .btn-secondary {
+    background: rgba(87, 42, 127, 0.85) !important;
+    color: #ffffff !important;
+    border-color: #D6A4FF !important;
+}
+
+
+/* =========================================================
+   ÍCONES HERDAM A COR DO BOTÃO
+   ========================================================= */
+
+#dashboardPage .dashboard-content button i,
+#esocialPage .dashboard-content button i {
+    color: inherit !important;
+}
+/* =========================================================
+   CORREÇÃO DE TEXTOS - MÓDULOS ANDRA
+   Branco somente quando estiver direto sobre o fundo
+   Escuro quando estiver dentro de cards/caixas brancas
+   ========================================================= */
+
+
+/* =========================================================
+   1. TEXTOS DIRETAMENTE SOBRE A IMAGEM DE FUNDO
+   ========================================================= */
+
+#dashboardPage .dashboard-content > .row > div > .form-label,
+#dashboardPage .dashboard-content > .row > div > label,
+#dashboardPage .dashboard-content > .d-flex > label,
+#dashboardPage .dashboard-content > h1,
+#dashboardPage .dashboard-content > h2,
+#dashboardPage .dashboard-content > h3,
+#dashboardPage .dashboard-content > h4,
+
+#esocialPage .dashboard-content > .row > div > .form-label,
+#esocialPage .dashboard-content > .row > div > label,
+#esocialPage .dashboard-content > h1,
+#esocialPage .dashboard-content > h2,
+#esocialPage .dashboard-content > h3 {
+    color: #ffffff !important;
+    text-shadow: 0 1px 4px rgba(0,0,0,.28);
+}
+
+
+/* Títulos que ficam soltos sobre o fundo */
+#dashboardPage .dashboard-content > .row + h4,
+#dashboardPage .dashboard-content > .row + h5,
+#dashboardPage .dashboard-content > div > h4,
+#dashboardPage .dashboard-content > div > h5 {
+    color: #ffffff !important;
+}
+
+
+/* =========================================================
+   2. TUDO QUE ESTÁ DENTRO DE CARD BRANCO = TEXTO ESCURO
+   ========================================================= */
+
+#dashboardPage .card,
+#dashboardPage .card-modern,
+#esocialPage .card,
+#esocialPage .card-modern {
+    color: #2B2138 !important;
+}
+
+
+#dashboardPage .card .card-body,
+#dashboardPage .card-modern .card-body,
+#esocialPage .card .card-body,
+#esocialPage .card-modern .card-body {
+    color: #2B2138 !important;
+}
+
+
+/* Títulos */
+#dashboardPage .card h1,
+#dashboardPage .card h2,
+#dashboardPage .card h3,
+#dashboardPage .card h4,
+#dashboardPage .card h5,
+#dashboardPage .card h6,
+#dashboardPage .card-modern h1,
+#dashboardPage .card-modern h2,
+#dashboardPage .card-modern h3,
+#dashboardPage .card-modern h4,
+#dashboardPage .card-modern h5,
+#dashboardPage .card-modern h6,
+
+#esocialPage .card h1,
+#esocialPage .card h2,
+#esocialPage .card h3,
+#esocialPage .card h4,
+#esocialPage .card h5,
+#esocialPage .card h6 {
+    color: #2B2138 !important;
+    text-shadow: none !important;
+}
+
+
+/* Textos, labels e valores */
+#dashboardPage .card p,
+#dashboardPage .card span:not(.badge),
+#dashboardPage .card label,
+#dashboardPage .card strong,
+#dashboardPage .card .fw-semibold,
+#dashboardPage .card-modern p,
+#dashboardPage .card-modern span:not(.badge),
+#dashboardPage .card-modern label,
+#dashboardPage .card-modern strong,
+#dashboardPage .card-modern .fw-semibold,
+
+#esocialPage .card p,
+#esocialPage .card span:not(.badge),
+#esocialPage .card label,
+#esocialPage .card strong,
+#esocialPage .card .fw-semibold {
+    color: #3A3045 !important;
+    text-shadow: none !important;
+}
+
+
+/* =========================================================
+   3. TEXTOS MUTED DENTRO DOS CARDS
+   ========================================================= */
+
+#dashboardPage .card .text-muted,
+#dashboardPage .card-modern .text-muted,
+#esocialPage .card .text-muted,
+#esocialPage .card-modern .text-muted {
+    color: #746B7D !important;
+}
+
+
+/* =========================================================
+   4. CARDS DE RESUMO
+   PAGOS / VENCIDOS / VALOR TOTAL / VIDAS ETC.
+   ========================================================= */
+
+#dashboardPage .card .card-body h3,
+#dashboardPage .card .card-body .h3,
+#dashboardPage .card .card-body .h4 {
+    color: #35283F !important;
+}
+
+
+/* =========================================================
+   5. TABELAS
+   ========================================================= */
+
+#dashboardPage table,
+#dashboardPage table td,
+#dashboardPage table tbody,
+#esocialPage table,
+#esocialPage table td,
+#esocialPage table tbody {
+    color: #302838 !important;
+}
+
+
+#dashboardPage table thead th,
+#esocialPage table thead th {
+    color: #5E347E !important;
+}
+
+
+/* =========================================================
+   6. CABEÇALHOS COLORIDOS DOS CARDS
+   Neles o texto continua branco
+   ========================================================= */
+
+#dashboardPage .card-header.bg-primary,
+#dashboardPage .card-header.bg-info,
+#dashboardPage .card-header.bg-success,
+#dashboardPage .card-header.bg-warning,
+#dashboardPage .card-header.bg-danger,
+#esocialPage .card-header.bg-primary,
+#esocialPage .card-header.bg-info,
+#esocialPage .card-header.bg-success,
+#esocialPage .card-header.bg-warning,
+#esocialPage .card-header.bg-danger {
+    color: #ffffff !important;
+}
+
+
+#dashboardPage .card-header.bg-primary *,
+#dashboardPage .card-header.bg-info *,
+#dashboardPage .card-header.bg-success *,
+#dashboardPage .card-header.bg-warning *,
+#dashboardPage .card-header.bg-danger *,
+#esocialPage .card-header.bg-primary *,
+#esocialPage .card-header.bg-info *,
+#esocialPage .card-header.bg-success *,
+#esocialPage .card-header.bg-warning *,
+#esocialPage .card-header.bg-danger * {
+    color: #ffffff !important;
+}
+
+
+/* =========================================================
+   7. CAMPOS DENTRO DE CARDS
+   ========================================================= */
+
+#dashboardPage .card .form-label,
+#dashboardPage .card-modern .form-label,
+#esocialPage .card .form-label,
+#esocialPage .card-modern .form-label {
+    color: #3A3045 !important;
+    text-shadow: none !important;
+}
+
+
+/* Texto de ajuda */
+#dashboardPage .card small,
+#dashboardPage .card-modern small,
+#esocialPage .card small,
+#esocialPage .card-modern small {
+    color: #756C7E !important;
+}
+
+/* =========================================================
+   AJUSTE FINAL - BOLETOS E BOTÕES DE AÇÃO
+   Mantém a identidade ANDRA sem perder cores de status
+   ========================================================= */
+
+/* ---------------------------------------------------------
+   CARDS DE RESUMO DOS BOLETOS
+   --------------------------------------------------------- */
+
+/* Pago = verde */
+#dashboardPage .card.card-boleto.bg-success {
+    background: linear-gradient(135deg, #198754, #137044) !important;
+    border-color: rgba(198, 255, 226, .35) !important;
+    color: #ffffff !important;
+}
+
+/* Vencido = vermelho */
+#dashboardPage .card.card-boleto.bg-danger {
+    background: linear-gradient(135deg, #dc3545, #a92230) !important;
+    border-color: rgba(255, 207, 213, .38) !important;
+    color: #ffffff !important;
+}
+
+/* A vencer = lilás/roxo neutro */
+#dashboardPage .card.card-boleto.bg-info {
+    background: linear-gradient(135deg, #8151c8, #6334a3) !important;
+    border-color: rgba(230, 210, 255, .38) !important;
+    color: #ffffff !important;
+}
+
+/* Próximo do vencimento = amarelo */
+#dashboardPage .card.card-boleto.bg-warning {
+    background: linear-gradient(135deg, #ffc94a, #e5a900) !important;
+    border-color: rgba(255, 240, 181, .62) !important;
+    color: #493500 !important;
+}
+
+/* Força o texto correto dentro dos quatro cards */
+#dashboardPage .card.card-boleto.bg-success h6,
+#dashboardPage .card.card-boleto.bg-success h2,
+#dashboardPage .card.card-boleto.bg-success small,
+#dashboardPage .card.card-boleto.bg-success span,
+#dashboardPage .card.card-boleto.bg-success .icon,
+#dashboardPage .card.card-boleto.bg-danger h6,
+#dashboardPage .card.card-boleto.bg-danger h2,
+#dashboardPage .card.card-boleto.bg-danger small,
+#dashboardPage .card.card-boleto.bg-danger span,
+#dashboardPage .card.card-boleto.bg-danger .icon,
+#dashboardPage .card.card-boleto.bg-info h6,
+#dashboardPage .card.card-boleto.bg-info h2,
+#dashboardPage .card.card-boleto.bg-info small,
+#dashboardPage .card.card-boleto.bg-info span,
+#dashboardPage .card.card-boleto.bg-info .icon {
+    color: #ffffff !important;
+    text-shadow: none !important;
+}
+
+#dashboardPage .card.card-boleto.bg-warning h6,
+#dashboardPage .card.card-boleto.bg-warning h2,
+#dashboardPage .card.card-boleto.bg-warning small,
+#dashboardPage .card.card-boleto.bg-warning span,
+#dashboardPage .card.card-boleto.bg-warning .icon {
+    color: #493500 !important;
+    text-shadow: none !important;
+}
+
+#dashboardPage .card.card-boleto {
+    box-shadow: 0 14px 32px rgba(28, 11, 55, .20) !important;
+    backdrop-filter: blur(12px);
+}
+
+#dashboardPage .card.card-boleto .icon {
+    opacity: .82 !important;
+}
+
+/* ---------------------------------------------------------
+   BOTÕES DE AÇÃO DAS TABELAS
+   Não ficam mais brancos/invisíveis
+   --------------------------------------------------------- */
+
+#dashboardPage .table-modern .btn-group .btn,
+#dashboardPage #resultsBody .btn-group .btn,
+#dashboardPage #boletosBody .btn-group .btn,
+#dashboardPage #precosBody .btn,
+#esocialPage .table-modern .btn-group .btn,
+#esocialPage #eventosBody .btn-group .btn {
+    min-width: 36px;
+    min-height: 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 1 !important;
+    box-shadow: 0 5px 14px rgba(39, 16, 75, .10) !important;
+}
+
+/* Ações normais = roxo/lilás */
+#dashboardPage .table-modern .btn-outline-primary,
+#dashboardPage .table-modern .btn-outline-info,
+#dashboardPage .table-modern .btn-outline-warning,
+#dashboardPage #resultsBody .btn-outline-primary,
+#dashboardPage #resultsBody .btn-outline-info,
+#dashboardPage #resultsBody .btn-outline-warning,
+#dashboardPage #boletosBody .btn-outline-primary,
+#dashboardPage #precosBody .btn-soft-primary,
+#esocialPage .table-modern .btn-outline-primary,
+#esocialPage .table-modern .btn-outline-info,
+#esocialPage .table-modern .btn-outline-warning,
+#esocialPage #eventosBody .btn-outline-primary,
+#esocialPage #eventosBody .btn-outline-info,
+#esocialPage #eventosBody .btn-outline-warning {
+    background: #eee4fb !important;
+    border-color: #d8c2f2 !important;
+    color: #67329a !important;
+}
+
+#dashboardPage .table-modern .btn-outline-primary:hover,
+#dashboardPage .table-modern .btn-outline-info:hover,
+#dashboardPage .table-modern .btn-outline-warning:hover,
+#dashboardPage #resultsBody .btn-outline-primary:hover,
+#dashboardPage #resultsBody .btn-outline-info:hover,
+#dashboardPage #resultsBody .btn-outline-warning:hover,
+#dashboardPage #boletosBody .btn-outline-primary:hover,
+#dashboardPage #precosBody .btn-soft-primary:hover,
+#esocialPage .table-modern .btn-outline-primary:hover,
+#esocialPage .table-modern .btn-outline-info:hover,
+#esocialPage .table-modern .btn-outline-warning:hover,
+#esocialPage #eventosBody .btn-outline-primary:hover,
+#esocialPage #eventosBody .btn-outline-info:hover,
+#esocialPage #eventosBody .btn-outline-warning:hover {
+    background: #7c3cc7 !important;
+    border-color: #7c3cc7 !important;
+    color: #ffffff !important;
+    transform: translateY(-1px);
+}
+
+/* Ação positiva / Pago = verde */
+#dashboardPage .table-modern .btn-outline-success,
+#dashboardPage .table-modern .btn-success,
+#dashboardPage #boletosBody .btn-outline-success,
+#dashboardPage #boletosBody .btn-success,
+#esocialPage .table-modern .btn-outline-success,
+#esocialPage .table-modern .btn-success {
+    background: #e2f4ea !important;
+    border-color: #b9dfc9 !important;
+    color: #147a45 !important;
+}
+
+#dashboardPage .table-modern .btn-outline-success:hover,
+#dashboardPage #boletosBody .btn-outline-success:hover,
+#esocialPage .table-modern .btn-outline-success:hover {
+    background: #198754 !important;
+    border-color: #198754 !important;
+    color: #ffffff !important;
+}
+
+/* Botão Pago desabilitado continua visível */
+#dashboardPage #boletosBody .btn-success:disabled,
+#dashboardPage #resultsBody .btn-success:disabled {
+    background: #198754 !important;
+    border-color: #198754 !important;
+    color: #ffffff !important;
+    opacity: .92 !important;
+}
+
+/* Ações destrutivas = vermelho */
+#dashboardPage .table-modern .btn-outline-danger,
+#dashboardPage .table-modern .btn-danger,
+#dashboardPage #resultsBody .btn-outline-danger,
+#dashboardPage #resultsBody .btn-danger,
+#dashboardPage #boletosBody .btn-outline-danger,
+#dashboardPage #boletosBody .btn-danger,
+#dashboardPage #precosBody .btn-soft-danger,
+#esocialPage .table-modern .btn-outline-danger,
+#esocialPage .table-modern .btn-danger,
+#esocialPage #eventosBody .btn-outline-danger,
+#esocialPage #eventosBody .btn-danger {
+    background: #fde7eb !important;
+    border-color: #f5bec8 !important;
+    color: #b4233c !important;
+}
+
+#dashboardPage .table-modern .btn-outline-danger:hover,
+#dashboardPage .table-modern .btn-danger:hover,
+#dashboardPage #resultsBody .btn-outline-danger:hover,
+#dashboardPage #resultsBody .btn-danger:hover,
+#dashboardPage #boletosBody .btn-outline-danger:hover,
+#dashboardPage #boletosBody .btn-danger:hover,
+#dashboardPage #precosBody .btn-soft-danger:hover,
+#esocialPage .table-modern .btn-outline-danger:hover,
+#esocialPage .table-modern .btn-danger:hover,
+#esocialPage #eventosBody .btn-outline-danger:hover,
+#esocialPage #eventosBody .btn-danger:hover {
+    background: #b4233c !important;
+    border-color: #b4233c !important;
+    color: #ffffff !important;
+}
+
+/* Ícones sempre acompanham a cor do botão */
+#dashboardPage .table-modern .btn i,
+#dashboardPage #resultsBody .btn i,
+#dashboardPage #boletosBody .btn i,
+#dashboardPage #precosBody .btn i,
+#esocialPage .table-modern .btn i,
+#esocialPage #eventosBody .btn i {
+    color: inherit !important;
+    opacity: 1 !important;
+}
+
+/* ---------------------------------------------------------
+   BADGES DE STATUS DA TABELA DE BOLETOS
+   Mantém semântica de cor
+   --------------------------------------------------------- */
+
+#dashboardPage #boletosBody .badge.bg-success {
+    background: #198754 !important;
+    color: #ffffff !important;
+}
+
+#dashboardPage #boletosBody .badge.bg-danger {
+    background: #dc3545 !important;
+    color: #ffffff !important;
+}
+
+#dashboardPage #boletosBody .badge.bg-warning {
+    background: #ffc94a !important;
+    color: #493500 !important;
+}
+
+#dashboardPage #boletosBody .badge.bg-info {
+    background: #8151c8 !important;
+    color: #ffffff !important;
+}
+
+/* ---------------------------------------------------------
+   EXPORTAÇÃO E BOTÕES SECUNDÁRIOS
+   --------------------------------------------------------- */
+
+#dashboardPage .btn-soft-success,
+#dashboardPage .btn-soft-primary,
+#esocialPage .btn-soft-success,
+#esocialPage .btn-soft-primary {
+    background: #eee4fb !important;
+    color: #67329a !important;
+    border: 1px solid #d8c2f2 !important;
+}
+
+#dashboardPage .btn-soft-success:hover,
+#dashboardPage .btn-soft-primary:hover,
+#esocialPage .btn-soft-success:hover,
+#esocialPage .btn-soft-primary:hover {
+    background: #7c3cc7 !important;
+    color: #ffffff !important;
+    border-color: #7c3cc7 !important;
+}
+
+
+</style>
+
 </head>
 <body>
 
   <!-- ==================== TELA DE LOGIN ==================== -->
   <div id="loginPage">
     <div class="login-wrapper">
-      <div class="login-card">
-        <div class="logo">
-          <i class="fas fa-heartbeat brand-icon"></i>
-          <h2>MÉTODOS</h2>
-          <div class="slogan">ESPECIALISTA EM CUIDAR DE QUEM TRABALHA</div>
+      <div class="login-shell">
+        <div class="login-visual-panel">
+          <div class="visual-copy">
+            <img src="favicon.png" alt="ANDRA" class="hero-andra-logo">
+            <h1 class="andra-hero-wordmark">ANDRA</h1>
+            <div class="andra-hero-tagline">AUTOMATION, NETWORK, DEVELOPMENT,<br>RESOURCES &amp; ANALYTICS</div>
+            <div class="brand-divider"></div>
+            <p class="brand-quote">
+              Tecnologia que conecta.<br>
+              Automação que liberta.<br>
+              Dados que geram decisões.<br>
+              Sistemas que evoluem.
+            </p>
+          </div>
         </div>
-        <form id="loginForm">
-          <div class="mb-3">
-            <label for="email" class="form-label">E-mail</label>
-            <input type="email" class="form-control" id="email" placeholder="seu@email.com" required />
+        <div class="login-card">
+          <div class="login-card-head">
+            <h3>Bem-vindo</h3>
+            <p>Que você tenha uma excelente jornada pela frente...</p>
+            <div class="company-using-badge">
+              <span class="company-using-label">Empresa usuária</span>
+              <strong>MÉTODOS</strong>
+            </div>
           </div>
-          <div class="mb-3">
-            <label for="password" class="form-label">Senha</label>
-            <input type="password" class="form-control" id="password" placeholder="********" required />
-          </div>
-          <button type="submit" class="btn btn-primary w-100"><i class="fas fa-sign-in-alt me-2"></i> Entrar</button>
-          <p class="mt-3 text-center text-muted small">
-            Ainda não tem conta? <a href="#" id="showRegister" class="fw-bold">Cadastre-se</a>
-          </p>
-        </form>
-        <form id="registerForm" class="hidden mt-3">
-          <div class="mb-3">
-            <label for="regEmail" class="form-label">E-mail</label>
-            <input type="email" class="form-control" id="regEmail" placeholder="seu@email.com" required />
-          </div>
-          <div class="mb-3">
-            <label for="regPassword" class="form-label">Senha</label>
-            <input type="password" class="form-control" id="regPassword" placeholder="********" required />
-          </div>
-          <button type="submit" class="btn btn-success w-100"><i class="fas fa-user-plus me-2"></i> Cadastrar</button>
-          <p class="mt-3 text-center"><a href="#" id="showLogin">Já tenho conta</a></p>
-        </form>
-        <div id="loginMessage" class="mt-3 text-center"></div>
+
+          <form id="loginForm">
+            <div class="login-field">
+              <label for="email" class="form-label">E-mail</label>
+              <i class="fas fa-user field-icon"></i>
+              <input type="email" class="form-control" id="email" placeholder="seu@email.com" autocomplete="email" required />
+            </div>
+
+            <div class="login-field">
+              <label for="password" class="form-label">Senha</label>
+              <i class="fas fa-lock field-icon"></i>
+              <input type="password" class="form-control" id="password" placeholder="Sua senha" autocomplete="current-password" required />
+            </div>
+
+            <div class="login-help-row">
+              <label class="remember-check"><input type="checkbox" id="rememberLogin"> <span>Lembre de mim</span></label>
+            </div>
+
+            <button type="submit" class="btn btn-primary w-100">
+              ENTRAR
+            </button>
+            <p class="mt-4 text-center text-muted register-switch">
+              Você não tem conta? <a href="#" id="showRegister" class="fw-bold">Criar</a>
+            </p>
+          </form>
+
+          <form id="registerForm" class="hidden mt-3">
+            <div class="login-field">
+              <label for="regEmail" class="form-label">E-mail</label>
+              <i class="fas fa-user field-icon"></i>
+              <input type="email" class="form-control" id="regEmail" placeholder="seu@email.com" autocomplete="email" required />
+            </div>
+
+            <div class="login-field">
+              <label for="regPassword" class="form-label">Senha</label>
+              <i class="fas fa-lock field-icon"></i>
+              <input type="password" class="form-control" id="regPassword" placeholder="Crie sua senha" autocomplete="new-password" minlength="6" required />
+            </div>
+
+            <button type="submit" class="btn btn-success w-100">
+              SIGN UP
+            </button>
+            <p class="mt-4 text-center text-muted register-switch"><a href="#" id="showLogin">Já tem conta?</a></p>
+          </form>
+
+          <div class="text-start mt-3"><a href="#" class="helper-link">Esqueceu sua senha</a></div>
+          <div id="loginMessage" class="mt-3 text-center"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -605,36 +2709,47 @@
   <!-- ==================== MENU PRINCIPAL ==================== -->
   <div id="menuPage" class="hidden">
     <div class="menu-wrapper">
-      <div class="menu-header text-center">
-        <i class="fas fa-heartbeat menu-icon"></i>
-        <h1 class="menu-title">MÉTODOS</h1>
-        <p class="menu-slogan">ESPECIALISTA EM CUIDAR DE QUEM TRABALHA</p>
-      </div>
-      <div class="menu-cards-container">
-        <div class="row justify-content-center g-4">
-          <!-- Card Faturamento -->
-          <div class="col-md-5 col-lg-4">
-            <div class="card menu-card" data-target="faturamento">
-              <div class="card-body text-center">
-                <div class="menu-card-icon">
-                  <i class="fas fa-file-invoice-dollar"></i>
-                </div>
-                <h5 class="card-title">Faturamento</h5>
-                <p class="card-text">Gerencie o faturamento mensal, dashboards e status de pagamento.</p>
-                <span class="badge bg-primary-custom">Acessar</span>
-              </div>
-            </div>
+      <div class="menu-shell">
+        <div class="menu-hero">
+          <div class="menu-hero-copy">
+            <div class="visual-badge"><i class="fas fa-layer-group"></i> ANDRA • MÉTODOS</div>
+            <h2>Escolha<br>o módulo</h2>
+            <p>Acesse rapidamente as áreas de faturamento e eSocial em um ambiente unificado.</p>
           </div>
-          <!-- Card E-Social -->
-          <div class="col-md-5 col-lg-4">
-            <div class="card menu-card" data-target="esocial">
-              <div class="card-body text-center">
-                <div class="menu-card-icon" style="background: #e1f5fe; color: #41bae8;">
-                  <i class="fas fa-cloud-upload-alt"></i>
+        </div>
+        <div class="menu-panel">
+          <div class="menu-header text-center">
+            <div class="menu-icon"><img src="favicon.png" alt="ANDRA" class="andra-logo-img"></div>
+            <h1 class="menu-title">ANDRA</h1>
+            <p class="menu-slogan">SISTEMA MÉTODOS • ESCOLHA O MÓDULO</p>
+          </div>
+          <div class="menu-cards-container">
+            <div class="row justify-content-center g-4">
+              <!-- Card Faturamento -->
+              <div class="col-md-6">
+                <div class="card menu-card" data-target="faturamento">
+                  <div class="card-body text-center">
+                    <div class="menu-card-icon">
+                      <i class="fas fa-file-invoice-dollar"></i>
+                    </div>
+                    <h5 class="card-title">Faturamento</h5>
+                    <p class="card-text">Gerencie o faturamento mensal, dashboards e status de pagamento.</p>
+                    <span class="badge bg-primary-custom">Acessar</span>
+                  </div>
                 </div>
-                <h5 class="card-title">E-Social</h5>
-                <p class="card-text">Automatize o envio de eventos e-Social para seus colaboradores.</p>
-                <span class="badge bg-primary-custom">Acessar</span>
+              </div>
+              <!-- Card E-Social -->
+              <div class="col-md-6">
+                <div class="card menu-card" data-target="esocial">
+                  <div class="card-body text-center">
+                    <div class="menu-card-icon" style="background: #e1f5fe; color: #41bae8;">
+                      <i class="fas fa-cloud-upload-alt"></i>
+                    </div>
+                    <h5 class="card-title">E-Social</h5>
+                    <p class="card-text">Automatize o envio de eventos e-Social para seus colaboradores.</p>
+                    <span class="badge bg-primary-custom">Acessar</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -651,11 +2766,12 @@
     <nav class="navbar-custom">
       <div class="container-fluid d-flex justify-content-between align-items-center">
         <a class="brand" href="#">
-          <i class="fas fa-heartbeat"></i>
+          <div class="andra-mini-mark"><img src="favicon.png" alt="ANDRA" class="andra-logo-img"></div>
           <div class="brand-text">
-            <span class="name">MÉTODOS</span>
-            <span class="slogan-nav">ESPECIALISTA EM CUIDAR DE QUEM TRABALHA</span>
+            <span class="name">ANDRA</span>
+            <span class="slogan-nav">AUTOMATION • NETWORK • DEVELOPMENT</span>
           </div>
+          <span class="andra-client-badge">MÉTODOS</span>
         </a>
         <div class="user-info">
           <button class="btn btn-outline-light btn-sm me-2" id="btnVoltarMenu" title="Voltar ao menu principal">
@@ -1277,11 +3393,12 @@
     <nav class="navbar-custom">
       <div class="container-fluid d-flex justify-content-between align-items-center">
         <a class="brand" href="#">
-          <i class="fas fa-heartbeat"></i>
+          <div class="andra-mini-mark"><img src="favicon.png" alt="ANDRA" class="andra-logo-img"></div>
           <div class="brand-text">
-            <span class="name">MÉTODOS</span>
-            <span class="slogan-nav">ESPECIALISTA EM CUIDAR DE QUEM TRABALHA</span>
+            <span class="name">ANDRA</span>
+            <span class="slogan-nav">AUTOMATION • NETWORK • DEVELOPMENT</span>
           </div>
+          <span class="andra-client-badge">MÉTODOS</span>
         </a>
         <div class="user-info">
           <button class="btn btn-back-menu me-2" id="btnVoltarMenuESocial" title="Voltar ao menu principal">
@@ -1320,6 +3437,25 @@
           <button class="btn btn-info btn-sm" id="btnAtualizarStatus">
             <i class="fas fa-sync me-1"></i> Atualizar Status
           </button>
+          <button
+    type="button"
+    class="btn btn-outline-primary btn-sm"
+    id="btnImportarZipEsocial"
+    title="Importar histórico em massa baixado do eSocial"
+>
+    <i class="fas fa-file-archive me-1"></i>
+
+    Importar histórico ZIP
+</button>
+
+
+<input
+    type="file"
+    id="inputImportarZipEsocial"
+    accept=".zip,application/zip,application/x-zip-compressed"
+    multiple
+    hidden
+/>
         </div>
       </div>
 
@@ -1390,13 +3526,44 @@
       <!-- Filtros -->
       <div class="row g-3 align-items-end mb-4">
         <div class="col-md-3">
+          <label class="form-label fw-semibold">Holding</label>
+          <select id="filtroHoldingEvento" class="form-select">
+            <option value="">Todas as Holdings</option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label fw-semibold">Unidade</label>
+          <select id="filtroUnidadeEvento" class="form-select">
+            <option value="">Todas as Unidades</option>
+          </select>
+        </div>
+        <div class="col-md-3">
           <label class="form-label fw-semibold">Status</label>
           <select id="filtroStatusEvento" class="form-select">
-            <option value="">Todos</option>
-            <option value="pendente">Pendente</option>
-            <option value="sucesso">Sucesso</option>
-            <option value="erro">Erro</option>
-          </select>
+
+    <option value="">
+        Todos
+    </option>
+
+    <option value="aguardando_verificacao">
+        Aguardando verificação
+    </option>
+
+    <option value="pendente">
+        Não emitido / Pendente
+    </option>
+
+    <option value="sucesso">
+        Concluído
+    </option>
+
+    <option value="erro">
+        Erro
+    </option>
+
+    
+
+</select>
         </div>
         <div class="col-md-3">
           <label class="form-label fw-semibold">Tipo Evento</label>
@@ -1424,7 +3591,42 @@
             </button>
           </div>
         </div>
+
+        <div class="col-md-12">
+    <label class="form-label fw-semibold">
+        Buscar evento
+    </label>
+
+    <div class="input-group">
+        <span class="input-group-text">
+            <i class="fas fa-search"></i>
+        </span>
+
+        <input
+            type="text"
+            id="filtroBuscaEvento"
+            class="form-control"
+            placeholder="Nome, CPF, matrícula, unidade, holding, S-2220, S-2240, recibo..."
+            autocomplete="off"
+        />
+
+        <button
+            type="button"
+            class="btn btn-outline-secondary"
+            id="btnLimparBuscaEvento"
+            title="Limpar pesquisa"
+        >
+            <i class="fas fa-times"></i>
+        </button>
+    </div>
+
+    <small class="text-muted">
+        Busca instantânea por colaborador, CPF, matrícula oficial/SOC, holding,
+        unidade, tipo/status do evento, recibo e próxima ação.
+    </small>
+</div>
       </div>
+
 
       <!-- Modal de Busca SOC -->
 <div class="modal fade" id="buscarDadosSocModal" tabindex="-1" aria-hidden="true">
@@ -1467,14 +3669,34 @@
                     </div>
 
                     <div class="alert alert-info mt-3">
-                        <i class="fas fa-info-circle"></i>
-                        <strong>O que será buscado:</strong>
-                        <ul class="mb-0 mt-1">
-                            <li>Holding, Unidade, Colaborador, CPF, Data do Exame, Tipo do Exame e ASO completo</li>
-                            <li><strong>S-2220</strong> - Para todos os exames (exceto Admissional e Mudança de Função)</li>
-                            <li><strong>S-2240</strong> - Para exames do tipo Admissional e Mudança de Função</li>
-                        </ul>
-                    </div>
+    <i class="fas fa-info-circle"></i>
+    <strong>O que será buscado:</strong>
+
+    <ul class="mb-0 mt-1">
+        <li>
+            Holding, Unidade, Colaborador, CPF, Data do Exame,
+            Tipo do Exame e informações do ASO
+        </li>
+
+        <li>
+            <strong>S-2220 - Monitoramento da Saúde do Trabalhador</strong>
+            <ul>
+                <li>Admissional</li>
+                <li>Periódico</li>
+                <li>Retorno ao Trabalho</li>
+                <li>Mudança de Função / Mudança de Riscos Ocupacionais</li>
+                <li>Demissional</li>
+                <li>Monitoração Pontual</li>
+            </ul>
+        </li>
+
+        <li>
+            <strong>S-2240 - Condições Ambientais do Trabalho</strong>:
+            será integrado separadamente para informações de ambiente,
+            atividades e exposição a agentes nocivos.
+        </li>
+    </ul>
+</div>
 
                     <div id="buscarSocStatus" class="mt-3"></div>
                 </form>
@@ -1505,17 +3727,21 @@
                   <th>Unidade</th>
                   <th>Colaborador</th>
                   <th>CPF</th>
+                  <th>Vínculo eSocial</th>
+                  <th>S-2220</th>
+                  <th>S-2240</th>
+                  <th>Próxima ação</th>
                   <th>Data Exame</th>
                   <th>Tipo Exame</th>
-                  <th>Tipo Evento</th>
-                  <th>Status</th>
+                  <th>Evento atual</th>
+                  <th>Status atual</th>
                   <th>Recibo</th>
                   <th>Ações</th>
                 </tr>
               </thead>
               <tbody id="eventosBody">
                 <tr>
-                  <td colspan="11" class="text-center text-muted py-4">
+                  <td colspan="15" class="text-center text-muted py-4">
                     <i class="fas fa-spinner fa-spin me-2"></i> Carregando eventos...
                   </td>
                 </tr>
