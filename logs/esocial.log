@@ -1289,3 +1289,14 @@
 {"level":"info","message":"GET /api/soc/eventos-salvos 304 - 1473ms - ::1","timestamp":"2026-09-04T18:47:12.013Z"}
 {"level":"info","message":"GET /api/soc/status-integracao 304 - 317ms - ::1","timestamp":"2026-09-04T18:47:12.379Z"}
 {"level":"info","message":"SIGINT recebido. Encerrando servidor...","timestamp":"2026-09-04T18:54:02.021Z"}
+{"level":"info","message":"Servidor rodando na porta 3002","timestamp":"2026-09-04T18:54:12.373Z"}
+{"level":"info","message":"Ambiente: development","timestamp":"2026-09-04T18:54:12.377Z"}
+{"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-04T18:54:12.378Z"}
+{"level":"info","message":"GET / 200 - 10ms - ::1","timestamp":"2026-09-04T18:56:18.652Z"}
+{"level":"info","message":"GET /favicon.png 200 - 13ms - ::1","timestamp":"2026-09-04T18:56:18.729Z"}
+{"level":"info","message":"GET /esocial.js 200 - 5ms - ::1","timestamp":"2026-09-04T18:56:18.753Z"}
+{"level":"info","message":"GET /app.js 200 - 99ms - ::1","timestamp":"2026-09-04T18:56:18.846Z"}
+{"level":"info","message":"GET /favicon2.png 200 - 19ms - ::1","timestamp":"2026-09-04T18:56:18.932Z"}
+{"level":"info","message":"GET /favicon.png 304 - 1ms - ::1","timestamp":"2026-09-04T18:56:19.123Z"}
+{"level":"info","message":"GET /api/soc/eventos-salvos 200 - 1698ms - ::1","timestamp":"2026-09-04T18:57:52.964Z"}
+{"level":"info","message":"GET /api/soc/status-integracao 200 - 358ms - ::1","timestamp":"2026-09-04T18:57:53.362Z"}
