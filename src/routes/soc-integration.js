@@ -25451,6 +25451,224 @@ function montarJanelaBxParaAdmissao(
 }
 
 
+// ============================================================
+// JANELA HISTÓRICA PROGRESSIVA PARA S-2220 NÃO ADMISSIONAL
+//
+// Problema resolvido:
+// trabalhadores antigos podem ter matrícula oficial apenas em um
+// S-2220/S-2240 histórico. Pesquisar somente ao redor da admissão
+// pode levar dezenas de ciclos quando a admissão ocorreu anos atrás.
+//
+// Estratégia:
+// - para S-2220 não admissional/demissional, priorizar janelas de
+//   30 dias ao redor de ~12 meses antes do evento atual;
+// - alternar blocos de 30 dias para trás/para frente desse ponto;
+// - após esgotar a faixa histórica rápida, voltar à busca segura
+//   ao redor da data de admissão;
+// - cada ciclo continua consumindo no máximo a mesma quantidade de
+//   acessos BX já controlada pelo worker.
+// ============================================================
+
+function eventoS2220PriorizaHistoricoMatricula(
+    evento
+) {
+
+    const tipoEvento =
+        String(
+            evento?.tipo_evento ||
+            evento?.tipoEvento ||
+            ''
+        )
+            .trim()
+            .toUpperCase();
+
+
+    if (
+        tipoEvento !== 'S-2220'
+    ) {
+
+        return false;
+    }
+
+
+    const tipoExame =
+        String(
+            evento?.tipo_exame ||
+            evento?.tipoExame ||
+            ''
+        )
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .trim()
+            .toLowerCase();
+
+
+    if (
+        tipoExame.includes('admiss') ||
+        tipoExame.includes('demiss')
+    ) {
+
+        return false;
+    }
+
+
+    return Boolean(
+        obterDataReferenciaEventoLocalBx(
+            evento
+        )
+    );
+}
+
+
+function montarJanelaBxHistoricaProgressivaEvento(
+    evento,
+    janelaIndice = 0
+) {
+
+    const dataReferencia =
+        obterDataReferenciaEventoLocalBx(
+            evento
+        );
+
+
+    if (
+        !dataReferencia
+    ) {
+
+        return null;
+    }
+
+
+    const base =
+        new Date(
+            `${dataReferencia}T12:00:00-03:00`
+        );
+
+
+    if (
+        Number.isNaN(
+            base.getTime()
+        )
+    ) {
+
+        return null;
+    }
+
+
+    const n =
+        Math.max(
+            0,
+            Number(
+                janelaIndice ||
+                0
+            )
+        );
+
+
+    // índice 0: ~12 meses antes do evento atual.
+    // índice 1: 30 dias antes desse ponto.
+    // índice 2: 30 dias depois desse ponto.
+    // Depois alterna em blocos de 30 dias.
+    const bloco =
+        n === 0
+            ? 0
+            : Math.ceil(
+                n / 2
+              );
+
+
+    const sinal =
+        n === 0
+            ? 0
+            : n % 2 === 1
+                ? -1
+                : 1;
+
+
+    const deslocamentoExtraDias =
+        bloco *
+        30 *
+        sinal;
+
+
+    const centroDias =
+        -365 +
+        deslocamentoExtraDias;
+
+
+    const diaMs =
+        24 *
+        60 *
+        60 *
+        1000;
+
+
+    const centro =
+        new Date(
+            base.getTime() +
+            centroDias *
+            diaMs
+        );
+
+
+    const inicio =
+        new Date(
+            centro.getTime() -
+            15 *
+            diaMs
+        );
+
+
+    let fim =
+        new Date(
+            inicio.getTime() +
+            30 *
+            diaMs
+        );
+
+
+    const limiteFim =
+        new Date(
+            Date.now() -
+            2 *
+            60 *
+            60 *
+            1000
+        );
+
+
+    if (
+        fim.getTime() >
+        limiteFim.getTime()
+    ) {
+
+        fim =
+            limiteFim;
+    }
+
+
+    if (
+        inicio.getTime() >=
+        fim.getTime()
+    ) {
+
+        return null;
+    }
+
+
+    return {
+        dtIni:
+            inicio,
+        dtFim:
+            fim,
+        deslocamentoDias:
+            centroDias,
+        estrategia:
+            'historico_evento'
+    };
+}
+
+
 async function baixarEventosBxEmLoteParaMatricula({
     tpInsc,
     nrInsc,
@@ -26049,12 +26267,77 @@ async function processarUmaPendenciaMatriculaEsocial(
     }
 
 
-    const janela =
-        montarJanelaBxParaAdmissao(
-            dataAdmissao,
+    const indiceJanela =
+        Number(
             pendencia.janela_indice ||
             0
         );
+
+
+    const priorizarHistorico =
+        eventoS2220PriorizaHistoricoMatricula(
+            evento
+        );
+
+
+    // Para periódicos e demais S-2220 não admissionais, as primeiras
+    // janelas procuram eventos do trabalhador próximos de 12 meses
+    // antes do evento atual. Isso encontra matrículas históricas com
+    // muito mais eficiência do que começar pela admissão antiga.
+    //
+    // Limitamos a 13 janelas históricas (~6 meses em torno do ponto
+    // de 12 meses) e, depois disso, retomamos a busca por admissão.
+    const LIMITE_JANELAS_HISTORICAS =
+        13;
+
+
+    let janela =
+        null;
+
+
+    if (
+        priorizarHistorico &&
+        indiceJanela <
+            LIMITE_JANELAS_HISTORICAS
+    ) {
+
+        janela =
+            montarJanelaBxHistoricaProgressivaEvento(
+                evento,
+                indiceJanela
+            );
+    }
+
+
+    if (
+        !janela
+    ) {
+
+        const indiceAdmissao =
+            priorizarHistorico
+                ? Math.max(
+                    0,
+                    indiceJanela -
+                    LIMITE_JANELAS_HISTORICAS
+                  )
+                : indiceJanela;
+
+
+        janela =
+            montarJanelaBxParaAdmissao(
+                dataAdmissao,
+                indiceAdmissao
+            );
+
+
+        if (
+            janela
+        ) {
+
+            janela.estrategia =
+                'admissao';
+        }
+    }
 
 
     if (
@@ -26171,7 +26454,9 @@ async function processarUmaPendenciaMatriculaEsocial(
                         0
                     ) + 1,
                 ultimo_erro:
-                    `Nenhum evento encontrado na janela BX (deslocamento ${janela.deslocamentoDias} dias).`,
+                    `Nenhum evento encontrado na janela BX ` +
+                    `(estratégia ${janela.estrategia || 'admissao'}, ` +
+                    `deslocamento ${janela.deslocamentoDias} dias).`,
                 proxima_tentativa_em:
                     new Date(
                         Date.now() +
