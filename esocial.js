@@ -1248,7 +1248,7 @@ let fimAcompanhamentoPreparacaoEsocial = 0;
                                 parametrosSoc: {
                                     s2220: {
                                         pDataIncAso:
-                                            '0',
+                                            '3',
                                         tpExame:
                                             '1,2,3,4,5,6'
                                     }
