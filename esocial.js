@@ -61,6 +61,9 @@ let eventosSelecionados = new Set();
 
 let empresasSocCache = [];
 
+let timerAcompanhamentoPreparacaoEsocial = null;
+let fimAcompanhamentoPreparacaoEsocial = 0;
+
     // ============================================================
     // API
     // ============================================================
@@ -1133,469 +1136,578 @@ let empresasSocCache = [];
 
     async function buscarDadosSoc() {
 
-    const btn =
-        document.getElementById(
-            'btnConfirmarBuscaSoc'
-        );
-
-    const statusEl =
-        document.getElementById(
-            'buscarSocStatus'
-        );
-
-    const holding =
-        document.getElementById(
-            'socHolding'
-        )?.value || '';
-
-    const empresaId =
-        document.getElementById(
-            'socEmpresa'
-        )?.value || '';
-
-    const dataInicio =
-        document.getElementById(
-            'socDataInicio'
-        )?.value || '';
-
-    const dataFim =
-        document.getElementById(
-            'socDataFim'
-        )?.value || '';
-
-
-    // ========================================================
-    // VALIDAR DATAS
-    // ========================================================
-
-    if (!dataInicio || !dataFim) {
-
-        if (statusEl) {
-
-            statusEl.innerHTML =
-                '<div class="alert alert-warning">' +
-                'Informe a data inicial e a data final.' +
-                '</div>';
-        }
-
-        return;
-    }
-
-
-    if (dataInicio > dataFim) {
-
-        if (statusEl) {
-
-            statusEl.innerHTML =
-                '<div class="alert alert-warning">' +
-                'A data inicial não pode ser maior que a data final.' +
-                '</div>';
-        }
-
-        return;
-    }
-
-
-    // ========================================================
-    // BLOQUEAR BOTÃO
-    // ========================================================
-
-    if (btn) {
-
-        btn.disabled = true;
-
-        btn.innerHTML =
-            '<i class="fas fa-spinner fa-spin me-1"></i>' +
-            ' Buscando...';
-    }
-
-
-    if (statusEl) {
-
-        statusEl.innerHTML =
-            '<div class="alert alert-info">' +
-            'Consultando dados no SOC...' +
-            '</div>';
-    }
-
-
-    try {
-
-        // ====================================================
-        // TOKEN DO SUPABASE
-        // ====================================================
-
-        let token = '';
-
-
-        if (
-            typeof obterTokenESocial ===
-            'function'
-        ) {
-
-            token =
-                await obterTokenESocial();
-        }
-
-
-        // ====================================================
-        // URL DA API
-        // ====================================================
-        //
-        // Se a página estiver rodando no próprio Node :3002,
-        // usa URL relativa.
-        //
-        // Se estiver no Live Server, força porta 3002.
-        // ====================================================
-
-        const baseUrl =
-            window.location.port === '3002'
-                ? ''
-                : 'http://localhost:3002';
-
-
-        // ====================================================
-        // CONSULTAR BACKEND CORRETO
-        // ====================================================
-
-        const response =
-            await fetch(
-
-                `${baseUrl}/api/soc/buscar-dados-esocial`,
-
-                {
-
-                    method:
-                        'POST',
-
-                    headers: {
-
-                        'Content-Type':
-                            'application/json',
-
-                        ...(token
-                            ? {
-                                Authorization:
-                                    `Bearer ${token}`
-                            }
-                            : {})
-                    },
-
-                    body:
-                        JSON.stringify({
-
-                            holding,
-
-                            empresaId,
-
-                            dataInicio,
-
-                            dataFim,
-
-                            salvar:
-                                true,
-
-                            parametrosSoc: {
-
-                                s2220: {
-
-                                    /*
-                                     * Data da ficha/ASO
-                                     */
-                                    pDataIncAso:
-                                        '0',
-
-                                    /*
-                                     * Mantemos o filtro
-                                     * configurado para o relatório.
-                                     */
-                                    tpExame:
-                                        '1,2,3,4,5,6'
-                                }
-                            }
-                        })
-                }
+        const btn =
+            document.getElementById(
+                'btnConfirmarBuscaSoc'
             );
 
-
-        // ====================================================
-        // LER RESPOSTA COM SEGURANÇA
-        // ====================================================
-
-        const textoResposta =
-            await response.text();
-
-
-        let result;
-
-
-        try {
-
-            result =
-                textoResposta
-                    ? JSON.parse(
-                        textoResposta
-                    )
-                    : {};
-
-        } catch (erroJson) {
-
-            console.error(
-                'Resposta não JSON:',
-                textoResposta
+        const statusEl =
+            document.getElementById(
+                'buscarSocStatus'
             );
 
-            throw new Error(
-                'O servidor retornou uma resposta inválida.'
-            );
-        }
+        const holding =
+            document.getElementById(
+                'socHolding'
+            )?.value || '';
+
+        const empresaId =
+            document.getElementById(
+                'socEmpresa'
+            )?.value || '';
+
+        const dataInicio =
+            document.getElementById(
+                'socDataInicio'
+            )?.value || '';
+
+        const dataFim =
+            document.getElementById(
+                'socDataFim'
+            )?.value || '';
 
 
-        if (
-            !response.ok ||
-            result.success === false
-        ) {
-
-            throw new Error(
-
-                result.error ||
-
-                result.message ||
-
-                `Erro HTTP ${response.status}`
-
-            );
-        }
-
-
-        // ====================================================
-        // INFORMAÇÕES DA CONSULTA
-        // ====================================================
-
-        const linhasRecebidas =
-            Number(
-                result.s2220
-                    ?.linhasRecebidas ||
-                0
-            );
-
-
-        const asosAgrupados =
-            Number(
-                result.s2220
-                    ?.asosAgrupados ||
-                0
-            );
-
-
-        const empresasConsultadas =
-            result.s2220
-                ?.empresasSocConsultadas ||
-            [];
-
-
-        console.log(
-            '==================================='
-        );
-
-        console.log(
-            'RESULTADO BUSCA SOC:',
-            result
-        );
-
-        console.log(
-            'Linhas recebidas:',
-            linhasRecebidas
-        );
-
-        console.log(
-            'ASOs agrupados:',
-            asosAgrupados
-        );
-
-        console.log(
-            'Empresas consultadas:',
-            empresasConsultadas
-        );
-
-        console.log(
-            '==================================='
-        );
-
-
-        // ====================================================
-        // NENHUM RESULTADO
-        // ====================================================
-
-        if (
-            linhasRecebidas === 0
-        ) {
-
-            let empresasTexto = '';
-
-
-            if (
-                Array.isArray(
-                    empresasConsultadas
-                ) &&
-                empresasConsultadas.length
-            ) {
-
-                empresasTexto =
-                    '<hr>' +
-
-                    empresasConsultadas
-                        .map(item => {
-
-                            const qtd =
-                                item.linhasRecebidas ||
-                                0;
-
-                            return (
-                                `${item.unidade} ` +
-                                `(SOC ${item.codigoSoc}) ` +
-                                `- ${qtd} linha(s)`
-                            );
-                        })
-                        .join('<br>');
-            }
-
+        if (!dataInicio || !dataFim) {
 
             if (statusEl) {
 
                 statusEl.innerHTML =
-
                     '<div class="alert alert-warning">' +
-
-                    '<strong>Consulta realizada, mas nenhum registro S-2220 foi encontrado.</strong>' +
-
-                    '<br>' +
-
-                    `Holding: ${holding || 'Todas'}` +
-
-                    empresasTexto +
-
+                    'Informe a data inicial e a data final.' +
                     '</div>';
             }
-
 
             return;
         }
 
 
-        // ====================================================
-        // SUCESSO
-        // ====================================================
+        if (dataInicio > dataFim) {
+
+            if (statusEl) {
+
+                statusEl.innerHTML =
+                    '<div class="alert alert-warning">' +
+                    'A data inicial não pode ser maior que a data final.' +
+                    '</div>';
+            }
+
+            return;
+        }
+
+
+        if (btn) {
+
+            btn.disabled = true;
+
+            btn.innerHTML =
+                '<i class="fas fa-spinner fa-spin me-1"></i>' +
+                ' Buscando e preparando...';
+        }
+
 
         if (statusEl) {
 
             statusEl.innerHTML =
-
-                '<div class="alert alert-success">' +
-
-                '<strong>Consulta ao SOC realizada com sucesso.</strong>' +
-
-                '<br>' +
-
-                `${linhasRecebidas} linha(s) recebida(s) do SOC.` +
-
-                '<br>' +
-
-                `${asosAgrupados} ASO(s) agrupado(s).` +
-
+                '<div class="alert alert-info">' +
+                '<strong>Etapa 1 de 2:</strong> consultando dados no SOC...' +
                 '</div>';
         }
 
 
-        // ====================================================
-        // RECARREGAR EVENTOS SALVOS
-        // ====================================================
-        //
-        // Como o backend salva os eventos no Supabase,
-        // buscamos novamente a lista oficial da tabela.
-        // ====================================================
+        try {
 
-        if (
-            typeof carregarEventosESocial ===
-            'function'
-        ) {
-
-            await carregarEventosESocial();
-        }
+            const token =
+                await obterTokenESocial();
 
 
-        // ====================================================
-        // FECHAR MODAL APÓS SUCESSO
-        // ====================================================
+            // ====================================================
+            // 1. BUSCAR SOC NO PERÍODO
+            // ====================================================
 
-        setTimeout(() => {
+            const response =
+                await fetch(
+                    apiUrl(
+                        '/api/soc/buscar-dados-esocial'
+                    ),
+                    {
+                        method:
+                            'POST',
+                        headers:
+                            criarHeaders(
+                                token,
+                                true
+                            ),
+                        body:
+                            JSON.stringify({
+                                holding,
+                                empresaId,
+                                dataInicio,
+                                dataFim,
+                                salvar:
+                                    true,
+                                parametrosSoc: {
+                                    s2220: {
+                                        pDataIncAso:
+                                            '0',
+                                        tpExame:
+                                            '1,2,3,4,5,6'
+                                    }
+                                }
+                            })
+                    }
+                );
 
-            const modalElement =
-                document.getElementById(
-                    'buscarDadosSocModal'
+
+            const textoResposta =
+                await response.text();
+
+
+            let result = {};
+
+
+            try {
+
+                result =
+                    textoResposta
+                        ? JSON.parse(
+                            textoResposta
+                        )
+                        : {};
+
+            } catch (erroJson) {
+
+                console.error(
+                    'Resposta não JSON:',
+                    textoResposta
+                );
+
+                throw new Error(
+                    'O servidor retornou uma resposta inválida.'
+                );
+            }
+
+
+            if (
+                !response.ok ||
+                result.success === false
+            ) {
+
+                throw new Error(
+                    result.error ||
+                    result.message ||
+                    `Erro HTTP ${response.status}`
+                );
+            }
+
+
+            const linhasRecebidas =
+                Number(
+                    result.s2220
+                        ?.linhasRecebidas ||
+                    0
+                );
+
+
+            const asosAgrupados =
+                Number(
+                    result.s2220
+                        ?.asosAgrupados ||
+                    0
+                );
+
+
+            const empresasConsultadas =
+                result.s2220
+                    ?.empresasSocConsultadas ||
+                [];
+
+
+            console.log(
+                'RESULTADO BUSCA SOC:',
+                result
+            );
+
+
+            if (
+                linhasRecebidas === 0
+            ) {
+
+                let empresasTexto = '';
+
+
+                if (
+                    Array.isArray(
+                        empresasConsultadas
+                    ) &&
+                    empresasConsultadas.length
+                ) {
+
+                    empresasTexto =
+                        '<hr>' +
+                        empresasConsultadas
+                            .map(item => {
+                                const qtd =
+                                    item.linhasRecebidas ||
+                                    0;
+
+                                return (
+                                    `${item.unidade} ` +
+                                    `(SOC ${item.codigoSoc}) ` +
+                                    `- ${qtd} linha(s)`
+                                );
+                            })
+                            .join('<br>');
+                }
+
+
+                if (statusEl) {
+
+                    statusEl.innerHTML =
+                        '<div class="alert alert-warning">' +
+                        '<strong>Consulta realizada, mas nenhum registro S-2220 foi encontrado.</strong>' +
+                        '<br>' +
+                        `Holding: ${holding || 'Todas'}` +
+                        empresasTexto +
+                        '</div>';
+                }
+
+                return;
+            }
+
+
+            // ====================================================
+            // 2. PREPARAR E-SOCIAL COM CACHE + FILA AUTOMÁTICA
+            //
+            // ESTA ROTA NÃO FAZ NOVA CONSULTA BX.
+            // ====================================================
+
+            const eventoIds =
+                Array.from(
+                    new Set(
+                        (
+                            Array.isArray(
+                                result.dados
+                            )
+                                ? result.dados
+                                : []
+                        )
+                            .map(
+                                item =>
+                                    String(
+                                        item?.id ||
+                                        ''
+                                    ).trim()
+                            )
+                            .filter(
+                                Boolean
+                            )
+                    )
+                );
+
+
+            if (statusEl) {
+
+                statusEl.innerHTML =
+                    '<div class="alert alert-info">' +
+                    '<strong>Etapa 2 de 2:</strong> preparando dados do eSocial...' +
+                    '<br><small>O sistema está usando o histórico já disponível e colocando vínculos faltantes na fila automática.</small>' +
+                    '</div>';
+            }
+
+
+            let preparacao = {
+                success:
+                    true,
+                resumo: {
+                    total:
+                        eventoIds.length,
+                    jaEmitidos:
+                        0,
+                    prontosEnvio:
+                        0,
+                    aguardandoMatricula:
+                        eventoIds.length,
+                    aguardandoVerificacao:
+                        0,
+                    s2240AguardandoDados:
+                        0,
+                    erros:
+                        0
+                }
+            };
+
+
+            if (
+                eventoIds.length
+            ) {
+
+                const responsePreparacao =
+                    await fetch(
+                        apiUrl(
+                            '/api/soc/preparar-periodo-esocial'
+                        ),
+                        {
+                            method:
+                                'POST',
+                            headers:
+                                criarHeaders(
+                                    token,
+                                    true
+                                ),
+                            body:
+                                JSON.stringify({
+                                    eventoIds,
+                                    holding,
+                                    empresaId,
+                                    dataInicio,
+                                    dataFim
+                                })
+                        }
+                    );
+
+
+                const textoPreparacao =
+                    await responsePreparacao.text();
+
+
+                try {
+
+                    preparacao =
+                        textoPreparacao
+                            ? JSON.parse(
+                                textoPreparacao
+                            )
+                            : preparacao;
+
+                } catch (errorJson) {
+
+                    console.warn(
+                        '⚠️ Resposta de preparação não JSON:',
+                        textoPreparacao
+                    );
+                }
+
+
+                if (
+                    !responsePreparacao.ok ||
+                    preparacao.success === false
+                ) {
+
+                    console.warn(
+                        '⚠️ Preparação do período retornou aviso:',
+                        preparacao
+                    );
+                }
+            }
+
+
+            const resumo =
+                preparacao.resumo ||
+                {};
+
+
+            if (
+                typeof carregarEventosESocial ===
+                'function'
+            ) {
+
+                await carregarEventosESocial();
+            }
+
+
+            const aguardando =
+                Number(
+                    resumo.aguardandoMatricula ||
+                    0
+                ) +
+                Number(
+                    resumo.aguardandoVerificacao ||
+                    0
                 );
 
 
             if (
-                modalElement &&
-                window.bootstrap
+                aguardando >
+                0
             ) {
 
-                const modal =
-                    bootstrap.Modal
-                        .getInstance(
-                            modalElement
-                        );
-
-
-                if (modal) {
-
-                    modal.hide();
-                }
+                iniciarAcompanhamentoPreparacaoEsocial(
+                    eventoIds
+                );
             }
 
-        }, 1200);
+
+            if (statusEl) {
+
+                const blocoAguardando =
+                    aguardando > 0
+                        ? (
+                            '<br><br>' +
+                            '<strong>Preparação continuará em segundo plano.</strong>' +
+                            '<br>Não é necessário clicar nas lupas. A tabela será atualizada automaticamente.'
+                        )
+                        : '';
 
 
-    } catch (error) {
+                statusEl.innerHTML =
+                    '<div class="alert alert-success">' +
+                    '<strong>Período carregado e preparado.</strong>' +
+                    '<br>' +
+                    `${linhasRecebidas} linha(s) recebida(s) do SOC; ` +
+                    `${asosAgrupados} ASO(s) agrupado(s).` +
+                    '<hr class="my-2">' +
+                    `<strong>${Number(resumo.jaEmitidos || 0)}</strong> já emitido(s) no eSocial.<br>` +
+                    `<strong>${Number(resumo.prontosEnvio || 0)}</strong> pronto(s) para envio manual.<br>` +
+                    `<strong>${Number(resumo.aguardandoMatricula || 0)}</strong> aguardando matrícula oficial.<br>` +
+                    `<strong>${Number(resumo.aguardandoVerificacao || 0)}</strong> aguardando confirmação histórica.<br>` +
+                    `<strong>${Number(resumo.s2240AguardandoDados || 0)}</strong> S-2240 aguardando dados/completude.` +
+                    blocoAguardando +
+                    '</div>';
+            }
 
-        console.error(
-            'Erro ao buscar dados SOC:',
-            error
-        );
+
+            setTimeout(() => {
+
+                const modalElement =
+                    document.getElementById(
+                        'buscarDadosSocModal'
+                    );
 
 
-        if (statusEl) {
+                if (
+                    modalElement &&
+                    window.bootstrap
+                ) {
 
-            statusEl.innerHTML =
+                    const modal =
+                        bootstrap.Modal
+                            .getInstance(
+                                modalElement
+                            );
 
-                '<div class="alert alert-danger">' +
 
-                '<strong>Erro ao consultar o SOC.</strong>' +
+                    if (modal) {
+                        modal.hide();
+                    }
+                }
 
-                '<br>' +
+            }, 2600);
 
-                error.message +
 
-                '</div>';
-        }
+        } catch (error) {
 
-    } finally {
+            console.error(
+                'Erro ao buscar/preparar dados eSocial:',
+                error
+            );
 
-        // ====================================================
-        // LIBERAR BOTÃO
-        // ====================================================
 
-        if (btn) {
+            if (statusEl) {
 
-            btn.disabled = false;
+                statusEl.innerHTML =
+                    '<div class="alert alert-danger">' +
+                    '<strong>Erro ao consultar/preparar os dados.</strong>' +
+                    '<br>' +
+                    error.message +
+                    '</div>';
+            }
 
-            btn.innerHTML =
-                '<i class="fas fa-search me-1"></i>' +
-                ' Buscar';
+        } finally {
+
+            if (btn) {
+
+                btn.disabled = false;
+
+                btn.innerHTML =
+                    '<i class="fas fa-search me-1"></i>' +
+                    ' Buscar e preparar';
+            }
         }
     }
-}
+
+
+    function pararAcompanhamentoPreparacaoEsocial() {
+
+        if (
+            timerAcompanhamentoPreparacaoEsocial
+        ) {
+
+            clearInterval(
+                timerAcompanhamentoPreparacaoEsocial
+            );
+
+            timerAcompanhamentoPreparacaoEsocial =
+                null;
+        }
+
+
+        fimAcompanhamentoPreparacaoEsocial =
+            0;
+    }
+
+
+    function iniciarAcompanhamentoPreparacaoEsocial(
+        eventoIds = []
+    ) {
+
+        pararAcompanhamentoPreparacaoEsocial();
+
+
+        if (
+            !Array.isArray(
+                eventoIds
+            ) ||
+            !eventoIds.length
+        ) {
+
+            return;
+        }
+
+
+        // Atualiza somente a nossa API/local. Não consulta BX diretamente.
+        fimAcompanhamentoPreparacaoEsocial =
+            Date.now() +
+            10 * 60 * 1000;
+
+
+        timerAcompanhamentoPreparacaoEsocial =
+            setInterval(
+                async () => {
+
+                    if (
+                        Date.now() >=
+                        fimAcompanhamentoPreparacaoEsocial
+                    ) {
+
+                        pararAcompanhamentoPreparacaoEsocial();
+                        return;
+                    }
+
+
+                    if (
+                        document.hidden
+                    ) {
+
+                        return;
+                    }
+
+
+                    try {
+
+                        await carregarEventosESocial();
+
+                    } catch (error) {
+
+                        console.warn(
+                            '⚠️ Não foi possível atualizar automaticamente a preparação eSocial:',
+                            error?.message ||
+                            error
+                        );
+                    }
+                },
+                30000
+            );
+    }
 
     // ============================================================
     // CARREGAR EVENTOS SALVOS
@@ -2731,7 +2843,7 @@ const resumoColaborador =
                 data-id="${escaparHtml(
                     evento.id
                 )}"
-                title="Buscar matrícula oficial no eSocial"
+                title="Verificar vínculo e evento no eSocial"
             >
 
                 <i class="fas fa-search"></i>
@@ -6809,10 +6921,19 @@ async function enviarIds(
             return;
         }
 
+        const tituloModal =
+            document.querySelector(
+                '#buscarDadosSocModal .modal-title'
+            );
+
+        if (tituloModal) {
+            tituloModal.innerHTML =
+                '<i class="fas fa-sync me-2"></i> Buscar SOC e Preparar eSocial';
+        }
+
         /*
-         * Atualiza o texto antigo do HTML,
-         * que ainda falava que S-2240
-         * seria buscado automaticamente.
+         * O fluxo operacional é por período:
+         * SOC -> preparação local/cache -> fila de vínculo -> envio manual.
          */
         alerta.innerHTML = `
             <i class="fas fa-info-circle"></i>
@@ -6841,10 +6962,10 @@ async function enviarIds(
                 </li>
 
                 <li>
-                    <strong>
-                        S-2240 ainda não está
-                        habilitado nesta busca.
-                    </strong>
+                    <strong>S-2240</strong> -
+                    quando a regra do SOC indicar que o colaborador precisa do evento,
+                    ele também será preparado. O envio continuará bloqueado enquanto
+                    faltarem dados obrigatórios ou enquanto a produção S-2240 não estiver liberada.
                 </li>
 
             </ul>
@@ -6868,6 +6989,12 @@ async function initESocial() {
             document.getElementById('btnBuscarDadosSoc');
 
         if (btnBuscarDadosSoc) {
+
+            btnBuscarDadosSoc.innerHTML =
+                '<i class="fas fa-sync me-1"></i> Buscar e Preparar eSocial';
+
+            btnBuscarDadosSoc.title =
+                'Buscar dados do SOC no período e preparar a situação eSocial';
 
             // Usamos onclick para não cadastrar o evento
             // várias vezes caso initESocial() seja executada novamente.
@@ -7067,13 +7194,11 @@ async function initESocial() {
 
         if (btnEnviarTodos) {
 
-            btnEnviarTodos.onclick =
-                async function (event) {
-
-                    event.preventDefault();
-
-                    await enviarTodosEventos();
-                };
+            // O fluxo final é manual por seleção.
+            // Não disponibilizar envio em massa sem escolha do usuário.
+            btnEnviarTodos.disabled = true;
+            btnEnviarTodos.style.display = 'none';
+            btnEnviarTodos.onclick = null;
         }
 
 
@@ -7596,10 +7721,6 @@ async function verificarEventoNoESocial(
     }
 
 
-    // ========================================================
-    // JÁ CONFIRMADO
-    // ========================================================
-
     if (
         evento.emitido_esocial === true ||
         evento.ja_emitido === true
@@ -7614,37 +7735,6 @@ async function verificarEventoNoESocial(
     }
 
 
-    const tipoEvento =
-        String(
-            evento.tipo_evento ||
-            ''
-        )
-            .trim()
-            .toUpperCase();
-
-
-    if (
-        ![
-            'S-2220',
-            'S-2240'
-        ].includes(
-            tipoEvento
-        )
-    ) {
-
-        mostrarAlertaESocial(
-            'A verificação está disponível somente para S-2220 e S-2240.',
-            'warning'
-        );
-
-        return;
-    }
-
-
-    // ========================================================
-    // ESTADO DO BOTÃO
-    // ========================================================
-
     let htmlBotaoOriginal =
         '';
 
@@ -7656,14 +7746,11 @@ async function verificarEventoNoESocial(
         htmlBotaoOriginal =
             botao.innerHTML;
 
-
         botao.disabled =
             true;
 
-
-        botao.innerHTML = `
-            <i class="fas fa-spinner fa-spin"></i>
-        `;
+        botao.innerHTML =
+            '<i class="fas fa-spinner fa-spin"></i>';
     }
 
 
@@ -7674,33 +7761,34 @@ async function verificarEventoNoESocial(
 
 
         mostrarAlertaESocial(
-            `Consultando ${evento.colaborador || 'o colaborador'} ` +
-            'no eSocial de Produção...',
+            `Atualizando a preparação de ${evento.colaborador || 'o colaborador'}...`,
             'info'
         );
 
 
+        // ====================================================
+        // IMPORTANTE:
+        // A lupa NÃO faz mais consulta BX direta.
+        // Ela usa somente cache/histórico local e garante que o
+        // vínculo esteja na fila automática quando necessário.
+        // ====================================================
+
         const response =
             await fetch(
                 apiUrl(
-                    `/api/soc/sincronizar-esocial-existente/` +
+                    `/api/soc/preparar-evento-esocial/` +
                     `${encodeURIComponent(id)}`
                 ),
                 {
-
                     method:
                         'POST',
-
                     headers:
                         criarHeaders(
                             token,
                             true
                         ),
-
                     body:
-                        JSON.stringify(
-                            {}
-                        )
+                        JSON.stringify({})
                 }
             );
 
@@ -7713,228 +7801,154 @@ async function verificarEventoNoESocial(
             {};
 
 
-        if (
-            texto
-        ) {
+        try {
 
-            try {
-
-                resultado =
-                    JSON.parse(
+            resultado =
+                texto
+                    ? JSON.parse(
                         texto
-                    );
+                    )
+                    : {};
 
-            } catch (
-                error
-            ) {
+        } catch (errorJson) {
 
-                resultado = {
-
-                    success:
-                        false,
-
-                    error:
-                        texto
-                };
-            }
+            resultado = {
+                success:
+                    false,
+                error:
+                    texto ||
+                    'Resposta inválida do servidor.'
+            };
         }
 
 
         console.log(
-            '🔎 Resultado verificação eSocial:',
+            '🔎 Resultado preparação eSocial:',
             resultado
         );
 
 
-        // ========================================================
-        // EVENTO ENCONTRADO
-        // ========================================================
-
         if (
-            resultado.jaExisteNoEsocial ===
-            true
+            response.status ===
+            429
         ) {
 
-            const recibo =
-                resultado
-                    .eventoCorrespondente
-                    ?.numeroRecibo ||
-                resultado
-                    .numeroReciboExistente ||
-                '';
-
-
-            let mensagem =
-                'Evento encontrado no eSocial de Produção. ' +
-                'O registro foi confirmado como Concluído.';
-
-
-            if (
-                recibo
-            ) {
-
-                mensagem +=
-                    ` Recibo: ${recibo}`;
-            }
-
-
             mostrarAlertaESocial(
-                mensagem,
-                'success'
-            );
-
-
-            await recarregarEventosESocial();
-
-
-            return;
-        }
-
-
-        // ========================================================
-        // VERIFICAÇÃO COMPLETA E NÃO ENCONTROU
-        // ========================================================
-
-        if (
-            resultado.success ===
-                true &&
-            resultado.verificacaoCompleta ===
-                true &&
-            resultado.jaExisteNoEsocial ===
-                false
-        ) {
-
-            const matriculaBx =
-                resultado
-                    .vinculoTrabalhista
-                    ?.matricula ||
-                '';
-
-
-            const matriculaAlterada =
-                resultado
-                    .vinculoTrabalhista
-                    ?.alterada ===
-                true;
-
-
-            let mensagem =
-                'Verificação concluída. ' +
-                'O evento não foi encontrado no eSocial de Produção.';
-
-
-            if (
-                matriculaBx
-            ) {
-
-                mensagem +=
-                    ` Matrícula oficial confirmada no eSocial: ${matriculaBx}.`;
-            }
-
-
-            if (
-                matriculaAlterada
-            ) {
-
-                mensagem +=
-                    ' O evento local foi atualizado e será gerado novamente antes do envio.';
-            }
-
-            mostrarAlertaESocial(
-                mensagem,
+                'O limite diário de consultas ao eSocial foi atingido para esta empresa. ' +
+                'O vínculo continuará na fila automática e não será enviado enquanto não estiver confirmado.',
                 'warning'
             );
 
-
-            await recarregarEventosESocial();
-
-
             return;
         }
 
 
-        // ========================================================
-        // IDENTIFICAR INDISPONIBILIDADE DO SERVIÇO BX
-        // ========================================================
+        if (
+            !response.ok ||
+            resultado.success === false
+        ) {
 
-        const erroCompleto =
-            String(
+            throw new Error(
                 resultado.error ||
-                resultado.descResposta ||
-                resultado.motivoBloqueio ||
+                `Erro HTTP ${response.status}`
+            );
+        }
+
+
+        const situacao =
+            String(
+                resultado.situacaoPreparacao ||
                 ''
             );
 
 
-        const erroNormalizado =
-            erroCompleto
-                .toLowerCase();
-
-
-        const servicoIndisponivel =
-            response.status >=
-                500 ||
-
-            erroNormalizado.includes(
-                'configuration error'
-            ) ||
-
-            erroNormalizado.includes(
-                'environmentsettings.config'
-            ) ||
-
-            erroNormalizado.includes(
-                'retornou html em vez de xml'
-            ) ||
-
-            erroNormalizado.includes(
-                'server error'
-            );
+        const matricula =
+            resultado.matricula
+                ?.valor ||
+            resultado.evento
+                ?.matricula ||
+            '';
 
 
         if (
-            servicoIndisponivel
+            situacao ===
+            'ja_emitido'
         ) {
 
             mostrarAlertaESocial(
-                'O serviço de consulta do eSocial está indisponível no momento. ' +
-                'O evento continuará como "Aguardando verificação" e ' +
-                'não poderá ser enviado até conseguirmos confirmar sua situação.',
+                'Evento já localizado no histórico/eSocial. O registro permanece bloqueado para reenvio.',
+                'success'
+            );
+
+        } else if (
+            situacao ===
+            'pronto_envio'
+        ) {
+
+            mostrarAlertaESocial(
+                'Preparação concluída. ' +
+                (matricula
+                    ? `Matrícula oficial: ${matricula}. `
+                    : '') +
+                'O evento está pronto para ser selecionado e enviado manualmente.',
+                'success'
+            );
+
+        } else if (
+            situacao ===
+            'aguardando_matricula'
+        ) {
+
+            mostrarAlertaESocial(
+                'A matrícula oficial ainda não está disponível no cache. ' +
+                'O vínculo está na fila automática do eSocial. Não é necessário clicar novamente.',
                 'warning'
             );
 
+            iniciarAcompanhamentoPreparacaoEsocial([
+                String(id)
+            ]);
 
-            return;
+        } else if (
+            situacao ===
+            's2240_aguardando_dados'
+        ) {
+
+            mostrarAlertaESocial(
+                'O vínculo foi preparado, mas o S-2240 ainda aguarda dados obrigatórios/completude antes do envio.',
+                'warning'
+            );
+
+        } else {
+
+            mostrarAlertaESocial(
+                'Dados locais atualizados. O evento ainda aguarda confirmação histórica do eSocial. ' +
+                'O processamento continuará em segundo plano.',
+                'info'
+            );
+
+            iniciarAcompanhamentoPreparacaoEsocial([
+                String(id)
+            ]);
         }
 
 
-        // ========================================================
-        // OUTRA FALHA NA VERIFICAÇÃO
-        // ========================================================
-
-        mostrarAlertaESocial(
-            'Não foi possível confirmar a situação deste evento. ' +
-            'Ele continuará como "Aguardando verificação" e não será enviado.',
-            'warning'
-        );
+        await recarregarEventosESocial();
 
 
-    } catch (
-        error
-    ) {
+    } catch (error) {
 
         console.error(
-            '❌ Erro verificando evento no eSocial:',
+            '❌ Erro preparando evento eSocial:',
             error
         );
 
 
         mostrarAlertaESocial(
-            'Não foi possível acessar o serviço de consulta do eSocial. ' +
-            'O evento continuará como "Aguardando verificação".',
+            'Não foi possível atualizar a preparação deste evento: ' +
+            error.message,
             'warning'
         );
-
 
     } finally {
 
@@ -7944,7 +7958,6 @@ async function verificarEventoNoESocial(
 
             botao.disabled =
                 false;
-
 
             botao.innerHTML =
                 htmlBotaoOriginal;
@@ -8196,8 +8209,8 @@ function adicionarControlesVerificacaoESocial() {
 
                     btnVerificar.title =
                         erroMatricula
-                            ? 'Buscar matrícula oficial no eSocial'
-                            : 'Verificar no eSocial';
+                            ? 'Verificar vínculo e evento no eSocial'
+                            : 'Verificar vínculo e evento no eSocial';
 
 
                     btnVerificar.innerHTML =

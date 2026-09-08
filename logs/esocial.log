@@ -1300,3 +1300,212 @@
 {"level":"info","message":"GET /favicon.png 304 - 1ms - ::1","timestamp":"2026-09-04T18:56:19.123Z"}
 {"level":"info","message":"GET /api/soc/eventos-salvos 200 - 1698ms - ::1","timestamp":"2026-09-04T18:57:52.964Z"}
 {"level":"info","message":"GET /api/soc/status-integracao 200 - 358ms - ::1","timestamp":"2026-09-04T18:57:53.362Z"}
+{"level":"info","message":"Servidor rodando na porta 3002","timestamp":"2026-09-08T13:31:41.192Z"}
+{"level":"info","message":"Ambiente: development","timestamp":"2026-09-08T13:31:41.204Z"}
+{"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-08T13:31:41.205Z"}
+{"level":"info","message":"GET / 200 - 14ms - ::1","timestamp":"2026-09-08T13:31:58.576Z"}
+{"level":"info","message":"GET /favicon.png 200 - 7ms - ::1","timestamp":"2026-09-08T13:31:58.714Z"}
+{"level":"info","message":"GET /favicon2.png 200 - 13ms - ::1","timestamp":"2026-09-08T13:31:58.823Z"}
+{"level":"info","message":"GET /esocial.js 200 - 115ms - ::1","timestamp":"2026-09-08T13:31:58.863Z"}
+{"level":"info","message":"GET /app.js 200 - 150ms - ::1","timestamp":"2026-09-08T13:31:58.896Z"}
+{"level":"info","message":"GET /favicon3.png 200 - 7ms - ::1","timestamp":"2026-09-08T13:31:58.997Z"}
+{"level":"info","message":"GET /api/soc/eventos-salvos 200 - 1681ms - ::1","timestamp":"2026-09-08T13:32:28.272Z"}
+{"level":"info","message":"GET /api/soc/status-integracao 200 - 354ms - ::1","timestamp":"2026-09-08T13:32:28.659Z"}
+{"level":"info","message":"SIGINT recebido. Encerrando servidor...","timestamp":"2026-09-08T13:36:28.619Z"}
+{"level":"info","message":"Servidor rodando na porta 3002","timestamp":"2026-09-08T13:36:36.374Z"}
+{"level":"info","message":"Ambiente: development","timestamp":"2026-09-08T13:36:36.377Z"}
+{"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-08T13:36:36.378Z"}
+{"level":"info","message":"GET /api/soc/matriculas-esocial/status 200 - 530ms - ::1","timestamp":"2026-09-08T13:38:29.428Z"}
+{"level":"info","message":"POST /api/soc/matriculas-esocial/processar-fila 200 - 8819ms - ::1","timestamp":"2026-09-08T13:38:48.945Z"}
+{"level":"info","message":"POST /api/soc/matriculas-esocial/processar-fila 200 - 7331ms - ::1","timestamp":"2026-09-08T13:40:54.135Z"}
+{"level":"info","message":"GET / 200 - 3ms - ::1","timestamp":"2026-09-08T13:41:58.479Z"}
+{"level":"info","message":"GET /favicon.png 304 - 1ms - ::1","timestamp":"2026-09-08T13:41:58.493Z"}
+{"level":"info","message":"GET /app.js 304 - 3ms - ::1","timestamp":"2026-09-08T13:41:58.495Z"}
+{"level":"info","message":"GET /esocial.js 304 - 1ms - ::1","timestamp":"2026-09-08T13:41:58.500Z"}
+{"level":"info","message":"GET /favicon2.png 304 - 1ms - ::1","timestamp":"2026-09-08T13:41:58.526Z"}
+{"level":"info","message":"GET /favicon3.png 304 - 1ms - ::1","timestamp":"2026-09-08T13:41:58.615Z"}
+{"level":"info","message":"GET /api/soc/eventos-salvos 304 - 1620ms - ::1","timestamp":"2026-09-08T13:42:02.401Z"}
+{"level":"info","message":"GET /api/soc/status-integracao 304 - 321ms - ::1","timestamp":"2026-09-08T13:42:02.774Z"}
+{"level":"info","message":"GET / 200 - 3ms - ::1","timestamp":"2026-09-08T13:42:42.095Z"}
+{"level":"info","message":"GET /favicon.png 304 - 1ms - ::1","timestamp":"2026-09-08T13:42:42.112Z"}
+{"level":"info","message":"GET /app.js 304 - 2ms - ::1","timestamp":"2026-09-08T13:42:42.113Z"}
+{"level":"info","message":"GET /esocial.js 304 - 1ms - ::1","timestamp":"2026-09-08T13:42:42.117Z"}
+{"level":"info","message":"GET /favicon2.png 304 - 0ms - ::1","timestamp":"2026-09-08T13:42:42.129Z"}
+{"level":"info","message":"GET /favicon3.png 304 - 1ms - ::1","timestamp":"2026-09-08T13:42:42.193Z"}
+{"level":"info","message":"GET /api/soc/eventos-salvos 304 - 1383ms - ::1","timestamp":"2026-09-08T13:42:45.408Z"}
+{"level":"info","message":"GET /api/soc/status-integracao 304 - 320ms - ::1","timestamp":"2026-09-08T13:42:45.763Z"}
+{"level":"info","message":"GET /api/soc/matriculas-esocial/status 200 - 336ms - ::1","timestamp":"2026-09-08T13:43:22.807Z"}
+{"level":"info","message":"GET / 200 - 3ms - ::1","timestamp":"2026-09-08T13:51:34.389Z"}
+{"level":"info","message":"GET /favicon.png 304 - 1ms - ::1","timestamp":"2026-09-08T13:51:34.409Z"}
+{"level":"info","message":"GET /app.js 304 - 0ms - ::1","timestamp":"2026-09-08T13:51:34.411Z"}
+{"level":"info","message":"GET /esocial.js 304 - 1ms - ::1","timestamp":"2026-09-08T13:51:34.415Z"}
+{"level":"info","message":"GET /favicon2.png 304 - 0ms - ::1","timestamp":"2026-09-08T13:51:34.473Z"}
+{"level":"info","message":"GET /favicon3.png 304 - 1ms - ::1","timestamp":"2026-09-08T13:51:34.507Z"}
+{"level":"info","message":"GET /api/soc/eventos-salvos 304 - 1748ms - ::1","timestamp":"2026-09-08T13:51:38.196Z"}
+{"level":"info","message":"GET /api/soc/status-integracao 304 - 295ms - ::1","timestamp":"2026-09-08T13:51:38.524Z"}
+{"level":"info","message":"GET / 304 - 1ms - ::1","timestamp":"2026-09-08T13:51:53.949Z"}
+{"level":"info","message":"GET /favicon.png 304 - 1ms - ::1","timestamp":"2026-09-08T13:51:53.960Z"}
+{"level":"info","message":"GET /app.js 304 - 2ms - ::1","timestamp":"2026-09-08T13:51:53.961Z"}
+{"level":"info","message":"GET /esocial.js 304 - 0ms - ::1","timestamp":"2026-09-08T13:51:53.963Z"}
+{"level":"info","message":"GET /favicon2.png 304 - 0ms - ::1","timestamp":"2026-09-08T13:51:53.977Z"}
+{"level":"info","message":"GET /favicon3.png 304 - 1ms - ::1","timestamp":"2026-09-08T13:51:54.052Z"}
+{"level":"info","message":"GET /api/soc/eventos-salvos 304 - 1581ms - ::1","timestamp":"2026-09-08T13:53:34.834Z"}
+{"level":"info","message":"GET /api/soc/status-integracao 304 - 247ms - ::1","timestamp":"2026-09-08T13:53:35.120Z"}
+{"level":"info","message":"SIGINT recebido. Encerrando servidor...","timestamp":"2026-09-08T14:03:44.010Z"}
+{"level":"info","message":"Servidor rodando na porta 3002","timestamp":"2026-09-08T14:03:48.578Z"}
+{"level":"info","message":"Ambiente: development","timestamp":"2026-09-08T14:03:48.581Z"}
+{"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-08T14:03:48.582Z"}
+{"level":"info","message":"POST /api/soc/matriculas-esocial/backfill-cache 200 - 5373ms - ::1","timestamp":"2026-09-08T14:04:03.956Z"}
+{"level":"info","message":"POST /api/soc/matriculas-esocial/resolver-cache-local 200 - 26099ms - ::1","timestamp":"2026-09-08T14:07:11.115Z"}
+{"level":"info","message":"GET /api/soc/matriculas-esocial/status 200 - 457ms - ::1","timestamp":"2026-09-08T14:08:44.781Z"}
+{"level":"info","message":"POST /api/soc/matriculas-esocial/processar-fila 200 - 9748ms - ::1","timestamp":"2026-09-08T14:09:25.986Z"}
+{"level":"info","message":"POST /api/soc/matriculas-esocial/resolver-cache-local 200 - 21549ms - ::1","timestamp":"2026-09-08T14:10:28.367Z"}
+{"level":"info","message":"GET /api/soc/matriculas-esocial/status 200 - 367ms - ::1","timestamp":"2026-09-08T14:10:46.717Z"}
+{"level":"info","message":"SIGINT recebido. Encerrando servidor...","timestamp":"2026-09-08T14:12:05.110Z"}
+{"level":"info","message":"Servidor rodando na porta 3002","timestamp":"2026-09-08T14:12:09.445Z"}
+{"level":"info","message":"Ambiente: development","timestamp":"2026-09-08T14:12:09.448Z"}
+{"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-08T14:12:09.448Z"}
+{"level":"info","message":"SIGINT recebido. Encerrando servidor...","timestamp":"2026-09-08T14:31:27.739Z"}
+{"level":"info","message":"Servidor rodando na porta 3002","timestamp":"2026-09-08T14:31:31.929Z"}
+{"level":"info","message":"Ambiente: development","timestamp":"2026-09-08T14:31:31.932Z"}
+{"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-08T14:31:31.933Z"}
+{"level":"info","message":"GET /api/soc/matriculas-esocial/status 200 - 745ms - ::1","timestamp":"2026-09-08T14:35:07.691Z"}
+{"level":"info","message":"GET /api/soc/matriculas-esocial/status 200 - 440ms - ::1","timestamp":"2026-09-08T14:35:55.029Z"}
+{"level":"info","message":"GET /.well-known/appspecific/com.chrome.devtools.json 404 - 3ms - ::1","timestamp":"2026-09-08T14:37:49.107Z"}
+{"level":"info","message":"GET /api/soc/matriculas-esocial/status 200 - 390ms - ::1","timestamp":"2026-09-08T14:39:24.802Z"}
+{"level":"info","message":"GET /api/soc/matriculas-esocial/status 200 - 378ms - ::1","timestamp":"2026-09-08T14:48:45.641Z"}
+{"level":"info","message":"GET / 200 - 20ms - ::1","timestamp":"2026-09-08T14:54:45.781Z"}
+{"level":"info","message":"GET /app.js 304 - 2ms - ::1","timestamp":"2026-09-08T14:54:45.801Z"}
+{"level":"info","message":"GET /favicon.png 304 - 3ms - ::1","timestamp":"2026-09-08T14:54:45.803Z"}
+{"level":"info","message":"GET /esocial.js 304 - 1ms - ::1","timestamp":"2026-09-08T14:54:45.813Z"}
+{"level":"info","message":"GET /favicon2.png 304 - 0ms - ::1","timestamp":"2026-09-08T14:54:45.861Z"}
+{"level":"info","message":"GET /favicon3.png 304 - 0ms - ::1","timestamp":"2026-09-08T14:54:45.962Z"}
+{"level":"info","message":"GET /api/soc/eventos-salvos 200 - 1714ms - ::1","timestamp":"2026-09-08T14:54:49.696Z"}
+{"level":"info","message":"GET /api/soc/status-integracao 304 - 262ms - ::1","timestamp":"2026-09-08T14:54:49.994Z"}
+{"level":"info","message":"GET /api/soc/matriculas-esocial/status 200 - 414ms - ::1","timestamp":"2026-09-08T15:05:26.757Z"}
+{"level":"info","message":"GET /api/soc/matriculas-esocial/status 200 - 561ms - ::1","timestamp":"2026-09-08T15:21:32.886Z"}
+{"level":"info","message":"GET /api/soc/matriculas-esocial/status 200 - 369ms - ::1","timestamp":"2026-09-08T15:34:44.295Z"}
+{"level":"info","message":"GET /api/soc/matriculas-esocial/status 200 - 285ms - ::1","timestamp":"2026-09-08T15:46:37.891Z"}
+{"level":"info","message":"SIGINT recebido. Encerrando servidor...","timestamp":"2026-09-08T15:48:54.336Z"}
+{"level":"info","message":"Servidor rodando na porta 3002","timestamp":"2026-09-08T15:49:06.817Z"}
+{"level":"info","message":"Ambiente: development","timestamp":"2026-09-08T15:49:06.824Z"}
+{"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-08T15:49:06.825Z"}
+{"level":"info","message":"GET /api/soc/matriculas-esocial/status 200 - 398ms - ::1","timestamp":"2026-09-08T15:50:52.500Z"}
+{"level":"info","message":"GET /api/soc/matriculas-esocial/status 200 - 394ms - ::1","timestamp":"2026-09-08T16:06:33.415Z"}
+{"level":"info","message":"GET / 304 - 8ms - ::1","timestamp":"2026-09-08T16:12:29.039Z"}
+{"level":"info","message":"GET /favicon.png 304 - 4ms - ::1","timestamp":"2026-09-08T16:12:29.068Z"}
+{"level":"info","message":"GET /app.js 304 - 3ms - ::1","timestamp":"2026-09-08T16:12:29.070Z"}
+{"level":"info","message":"GET /esocial.js 304 - 2ms - ::1","timestamp":"2026-09-08T16:12:29.087Z"}
+{"level":"info","message":"GET /favicon2.png 304 - 0ms - ::1","timestamp":"2026-09-08T16:12:29.137Z"}
+{"level":"info","message":"GET /favicon3.png 304 - 1ms - ::1","timestamp":"2026-09-08T16:12:29.262Z"}
+{"level":"info","message":"GET /api/soc/eventos-salvos 200 - 2289ms - ::1","timestamp":"2026-09-08T16:12:34.012Z"}
+{"level":"info","message":"GET /api/soc/status-integracao 304 - 311ms - ::1","timestamp":"2026-09-08T16:12:34.781Z"}
+{"level":"info","message":"GET /api/soc/matriculas-esocial/status 200 - 414ms - ::1","timestamp":"2026-09-08T16:21:00.944Z"}
+{"level":"info","message":"SIGINT recebido. Encerrando servidor...","timestamp":"2026-09-08T16:28:47.357Z"}
+{"level":"info","message":"Servidor rodando na porta 3002","timestamp":"2026-09-08T16:28:50.613Z"}
+{"level":"info","message":"Ambiente: development","timestamp":"2026-09-08T16:28:50.616Z"}
+{"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-08T16:28:50.617Z"}
+{"level":"info","message":"SIGINT recebido. Encerrando servidor...","timestamp":"2026-09-08T16:30:00.460Z"}
+{"level":"info","message":"Servidor rodando na porta 3002","timestamp":"2026-09-08T16:30:14.581Z"}
+{"level":"info","message":"Ambiente: development","timestamp":"2026-09-08T16:30:14.584Z"}
+{"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-08T16:30:14.585Z"}
+{"level":"info","message":"SIGINT recebido. Encerrando servidor...","timestamp":"2026-09-08T16:32:07.021Z"}
+{"level":"info","message":"Servidor rodando na porta 3002","timestamp":"2026-09-08T16:32:10.185Z"}
+{"level":"info","message":"Ambiente: development","timestamp":"2026-09-08T16:32:10.188Z"}
+{"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-08T16:32:10.188Z"}
+{"level":"info","message":"GET /api/soc/matriculas-esocial/status 200 - 326ms - ::1","timestamp":"2026-09-08T16:32:31.819Z"}
+{"level":"info","message":"GET /api/soc/matriculas-esocial/status 200 - 1203ms - ::1","timestamp":"2026-09-08T16:45:02.271Z"}
+{"level":"info","message":"GET /api/soc/matriculas-esocial/status 200 - 890ms - ::1","timestamp":"2026-09-08T16:51:08.967Z"}
+{"level":"info","message":"SIGINT recebido. Encerrando servidor...","timestamp":"2026-09-08T16:54:59.280Z"}
+{"level":"info","message":"Servidor rodando na porta 3002","timestamp":"2026-09-08T16:55:09.089Z"}
+{"level":"info","message":"Ambiente: development","timestamp":"2026-09-08T16:55:09.091Z"}
+{"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-08T16:55:09.092Z"}
+{"level":"info","message":"GET /api/soc/matriculas-esocial/status 200 - 441ms - ::1","timestamp":"2026-09-08T17:17:41.631Z"}
+{"level":"info","message":"GET /api/soc/eventos-salvos 200 - 1486ms - ::1","timestamp":"2026-09-08T17:18:20.683Z"}
+{"level":"info","message":"GET /api/soc/status-integracao 304 - 491ms - ::1","timestamp":"2026-09-08T17:18:21.211Z"}
+{"level":"info","message":"GET /api/soc/matriculas-esocial/status 200 - 356ms - ::1","timestamp":"2026-09-08T17:26:04.714Z"}
+{"level":"info","message":"GET /api/soc/matriculas-esocial/status 200 - 268ms - ::1","timestamp":"2026-09-08T17:26:20.874Z"}
+{"level":"info","message":"GET /api/soc/matriculas-esocial/status 200 - 296ms - ::1","timestamp":"2026-09-08T17:32:43.423Z"}
+{"level":"info","message":"GET /api/soc/matriculas-esocial/status 200 - 623ms - ::1","timestamp":"2026-09-08T17:38:02.234Z"}
+{"level":"info","message":"GET /api/soc/matriculas-esocial/status 200 - 397ms - ::1","timestamp":"2026-09-08T17:42:26.416Z"}
+{"level":"info","message":"GET /api/soc/matriculas-esocial/status 200 - 2271ms - ::1","timestamp":"2026-09-08T17:51:28.979Z"}
+{"level":"info","message":"GET /api/soc/matriculas-esocial/status 200 - 656ms - ::1","timestamp":"2026-09-08T17:52:05.528Z"}
+{"level":"info","message":"SIGINT recebido. Encerrando servidor...","timestamp":"2026-09-08T17:54:54.568Z"}
+{"level":"info","message":"Servidor rodando na porta 3002","timestamp":"2026-09-08T18:11:47.824Z"}
+{"level":"info","message":"Ambiente: development","timestamp":"2026-09-08T18:11:47.828Z"}
+{"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-08T18:11:47.828Z"}
+{"level":"info","message":"GET /api/soc/matriculas-esocial/status 200 - 1479ms - ::1","timestamp":"2026-09-08T18:11:59.053Z"}
+{"level":"info","message":"GET /api/soc/matriculas-esocial/status 200 - 415ms - ::1","timestamp":"2026-09-08T18:13:17.600Z"}
+{"level":"info","message":"SIGINT recebido. Encerrando servidor...","timestamp":"2026-09-08T18:17:07.907Z"}
+{"level":"info","message":"Servidor rodando na porta 3002","timestamp":"2026-09-08T18:21:31.646Z"}
+{"level":"info","message":"Ambiente: development","timestamp":"2026-09-08T18:21:31.649Z"}
+{"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-08T18:21:31.649Z"}
+{"level":"info","message":"GET / 304 - 4ms - ::1","timestamp":"2026-09-08T18:21:49.986Z"}
+{"level":"info","message":"GET /favicon.png 304 - 2ms - ::1","timestamp":"2026-09-08T18:21:50.005Z"}
+{"level":"info","message":"GET /app.js 304 - 3ms - ::1","timestamp":"2026-09-08T18:21:50.007Z"}
+{"level":"info","message":"GET /esocial.js 304 - 2ms - ::1","timestamp":"2026-09-08T18:21:50.014Z"}
+{"level":"info","message":"GET /favicon2.png 304 - 1ms - ::1","timestamp":"2026-09-08T18:21:50.062Z"}
+{"level":"info","message":"GET /favicon3.png 304 - 1ms - ::1","timestamp":"2026-09-08T18:21:50.199Z"}
+{"level":"info","message":"GET /api/soc/eventos-salvos 200 - 1570ms - ::1","timestamp":"2026-09-08T18:21:53.245Z"}
+{"level":"info","message":"GET /api/soc/status-integracao 304 - 539ms - ::1","timestamp":"2026-09-08T18:21:53.818Z"}
+{"level":"info","message":"GET / 304 - 1ms - ::1","timestamp":"2026-09-08T18:22:52.382Z"}
+{"level":"info","message":"GET /favicon.png 304 - 2ms - ::1","timestamp":"2026-09-08T18:22:52.401Z"}
+{"level":"info","message":"GET /app.js 304 - 2ms - ::1","timestamp":"2026-09-08T18:22:52.402Z"}
+{"level":"info","message":"GET /esocial.js 304 - 1ms - ::1","timestamp":"2026-09-08T18:22:52.407Z"}
+{"level":"info","message":"GET /favicon2.png 304 - 1ms - ::1","timestamp":"2026-09-08T18:22:52.419Z"}
+{"level":"info","message":"GET /favicon3.png 304 - 1ms - ::1","timestamp":"2026-09-08T18:22:52.492Z"}
+{"level":"info","message":"GET /api/soc/eventos-salvos 200 - 372ms - ::1","timestamp":"2026-09-08T18:22:54.325Z"}
+{"level":"info","message":"GET /api/soc/status-integracao 304 - 231ms - ::1","timestamp":"2026-09-08T18:22:54.561Z"}
+{"level":"info","message":"POST /api/soc/buscar-dados-esocial 200 - 67379ms - ::1","timestamp":"2026-09-08T18:24:30.062Z"}
+{"level":"info","message":"GET /api/soc/eventos-salvos 200 - 787ms - ::1","timestamp":"2026-09-08T18:24:30.856Z"}
+{"level":"info","message":"POST /api/soc/sincronizar-esocial-existente/879 200 - 3436ms - ::1","timestamp":"2026-09-08T18:24:58.942Z"}
+{"level":"info","message":"GET /api/soc/eventos-salvos 200 - 841ms - ::1","timestamp":"2026-09-08T18:24:59.787Z"}
+{"level":"info","message":"POST /api/soc/sincronizar-esocial-existente/878 200 - 1240ms - ::1","timestamp":"2026-09-08T18:25:08.713Z"}
+{"level":"info","message":"GET /api/soc/eventos-salvos 200 - 1118ms - ::1","timestamp":"2026-09-08T18:25:09.835Z"}
+{"level":"info","message":"POST /api/soc/sincronizar-esocial-existente/876 200 - 1350ms - ::1","timestamp":"2026-09-08T18:25:17.271Z"}
+{"level":"info","message":"GET /api/soc/eventos-salvos 200 - 743ms - ::1","timestamp":"2026-09-08T18:25:18.019Z"}
+{"level":"info","message":"POST /api/soc/sincronizar-esocial-existente/876 200 - 1411ms - ::1","timestamp":"2026-09-08T18:25:23.898Z"}
+{"level":"info","message":"GET /api/soc/eventos-salvos 200 - 784ms - ::1","timestamp":"2026-09-08T18:25:24.689Z"}
+{"level":"info","message":"POST /api/soc/sincronizar-esocial-existente/874 200 - 962ms - ::1","timestamp":"2026-09-08T18:25:27.138Z"}
+{"level":"info","message":"GET /api/soc/eventos-salvos 200 - 724ms - ::1","timestamp":"2026-09-08T18:25:27.867Z"}
+{"level":"info","message":"POST /api/soc/sincronizar-esocial-existente/873 200 - 5433ms - ::1","timestamp":"2026-09-08T18:25:36.110Z"}
+{"level":"info","message":"POST /api/soc/sincronizar-esocial-existente/879 200 - 1557ms - ::1","timestamp":"2026-09-08T18:25:50.894Z"}
+{"level":"info","message":"POST /api/soc/sincronizar-esocial-existente/879 200 - 1548ms - ::1","timestamp":"2026-09-08T18:27:32.342Z"}
+{"level":"info","message":"SIGINT recebido. Encerrando servidor...","timestamp":"2026-09-08T18:40:32.358Z"}
+{"level":"info","message":"Servidor rodando na porta 3002","timestamp":"2026-09-08T18:40:36.526Z"}
+{"level":"info","message":"Ambiente: development","timestamp":"2026-09-08T18:40:36.529Z"}
+{"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-08T18:40:36.530Z"}
+{"level":"info","message":"GET / 304 - 3ms - ::1","timestamp":"2026-09-08T18:40:48.623Z"}
+{"level":"info","message":"GET /favicon.png 304 - 2ms - ::1","timestamp":"2026-09-08T18:40:48.646Z"}
+{"level":"info","message":"GET /app.js 304 - 2ms - ::1","timestamp":"2026-09-08T18:40:48.647Z"}
+{"level":"info","message":"GET /esocial.js 200 - 4ms - ::1","timestamp":"2026-09-08T18:40:48.656Z"}
+{"level":"info","message":"GET /favicon2.png 304 - 0ms - ::1","timestamp":"2026-09-08T18:40:48.722Z"}
+{"level":"info","message":"GET /favicon3.png 304 - 1ms - ::1","timestamp":"2026-09-08T18:40:48.765Z"}
+{"level":"info","message":"GET /api/soc/eventos-salvos 200 - 772ms - ::1","timestamp":"2026-09-08T18:40:51.879Z"}
+{"level":"info","message":"GET /api/soc/status-integracao 304 - 384ms - ::1","timestamp":"2026-09-08T18:40:52.283Z"}
+{"level":"info","message":"POST /api/soc/sincronizar-esocial-existente/879 429 - 936ms - ::1","timestamp":"2026-09-08T18:40:56.443Z"}
+{"level":"info","message":"POST /api/soc/sincronizar-esocial-existente/879 429 - 903ms - ::1","timestamp":"2026-09-08T18:41:00.831Z"}
+{"level":"info","message":"POST /api/soc/sincronizar-esocial-existente/879 429 - 917ms - ::1","timestamp":"2026-09-08T18:41:38.661Z"}
+{"level":"info","message":"POST /api/soc/sincronizar-esocial-existente/879 429 - 1401ms - ::1","timestamp":"2026-09-08T18:41:58.583Z"}
+{"level":"info","message":"GET /.well-known/appspecific/com.chrome.devtools.json 404 - 3ms - ::1","timestamp":"2026-09-08T18:41:59.591Z"}
+{"level":"info","message":"POST /api/soc/sincronizar-esocial-existente/878 429 - 922ms - ::1","timestamp":"2026-09-08T18:46:24.839Z"}
+{"level":"info","message":"POST /api/soc/sincronizar-esocial-existente/874 429 - 1998ms - ::1","timestamp":"2026-09-08T18:46:37.222Z"}
+{"level":"info","message":"POST /api/soc/sincronizar-esocial-existente/869 429 - 1410ms - ::1","timestamp":"2026-09-08T18:46:44.228Z"}
+{"level":"info","message":"POST /api/soc/sincronizar-esocial-existente/866 422 - 1924ms - ::1","timestamp":"2026-09-08T18:46:48.855Z"}
+{"level":"info","message":"POST /api/soc/sincronizar-esocial-existente/864 200 - 4508ms - ::1","timestamp":"2026-09-08T18:46:55.221Z"}
+{"level":"info","message":"GET /api/soc/eventos-salvos 200 - 847ms - ::1","timestamp":"2026-09-08T18:46:56.074Z"}
+{"level":"info","message":"SIGINT recebido. Encerrando servidor...","timestamp":"2026-09-08T18:54:40.942Z"}
+{"level":"info","message":"Servidor rodando na porta 3002","timestamp":"2026-09-08T18:54:48.428Z"}
+{"level":"info","message":"Ambiente: development","timestamp":"2026-09-08T18:54:48.431Z"}
+{"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-08T18:54:48.431Z"}
+{"level":"info","message":"GET / 200 - 11ms - ::1","timestamp":"2026-09-08T18:54:55.636Z"}
+{"level":"info","message":"GET /favicon.png 200 - 8ms - ::1","timestamp":"2026-09-08T18:54:55.664Z"}
+{"level":"info","message":"GET /esocial.js 200 - 4ms - ::1","timestamp":"2026-09-08T18:54:55.684Z"}
+{"level":"info","message":"GET /favicon2.png 200 - 13ms - ::1","timestamp":"2026-09-08T18:54:55.798Z"}
+{"level":"info","message":"GET /app.js 200 - 136ms - ::1","timestamp":"2026-09-08T18:54:55.816Z"}
+{"level":"info","message":"GET /favicon3.png 200 - 8ms - ::1","timestamp":"2026-09-08T18:54:55.919Z"}
+{"level":"info","message":"GET /api/soc/eventos-salvos 304 - 773ms - ::1","timestamp":"2026-09-08T18:54:58.701Z"}
+{"level":"info","message":"GET /api/soc/status-integracao 304 - 413ms - ::1","timestamp":"2026-09-08T18:54:59.126Z"}
+{"level":"info","message":"GET /.well-known/appspecific/com.chrome.devtools.json 404 - 2ms - ::1","timestamp":"2026-09-08T18:55:23.035Z"}
+{"level":"info","message":"POST /api/soc/preparar-evento-esocial/879 200 - 24201ms - ::1","timestamp":"2026-09-08T18:55:27.276Z"}
+{"level":"info","message":"GET /api/soc/eventos-salvos 304 - 996ms - ::1","timestamp":"2026-09-08T18:55:28.276Z"}

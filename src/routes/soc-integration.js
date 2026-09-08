@@ -21899,12 +21899,13 @@ function limiteDivergenciaAdmissaoMatriculaEsocial() {
 }
 
 
+
 function escolherVinculoOficialBxParaPendencia(
     candidatos,
     dataAdmissaoSoc
 ) {
 
-    const lista =
+    const todos =
         (
             Array.isArray(
                 candidatos
@@ -21913,25 +21914,55 @@ function escolherVinculoOficialBxParaPendencia(
                 : []
         )
             .filter(
-                item =>
-                    [
-                        'S-2200',
-                        'S-2190'
-                    ].includes(
+                item => {
+
+                    const tipo =
                         String(
                             item?.tipoEvento ||
+                            item?.tipo_evento ||
                             ''
-                        ).toUpperCase()
+                        )
+                            .trim()
+                            .toUpperCase();
+
+                    return [
+                        'S-2200',
+                        'S-2190',
+                        'S-2220',
+                        'S-2240'
+                    ].includes(
+                        tipo
                     ) &&
-                    String(
-                        item?.matricula ||
-                        ''
-                    ).trim()
+                        String(
+                            item?.matricula ||
+                            item?.matricula_esocial ||
+                            ''
+                        ).trim();
+                }
+            )
+            .map(
+                item => ({
+                    ...item,
+                    tipoEvento:
+                        String(
+                            item?.tipoEvento ||
+                            item?.tipo_evento ||
+                            ''
+                        )
+                            .trim()
+                            .toUpperCase(),
+                    matricula:
+                        String(
+                            item?.matricula ||
+                            item?.matricula_esocial ||
+                            ''
+                        ).trim()
+                })
             );
 
 
     if (
-        !lista.length
+        !todos.length
     ) {
 
         return {
@@ -21942,65 +21973,270 @@ function escolherVinculoOficialBxParaPendencia(
             quantidadeMatriculas:
                 0,
             divergenciaDias:
+                null,
+            dataAdmissaoOficial:
                 null
         };
     }
 
 
+    const dataSoc =
+        normalizarDataAdmissaoEsocial(
+            dataAdmissaoSoc ||
+            ''
+        );
+
+
     // ========================================================
-    // 1) DATA EXATA CONTINUA SENDO A PRIMEIRA ESCOLHA
+    // 1) PRIORIDADE ABSOLUTA: S-2200 / S-2190
     // ========================================================
 
-    const exato =
-        lista.find(
+    const eventosVinculo =
+        todos.filter(
             item =>
-                normalizarDataAdmissaoEsocial(
-                    item?.dataReferencia ||
-                    item?.data_admissao ||
-                    ''
-                ) ===
-                dataAdmissaoSoc
-        ) ||
-        null;
+                [
+                    'S-2200',
+                    'S-2190'
+                ].includes(
+                    item.tipoEvento
+                )
+        );
 
 
     if (
-        exato
+        eventosVinculo.length
     ) {
+
+        const exato =
+            dataSoc
+                ? (
+                    eventosVinculo.find(
+                        item =>
+                            normalizarDataAdmissaoEsocial(
+                                item?.dataReferencia ||
+                                item?.data_admissao ||
+                                ''
+                            ) ===
+                            dataSoc
+                    ) ||
+                    null
+                )
+                : null;
+
+
+        if (
+            exato
+        ) {
+
+            return {
+                vinculo:
+                    exato,
+                criterio:
+                    'DATA_ADMISSAO_EXATA',
+                quantidadeMatriculas:
+                    new Set(
+                        eventosVinculo.map(
+                            item =>
+                                String(
+                                    item.matricula
+                                ).trim()
+                        )
+                    ).size,
+                divergenciaDias:
+                    0,
+                dataAdmissaoOficial:
+                    dataSoc
+            };
+        }
+
+
+        const porMatricula =
+            new Map();
+
+
+        for (
+            const item
+            of eventosVinculo
+        ) {
+
+            const matricula =
+                String(
+                    item.matricula ||
+                    ''
+                ).trim();
+
+
+            if (
+                !matricula
+            ) {
+                continue;
+            }
+
+
+            const atual =
+                porMatricula.get(
+                    matricula
+                );
+
+
+            if (
+                !atual
+            ) {
+
+                porMatricula.set(
+                    matricula,
+                    item
+                );
+
+                continue;
+            }
+
+
+            // Preferir S-2200 quando houver S-2190 + S-2200
+            // representando a mesma matrícula.
+            if (
+                String(
+                    atual.tipoEvento ||
+                    ''
+                ).toUpperCase() ===
+                    'S-2190' &&
+                String(
+                    item.tipoEvento ||
+                    ''
+                ).toUpperCase() ===
+                    'S-2200'
+            ) {
+
+                porMatricula.set(
+                    matricula,
+                    item
+                );
+            }
+        }
+
+
+        const unicos =
+            Array.from(
+                porMatricula.values()
+            );
+
+
+        if (
+            unicos.length !== 1
+        ) {
+
+            return {
+                vinculo:
+                    null,
+                criterio:
+                    unicos.length > 1
+                        ? 'MULTIPLOS_VINCULOS_PLAUSIVEIS'
+                        : 'SEM_VINCULO_UNICO',
+                quantidadeMatriculas:
+                    unicos.length,
+                divergenciaDias:
+                    null,
+                dataAdmissaoOficial:
+                    null
+            };
+        }
+
+
+        const unico =
+            unicos[0];
+
+
+        const dataOficial =
+            normalizarDataAdmissaoEsocial(
+                unico?.dataReferencia ||
+                unico?.data_admissao ||
+                ''
+            );
+
+
+        const divergenciaDias =
+            (
+                dataSoc &&
+                dataOficial
+            )
+                ? diferencaDiasDatasEsocial(
+                    dataSoc,
+                    dataOficial
+                )
+                : null;
+
+
+        const limiteDias =
+            limiteDivergenciaAdmissaoMatriculaEsocial();
+
+
+        if (
+            dataSoc &&
+            (
+                divergenciaDias ===
+                    null ||
+                divergenciaDias >
+                    limiteDias
+            )
+        ) {
+
+            return {
+                vinculo:
+                    null,
+                criterio:
+                    'VINCULO_UNICO_FORA_LIMITE_DIVERGENCIA',
+                quantidadeMatriculas:
+                    1,
+                divergenciaDias,
+                dataAdmissaoOficial:
+                    dataOficial ||
+                    null,
+                limiteDias
+            };
+        }
+
 
         return {
             vinculo:
-                exato,
+                unico,
             criterio:
-                'DATA_ADMISSAO_EXATA',
+                'VINCULO_UNICO_CPF_EMPREGADOR',
             quantidadeMatriculas:
-                new Set(
-                    lista.map(
-                        item =>
-                            String(
-                                item.matricula
-                            ).trim()
-                    )
-                ).size,
-            divergenciaDias:
-                0
+                1,
+            divergenciaDias,
+            dataAdmissaoOficial:
+                dataOficial ||
+                null,
+            limiteDias
         };
     }
 
 
     // ========================================================
-    // 2) SOC É REFERÊNCIA, NÃO FONTE OFICIAL DA dtAdm
+    // 2) FALLBACK SEGURO: S-2220 / S-2240
     //
-    // O BX já foi consultado usando:
-    //   empregador + CPF
+    // A matrícula contida nesses eventos veio do próprio
+    // eSocial/BX e portanto pode ser usada como matrícula
+    // oficial do vínculo.
     //
-    // Se a janela retorna somente UMA matrícula oficial
-    // plausível para esse trabalhador/empregador, podemos usar
-    // o vínculo mesmo que a dtAdm do SOC seja diferente.
-    //
-    // S-2190 e S-2200 do mesmo vínculo podem aparecer juntos,
-    // por isso deduplicamos pela matrícula.
+    // IMPORTANTE:
+    // - dtAso / dtIniCondicao NÃO são data de admissão;
+    // - por isso não calculamos divergência de admissão aqui;
+    // - só aceitamos se houver UMA única matrícula distinta
+    //   para empregador + CPF no conjunto retornado.
     // ========================================================
+
+    const eventosTrabalhador =
+        todos.filter(
+            item =>
+                [
+                    'S-2220',
+                    'S-2240'
+                ].includes(
+                    item.tipoEvento
+                )
+        );
+
 
     const porMatricula =
         new Map();
@@ -22008,7 +22244,7 @@ function escolherVinculoOficialBxParaPendencia(
 
     for (
         const item
-        of lista
+        of eventosTrabalhador
     ) {
 
         const matricula =
@@ -22021,7 +22257,6 @@ function escolherVinculoOficialBxParaPendencia(
         if (
             !matricula
         ) {
-
             continue;
         }
 
@@ -22045,19 +22280,19 @@ function escolherVinculoOficialBxParaPendencia(
         }
 
 
-        // Preferir S-2200 quando houver S-2190 + S-2200
-        // representando a mesma matrícula.
+        // Para a mesma matrícula, preferir S-2220 como
+        // evidência primária quando disponível.
         if (
             String(
                 atual.tipoEvento ||
                 ''
             ).toUpperCase() ===
-                'S-2190' &&
+                'S-2240' &&
             String(
                 item.tipoEvento ||
                 ''
             ).toUpperCase() ===
-                'S-2200'
+                'S-2220'
         ) {
 
             porMatricula.set(
@@ -22083,74 +22318,31 @@ function escolherVinculoOficialBxParaPendencia(
                 null,
             criterio:
                 unicos.length > 1
-                    ? 'MULTIPLOS_VINCULOS_PLAUSIVEIS'
-                    : 'SEM_VINCULO_UNICO',
+                    ? 'MULTIPLAS_MATRICULAS_EVENTOS_TRABALHADOR'
+                    : 'SEM_CANDIDATOS',
             quantidadeMatriculas:
                 unicos.length,
             divergenciaDias:
-                null
-        };
-    }
-
-
-    const unico =
-        unicos[0];
-
-
-    const dataOficial =
-        normalizarDataAdmissaoEsocial(
-            unico?.dataReferencia ||
-            unico?.data_admissao ||
-            ''
-        );
-
-
-    const divergenciaDias =
-        diferencaDiasDatasEsocial(
-            dataAdmissaoSoc,
-            dataOficial
-        );
-
-
-    const limiteDias =
-        limiteDivergenciaAdmissaoMatriculaEsocial();
-
-
-    if (
-        divergenciaDias ===
-            null ||
-        divergenciaDias >
-            limiteDias
-    ) {
-
-        return {
-            vinculo:
                 null,
-            criterio:
-                'VINCULO_UNICO_FORA_LIMITE_DIVERGENCIA',
-            quantidadeMatriculas:
-                1,
-            divergenciaDias,
             dataAdmissaoOficial:
-                dataOficial ||
-                null,
-            limiteDias
+                null
         };
     }
 
 
     return {
         vinculo:
-            unico,
+            unicos[0],
         criterio:
-            'VINCULO_UNICO_CPF_EMPREGADOR',
+            'MATRICULA_UNICA_EVENTO_TRABALHADOR_BX',
         quantidadeMatriculas:
             1,
-        divergenciaDias,
-        dataAdmissaoOficial:
-            dataOficial ||
+        divergenciaDias:
             null,
-        limiteDias
+        dataAdmissaoOficial:
+            null,
+        limiteDias:
+            null
     };
 }
 
@@ -22706,6 +22898,7 @@ async function aplicarVinculoOficialNoEvento(
 }
 
 
+
 async function resolverEventosLocaisComVinculoEsocial(
     vinculo
 ) {
@@ -22736,7 +22929,6 @@ async function resolverEventosLocaisComVinculoEsocial(
     const dataAdmissao =
         normalizarDataAdmissaoEsocial(
             vinculo?.data_admissao ||
-            vinculo?.dataReferencia ||
             ''
         );
 
@@ -22791,7 +22983,7 @@ async function resolverEventosLocaisComVinculoEsocial(
     }
 
 
-    const candidatos =
+    const base =
         (
             Array.isArray(
                 data
@@ -22816,25 +23008,57 @@ async function resolverEventosLocaisComVinculoEsocial(
                     }
 
 
-                    if (
-                        !dataAdmissao
-                    ) {
-
-                        return true;
-                    }
-
-
-                    const dataEvento =
-                        normalizarDataAdmissaoEsocial(
-                            evento.data_admissao ||
-                            ''
-                        );
-
-
-                    return dataEvento ===
-                        dataAdmissao;
+                    return true;
                 }
             );
+
+
+    let candidatos =
+        base;
+
+
+    if (
+        dataAdmissao
+    ) {
+
+        candidatos =
+            base.filter(
+                evento =>
+                    normalizarDataAdmissaoEsocial(
+                        evento.data_admissao ||
+                        ''
+                    ) ===
+                    dataAdmissao
+            );
+
+    } else {
+
+        // Sem data de admissão oficial no vínculo (ex.: matrícula
+        // descoberta a partir de S-2220/S-2240), não cruzar
+        // automaticamente recontratações diferentes.
+        const datasLocais =
+            new Set(
+                base
+                    .map(
+                        evento =>
+                            normalizarDataAdmissaoEsocial(
+                                evento.data_admissao ||
+                                ''
+                            )
+                    )
+                    .filter(
+                        Boolean
+                    )
+            );
+
+
+        if (
+            datasLocais.size > 1
+        ) {
+
+            return 0;
+        }
+    }
 
 
     let atualizados =
@@ -22867,6 +23091,7 @@ async function resolverEventosLocaisComVinculoEsocial(
 }
 
 
+
 async function salvarVinculoOficialEsocial(
     vinculo
 ) {
@@ -22884,7 +23109,9 @@ async function salvarVinculoOficialEsocial(
     if (
         ![
             'S-2200',
-            'S-2190'
+            'S-2190',
+            'S-2220',
+            'S-2240'
         ].includes(
             tipoEvento
         )
@@ -22933,12 +23160,29 @@ async function salvarVinculoOficialEsocial(
         ).trim();
 
 
-    const dataAdmissao =
-        normalizarDataAdmissaoEsocial(
-            vinculo?.dataReferencia ||
-            vinculo?.data_admissao ||
-            ''
+    const ehEventoAdmissao =
+        [
+            'S-2200',
+            'S-2190'
+        ].includes(
+            tipoEvento
         );
+
+
+    // S-2200/S-2190: dataReferencia é data de admissão.
+    // S-2220/S-2240: dataReferencia é dtAso/dtIniCondicao,
+    // portanto NÃO pode ser gravada como data de admissão.
+    const dataAdmissao =
+        ehEventoAdmissao
+            ? normalizarDataAdmissaoEsocial(
+                vinculo?.dataReferencia ||
+                vinculo?.data_admissao ||
+                ''
+              )
+            : normalizarDataAdmissaoEsocial(
+                vinculo?.data_admissao ||
+                ''
+              );
 
 
     if (
@@ -22996,11 +23240,15 @@ async function salvarVinculoOficialEsocial(
     };
 
 
+    const db =
+        getSupabase();
+
+
     const {
         data,
         error
     } =
-        await getSupabase()
+        await db
             .from(
                 'esocial_vinculos'
             )
@@ -23025,15 +23273,99 @@ async function salvarVinculoOficialEsocial(
     }
 
 
-    await resolverEventosLocaisComVinculoEsocial(
+    const salvo =
         data ||
-        registro
-    );
-
-
-    return data ||
         registro;
+
+
+    // ========================================================
+    // RESOLVER EVENTOS LOCAIS SEM ARRISCAR RECONTRATAÇÕES
+    // ========================================================
+
+    if (
+        dataAdmissao
+    ) {
+
+        await resolverEventosLocaisComVinculoEsocial(
+            salvo
+        );
+
+    } else {
+
+        // Quando a matrícula veio de S-2220/S-2240, somente
+        // propagar automaticamente se o cache do CPF/empregador
+        // tiver UMA única matrícula oficial conhecida.
+        const {
+            data:
+                vinculosMesmoCpf,
+            error:
+                erroVinculos
+        } =
+            await db
+                .from(
+                    'esocial_vinculos'
+                )
+                .select(
+                    'matricula_esocial'
+                )
+                .eq(
+                    'tp_insc_empregador',
+                    tpInsc
+                )
+                .eq(
+                    'nr_insc_empregador',
+                    nrInsc
+                )
+                .eq(
+                    'cpf',
+                    cpf
+                );
+
+
+        if (
+            erroVinculos
+        ) {
+
+            throw erroVinculos;
+        }
+
+
+        const matriculasConhecidas =
+            new Set(
+                (
+                    Array.isArray(
+                        vinculosMesmoCpf
+                    )
+                        ? vinculosMesmoCpf
+                        : []
+                )
+                    .map(
+                        item =>
+                            String(
+                                item?.matricula_esocial ||
+                                ''
+                            ).trim()
+                    )
+                    .filter(
+                        Boolean
+                    )
+            );
+
+
+        if (
+            matriculasConhecidas.size === 1
+        ) {
+
+            await resolverEventosLocaisComVinculoEsocial(
+                salvo
+            );
+        }
+    }
+
+
+    return salvo;
 }
+
 
 
 async function salvarVinculosOficiaisDoBx(
@@ -23041,15 +23373,44 @@ async function salvarVinculosOficiaisDoBx(
 ) {
 
     const lista =
-        Array.isArray(
-            eventosBx
+        (
+            Array.isArray(
+                eventosBx
+            )
+                ? eventosBx
+                : []
         )
-            ? eventosBx
-            : [];
+            .filter(
+                item => {
+
+                    const tipo =
+                        String(
+                            item?.tipoEvento ||
+                            item?.tipo_evento ||
+                            ''
+                        )
+                            .trim()
+                            .toUpperCase();
+
+                    return [
+                        'S-2200',
+                        'S-2190',
+                        'S-2220',
+                        'S-2240'
+                    ].includes(
+                        tipo
+                    ) &&
+                        String(
+                            item?.matricula ||
+                            item?.matricula_esocial ||
+                            ''
+                        ).trim();
+                }
+            );
 
 
-    const salvos =
-        [];
+    const grupos =
+        new Map();
 
 
     for (
@@ -23057,36 +23418,315 @@ async function salvarVinculosOficiaisDoBx(
         of lista
     ) {
 
+        const tpInsc =
+            String(
+                eventoBx?.tpInscEmpregador ||
+                eventoBx?.tp_insc_empregador ||
+                ''
+            ).trim();
+
+
+        const nrInsc =
+            normalizarDocumentoEsocial(
+                eventoBx?.nrInscEmpregador ||
+                eventoBx?.nr_insc_empregador ||
+                ''
+            );
+
+
+        const cpf =
+            normalizarCpfEsocial(
+                eventoBx?.cpf ||
+                ''
+            );
+
+
         if (
-            ![
-                'S-2200',
-                'S-2190'
-            ].includes(
-                String(
-                    eventoBx?.tipoEvento ||
-                    ''
-                ).toUpperCase()
+            !tpInsc ||
+            !nrInsc ||
+            cpf.length !== 11
+        ) {
+
+            continue;
+        }
+
+
+        const chave =
+            [
+                tpInsc,
+                nrInsc,
+                cpf
+            ].join(
+                '|'
+            );
+
+
+        if (
+            !grupos.has(
+                chave
             )
         ) {
 
+            grupos.set(
+                chave,
+                []
+            );
+        }
+
+
+        grupos
+            .get(
+                chave
+            )
+            .push(
+                eventoBx
+            );
+    }
+
+
+    const salvos =
+        [];
+
+
+    for (
+        const itens
+        of grupos.values()
+    ) {
+
+        const fortes =
+            itens.filter(
+                item =>
+                    [
+                        'S-2200',
+                        'S-2190'
+                    ].includes(
+                        String(
+                            item?.tipoEvento ||
+                            item?.tipo_evento ||
+                            ''
+                        )
+                            .trim()
+                            .toUpperCase()
+                    )
+            );
+
+
+        if (
+            fortes.length
+        ) {
+
+            const porMatricula =
+                new Map();
+
+
+            for (
+                const item
+                of fortes
+            ) {
+
+                const matricula =
+                    String(
+                        item?.matricula ||
+                        item?.matricula_esocial ||
+                        ''
+                    ).trim();
+
+
+                const atual =
+                    porMatricula.get(
+                        matricula
+                    );
+
+
+                if (
+                    !atual
+                ) {
+
+                    porMatricula.set(
+                        matricula,
+                        item
+                    );
+
+                    continue;
+                }
+
+
+                const tipoAtual =
+                    String(
+                        atual?.tipoEvento ||
+                        atual?.tipo_evento ||
+                        ''
+                    )
+                        .trim()
+                        .toUpperCase();
+
+
+                const tipoNovo =
+                    String(
+                        item?.tipoEvento ||
+                        item?.tipo_evento ||
+                        ''
+                    )
+                        .trim()
+                        .toUpperCase();
+
+
+                if (
+                    tipoAtual ===
+                        'S-2190' &&
+                    tipoNovo ===
+                        'S-2200'
+                ) {
+
+                    porMatricula.set(
+                        matricula,
+                        item
+                    );
+                }
+            }
+
+
+            for (
+                const item
+                of porMatricula.values()
+            ) {
+
+                const salvo =
+                    await salvarVinculoOficialEsocial(
+                        item
+                    );
+
+
+                if (
+                    salvo
+                ) {
+
+                    salvos.push(
+                        salvo
+                    );
+                }
+            }
+
+
             continue;
+        }
+
+
+        // Sem S-2200/S-2190: usar S-2220/S-2240 somente se
+        // houver UMA única matrícula distinta no grupo.
+        const fracos =
+            itens.filter(
+                item =>
+                    [
+                        'S-2220',
+                        'S-2240'
+                    ].includes(
+                        String(
+                            item?.tipoEvento ||
+                            item?.tipo_evento ||
+                            ''
+                        )
+                            .trim()
+                            .toUpperCase()
+                    )
+            );
+
+
+        const porMatricula =
+            new Map();
+
+
+        for (
+            const item
+            of fracos
+        ) {
+
+            const matricula =
+                String(
+                    item?.matricula ||
+                    item?.matricula_esocial ||
+                    ''
+                ).trim();
+
+
+            if (
+                !matricula
+            ) {
+                continue;
+            }
+
+
+            const atual =
+                porMatricula.get(
+                    matricula
+                );
+
+
+            if (
+                !atual
+            ) {
+
+                porMatricula.set(
+                    matricula,
+                    item
+                );
+
+                continue;
+            }
+
+
+            const tipoAtual =
+                String(
+                    atual?.tipoEvento ||
+                    atual?.tipo_evento ||
+                    ''
+                )
+                    .trim()
+                    .toUpperCase();
+
+
+            const tipoNovo =
+                String(
+                    item?.tipoEvento ||
+                    item?.tipo_evento ||
+                    ''
+                )
+                    .trim()
+                    .toUpperCase();
+
+
+            if (
+                tipoAtual ===
+                    'S-2240' &&
+                tipoNovo ===
+                    'S-2220'
+            ) {
+
+                porMatricula.set(
+                    matricula,
+                    item
+                );
+            }
         }
 
 
         if (
-            !String(
-                eventoBx?.matricula ||
-                ''
-            ).trim()
+            porMatricula.size !== 1
         ) {
 
             continue;
         }
+
+
+        const unico =
+            Array.from(
+                porMatricula.values()
+            )[0];
 
 
         const salvo =
             await salvarVinculoOficialEsocial(
-                eventoBx
+                unico
             );
 
 
@@ -23476,6 +24116,22 @@ async function criarOuAtualizarPendenciaMatriculaEsocial(
     }
 
 
+    // ========================================================
+    // PRESERVAR O ESTADO ATUAL DA PENDÊNCIA
+    //
+    // A semeadura roda em todo ciclo do worker. Se um registro já
+    // estava em erro/aguardando_janela, não podemos transformá-lo
+    // novamente em pendente, pois isso mascara o status real e faz
+    // a contagem da fila parecer incorreta.
+    // ========================================================
+
+    const statusExistente =
+        String(
+            existente?.status ||
+            ''
+        ).trim();
+
+
     const dados = {
         chave_vinculo:
             chave.chave,
@@ -23519,10 +24175,11 @@ async function criarOuAtualizarPendenciaMatriculaEsocial(
             existente?.data_evento ||
             null,
         status:
+            statusExistente ||
             'pendente',
         motivo:
-            motivo ||
             existente?.motivo ||
+            motivo ||
             null,
         ultimo_erro:
             existente?.ultimo_erro ||
@@ -23748,6 +24405,7 @@ async function garantirMatriculaOficialEvento(
 // BACKFILL SEM CONSUMIR BX
 // ============================================================
 
+
 async function backfillVinculosDoCacheBxExistente() {
 
     const {
@@ -23765,7 +24423,9 @@ async function backfillVinculosDoCacheBxExistente() {
                 'tipo_evento',
                 [
                     'S-2200',
-                    'S-2190'
+                    'S-2190',
+                    'S-2220',
+                    'S-2240'
                 ]
             );
 
@@ -23779,63 +24439,51 @@ async function backfillVinculosDoCacheBxExistente() {
 
 
     const lista =
-        Array.isArray(
-            data
+        (
+            Array.isArray(
+                data
+            )
+                ? data
+                : []
         )
-            ? data
-            : [];
+            .map(
+                item => ({
+                    tipoEvento:
+                        item.tipo_evento,
+                    tpInscEmpregador:
+                        item.tp_insc_empregador,
+                    nrInscEmpregador:
+                        item.nr_insc_empregador,
+                    cpf:
+                        item.cpf,
+                    matricula:
+                        item.matricula,
+                    codCateg:
+                        item.cod_categ,
+                    // ATENÇÃO: salvarVinculoOficialEsocial só usa
+                    // dataReferencia como admissão em S-2200/S-2190.
+                    dataReferencia:
+                        item.data_referencia,
+                    idEvento:
+                        item.id_evento_esocial,
+                    numeroRecibo:
+                        item.numero_recibo
+                })
+            );
 
 
-    let total =
-        0;
+    const salvos =
+        await salvarVinculosOficiaisDoBx(
+            lista
+        );
 
 
-    for (
-        const item
-        of lista
-    ) {
-
-        if (
-            !String(
-                item?.matricula ||
-                ''
-            ).trim()
-        ) {
-
-            continue;
-        }
-
-
-        const salvo =
-            await salvarVinculoOficialEsocial({
-                tipoEvento:
-                    item.tipo_evento,
-                tpInscEmpregador:
-                    item.tp_insc_empregador,
-                nrInscEmpregador:
-                    item.nr_insc_empregador,
-                cpf:
-                    item.cpf,
-                matricula:
-                    item.matricula,
-                codCateg:
-                    item.cod_categ,
-                dataReferencia:
-                    item.data_referencia,
-                idEvento:
-                    item.id_evento_esocial,
-                numeroRecibo:
-                    item.numero_recibo
-            });
-
-
-        if (
-            salvo
-        ) {
-
-            total++;
-        }
-    }
+    const total =
+        Array.isArray(
+            salvos
+        )
+            ? salvos.length
+            : 0;
 
 
     if (
@@ -23849,6 +24497,245 @@ async function backfillVinculosDoCacheBxExistente() {
 
 
     return total;
+}
+
+
+
+// ============================================================
+// RESOLVER PENDÊNCIAS USANDO SOMENTE O CACHE LOCAL
+// NÃO CONSOME CONSULTA/DOWNLOAD BX.
+// ============================================================
+
+async function resolverPendenciasMatriculaSomenteCacheEsocial({
+    limiteItens = 200
+} = {}) {
+
+    const db =
+        getSupabase();
+
+
+    const {
+        data,
+        error
+    } =
+        await db
+            .from(
+                'esocial_matriculas_pendentes'
+            )
+            .select(
+                '*'
+            )
+            .in(
+                'status',
+                [
+                    'pendente',
+                    'erro',
+                    'aguardando_janela'
+                ]
+            )
+            .order(
+                'created_at',
+                {
+                    ascending:
+                        true
+                }
+            )
+            .limit(
+                Math.min(
+                    500,
+                    Math.max(
+                        1,
+                        Number(
+                            limiteItens ||
+                            200
+                        )
+                    )
+                )
+            );
+
+
+    if (
+        error
+    ) {
+
+        throw error;
+    }
+
+
+    const pendencias =
+        Array.isArray(
+            data
+        )
+            ? data
+            : [];
+
+
+    const resultados =
+        [];
+
+
+    let resolvidas =
+        0;
+
+
+    for (
+        const pendencia
+        of pendencias
+    ) {
+
+        try {
+
+            const evento =
+                await obterEventoExemploPendencia(
+                    pendencia
+                );
+
+
+            if (
+                !evento
+            ) {
+
+                resultados.push({
+                    id:
+                        pendencia.id,
+                    cpf:
+                        pendencia.cpf,
+                    resolvida:
+                        false,
+                    motivo:
+                        'EVENTO_NAO_ENCONTRADO'
+                });
+
+                continue;
+            }
+
+
+            const cache =
+                await buscarVinculoOficialCacheEsocial(
+                    evento
+                );
+
+
+            if (
+                !cache
+            ) {
+
+                resultados.push({
+                    id:
+                        pendencia.id,
+                    cpf:
+                        pendencia.cpf,
+                    resolvida:
+                        false,
+                    motivo:
+                        'SEM_CACHE_OFICIAL'
+                });
+
+                continue;
+            }
+
+
+            const aplicado =
+                await aplicarVinculoOficialNoEvento(
+                    evento,
+                    cache,
+                    'cache_esocial'
+                );
+
+
+            if (
+                !aplicado?.encontrada
+            ) {
+
+                resultados.push({
+                    id:
+                        pendencia.id,
+                    cpf:
+                        pendencia.cpf,
+                    resolvida:
+                        false,
+                    motivo:
+                        'CACHE_NAO_APLICADO'
+                });
+
+                continue;
+            }
+
+
+            await atualizarPendenciaMatricula(
+                pendencia.id,
+                {
+                    status:
+                        'resolvido',
+                    motivo:
+                        'MATRICULA_RESOLVIDA_CACHE_LOCAL',
+                    resolvido_em:
+                        new Date()
+                            .toISOString(),
+                    ultimo_erro:
+                        null,
+                    proxima_tentativa_em:
+                        null
+                }
+            );
+
+
+            resolvidas++;
+
+
+            resultados.push({
+                id:
+                    pendencia.id,
+                cpf:
+                    pendencia.cpf,
+                resolvida:
+                    true,
+                origem:
+                    'cache_esocial',
+                matricula:
+                    aplicado.matricula ||
+                    cache.matricula_esocial ||
+                    null
+            });
+
+        } catch (
+            errorItem
+        ) {
+
+            resultados.push({
+                id:
+                    pendencia.id,
+                cpf:
+                    pendencia.cpf,
+                resolvida:
+                    false,
+                motivo:
+                    'ERRO_CACHE_LOCAL',
+                error:
+                    errorItem?.message ||
+                    String(
+                        errorItem
+                    )
+            });
+        }
+    }
+
+
+    return {
+        success:
+            true,
+        executou:
+            true,
+        semConsumoBx:
+            true,
+        analisadas:
+            pendencias.length,
+        resolvidas,
+        naoResolvidas:
+            pendencias.length -
+            resolvidas,
+        resultados
+    };
 }
 
 
@@ -23911,6 +24798,53 @@ function partesDataBrasil(
         iso:
             `${mapa.year}-${mapa.month}-${mapa.day}`
     };
+}
+
+
+function proximaTentativaAposLimiteDiarioBx() {
+
+    // O controle de consumo é diário por empregador e usa a
+    // data de America/Sao_Paulo. Quando um empregador atinge
+    // o limite, tiramos a pendência dos ciclos restantes do dia
+    // e voltamos a torná-la elegível após a virada da data.
+
+    const amanha =
+        partesDataBrasil(
+            new Date(
+                Date.now() +
+                24 *
+                60 *
+                60 *
+                1000
+            )
+        ).iso;
+
+
+    return new Date(
+        `${amanha}T00:10:00-03:00`
+    ).toISOString();
+}
+
+
+async function adiarPendenciaPorLimiteDiarioBx(
+    pendenciaId,
+    motivo
+) {
+
+    await atualizarPendenciaMatricula(
+        pendenciaId,
+        {
+            status:
+                'aguardando_janela',
+            motivo:
+                motivo ||
+                'LIMITE_DIARIO_WORKER_BX',
+            ultimo_erro:
+                'Limite diário BX atingido para este empregador. Nova tentativa após a virada do dia no horário de Brasília.',
+            proxima_tentativa_em:
+                proximaTentativaAposLimiteDiarioBx()
+        }
+    );
 }
 
 
@@ -24815,6 +25749,12 @@ async function processarUmaPendenciaMatriculaEsocial(
         )
     ) {
 
+        await adiarPendenciaPorLimiteDiarioBx(
+            pendencia.id,
+            'LIMITE_DIARIO_WORKER_BX'
+        );
+
+
         return {
             resolvida:
                 false,
@@ -24975,6 +25915,12 @@ async function processarUmaPendenciaMatriculaEsocial(
         )
     ) {
 
+        await adiarPendenciaPorLimiteDiarioBx(
+            pendencia.id,
+            'LIMITE_DIARIO_WORKER_BX_ANTES_DOWNLOAD'
+        );
+
+
         return {
             resolvida:
                 false,
@@ -25011,9 +25957,16 @@ async function processarUmaPendenciaMatriculaEsocial(
                 item =>
                     [
                         'S-2200',
-                        'S-2190'
+                        'S-2190',
+                        'S-2220',
+                        'S-2240'
                     ].includes(
-                        item?.tipoEvento
+                        String(
+                            item?.tipoEvento ||
+                            ''
+                        )
+                            .trim()
+                            .toUpperCase()
                     ) &&
                     normalizarCpfEsocial(
                         item?.cpf
@@ -25054,16 +26007,41 @@ async function processarUmaPendenciaMatriculaEsocial(
         );
 
 
-        const dataAdmissaoOficial =
-            normalizarDataAdmissaoEsocial(
-                vinculoEscolhido?.dataReferencia ||
-                vinculoEscolhido?.data_admissao ||
+        const tipoEventoOrigem =
+            String(
+                vinculoEscolhido?.tipoEvento ||
+                vinculoEscolhido?.tipo_evento ||
                 ''
+            )
+                .trim()
+                .toUpperCase();
+
+
+        const origemEhEventoAdmissao =
+            [
+                'S-2200',
+                'S-2190'
+            ].includes(
+                tipoEventoOrigem
             );
+
+
+        // S-2220/S-2240 trazem matrícula oficial, porém
+        // dataReferencia representa dtAso/dtIniCondicao.
+        // Nunca tratar essas datas como data de admissão.
+        const dataAdmissaoOficial =
+            origemEhEventoAdmissao
+                ? normalizarDataAdmissaoEsocial(
+                    vinculoEscolhido?.dataReferencia ||
+                    vinculoEscolhido?.data_admissao ||
+                    ''
+                  )
+                : null;
 
 
         const houveDivergencia =
             Boolean(
+                origemEhEventoAdmissao &&
                 dataAdmissaoOficial &&
                 dataAdmissaoOficial !==
                     dataAdmissao
@@ -25071,12 +26049,14 @@ async function processarUmaPendenciaMatriculaEsocial(
 
 
         const motivoResolucao =
-            houveDivergencia
-                ? (
-                    `MATRICULA_RESOLVIDA_BX_DIVERGENCIA_ADMISSAO:` +
-                    `${dataAdmissao}->${dataAdmissaoOficial}`
-                )
-                : 'MATRICULA_RESOLVIDA_BX';
+            !origemEhEventoAdmissao
+                ? 'MATRICULA_RESOLVIDA_BX_EVENTO_TRABALHADOR'
+                : houveDivergencia
+                    ? (
+                        `MATRICULA_RESOLVIDA_BX_DIVERGENCIA_ADMISSAO:` +
+                        `${dataAdmissao}->${dataAdmissaoOficial}`
+                    )
+                    : 'MATRICULA_RESOLVIDA_BX';
 
 
         await atualizarPendenciaMatricula(
@@ -25461,7 +26441,11 @@ async function processarFilaMatriculasEsocial({
                     resultado.motivo === 'LIMITE_DIARIO_WORKER_BX_ANTES_DOWNLOAD'
                 ) {
 
-                    break;
+                    // O limite BX é por empregador.
+                    // Não interromper o ciclo inteiro por causa de uma
+                    // pendência cujo empregador já atingiu o limite diário;
+                    // seguir para as demais pendências elegíveis.
+                    continue;
                 }
 
             } catch (
@@ -27055,7 +28039,7 @@ async function statusMatriculasEsocial() {
                 'esocial_matriculas_pendentes'
             )
             .select(
-                'status'
+                'status, proxima_tentativa_em'
             );
 
 
@@ -27068,6 +28052,18 @@ async function statusMatriculasEsocial() {
 
 
     const contagem = {};
+
+
+    let elegiveisAgora =
+        0;
+
+
+    let aguardandoProximaTentativa =
+        0;
+
+
+    const agoraMs =
+        Date.now();
 
 
     for (
@@ -27097,6 +28093,42 @@ async function statusMatriculasEsocial() {
                 ] ||
                 0
             ) + 1;
+
+
+        if (
+            [
+                'pendente',
+                'erro',
+                'aguardando_janela'
+            ].includes(
+                status
+            )
+        ) {
+
+            const proximaTentativa =
+                item.proxima_tentativa_em
+                    ? new Date(
+                        item.proxima_tentativa_em
+                    )
+                    : null;
+
+
+            if (
+                !proximaTentativa ||
+                Number.isNaN(
+                    proximaTentativa.getTime()
+                ) ||
+                proximaTentativa.getTime() <=
+                    agoraMs
+            ) {
+
+                elegiveisAgora++;
+
+            } else {
+
+                aguardandoProximaTentativa++;
+            }
+        }
     }
 
 
@@ -27118,6 +28150,8 @@ async function statusMatriculasEsocial() {
                 .iso,
         limiteDiarioWorkerPorEmpregador:
             limiteDiarioWorkerBx(),
+        elegiveisAgora,
+        aguardandoProximaTentativa,
         fila:
             contagem
     };
@@ -27127,6 +28161,107 @@ async function statusMatriculasEsocial() {
 // ============================================================
 // ROTAS DE DIAGNÓSTICO / TESTE DA FILA
 // ============================================================
+
+
+router.post(
+    '/matriculas-esocial/backfill-cache',
+    async (
+        req,
+        res
+    ) => {
+
+        try {
+
+            const total =
+                await backfillVinculosDoCacheBxExistente();
+
+
+            return res.json({
+                success:
+                    true,
+                semConsumoBx:
+                    true,
+                vinculosRecuperados:
+                    total
+            });
+
+        } catch (
+            error
+        ) {
+
+            return res
+                .status(
+                    500
+                )
+                .json({
+                    success:
+                        false,
+                    error:
+                        error?.message ||
+                        String(
+                            error
+                        )
+                });
+        }
+    }
+);
+
+
+router.post(
+    '/matriculas-esocial/resolver-cache-local',
+    async (
+        req,
+        res
+    ) => {
+
+        try {
+
+            const limite =
+                Math.min(
+                    500,
+                    Math.max(
+                        1,
+                        Number(
+                            req.body?.limite ||
+                            200
+                        ) ||
+                        200
+                    )
+                );
+
+
+            const resultado =
+                await resolverPendenciasMatriculaSomenteCacheEsocial({
+                    limiteItens:
+                        limite
+                });
+
+
+            return res.json(
+                resultado
+            );
+
+        } catch (
+            error
+        ) {
+
+            return res
+                .status(
+                    500
+                )
+                .json({
+                    success:
+                        false,
+                    error:
+                        error?.message ||
+                        String(
+                            error
+                        )
+                });
+        }
+    }
+);
+
 
 router.get(
     '/matriculas-esocial/status',
@@ -27451,12 +28586,12 @@ function iniciarWorkerMatriculasEsocial() {
 
     const intervaloMs =
         Math.max(
-            15 *
+            5 *
             60 *
             1000,
             envNumber(
                 'ESOCIAL_MATRICULA_WORKER_INTERVALO_MS',
-                60 *
+                5 *
                 60 *
                 1000
             )
@@ -31908,6 +33043,1497 @@ async function verificarEventoExistenteNoEsocialAntesDoEnvio(
 }
 
 
+
+// ============================================================
+// RESOLUÇÃO RÁPIDA DE MATRÍCULA PARA A VERIFICAÇÃO PELO FRONT
+//
+// A lupa do front precisa separar duas coisas:
+// 1) descobrir o vínculo/matrícula oficial;
+// 2) verificar se o evento atual já existe no eSocial.
+//
+// Antes, a mesma janela de 30 dias era usada para as duas tarefas.
+// Isso falhava para trabalhadores antigos: o S-2220 atual podia não
+// existir, mas a matrícula estava em um S-2220/S-2240 histórico.
+//
+// Estratégia segura:
+// - cache oficial primeiro;
+// - se não houver cache, UMA janela histórica rápida em torno de
+//   12 meses antes da data do evento atual (muito útil para periódicos);
+// - respeitar o mesmo limite diário BX do worker;
+// - se não resolver, a pendência continua com o worker normal.
+// ============================================================
+
+function montarJanelaHistoricaRapidaVinculoEsocial(
+    evento
+) {
+
+    const dataReferencia =
+        obterDataReferenciaEventoLocalBx(
+            evento
+        );
+
+
+    let base =
+        dataReferencia
+            ? new Date(
+                `${dataReferencia}T12:00:00-03:00`
+              )
+            : new Date();
+
+
+    if (
+        Number.isNaN(
+            base.getTime()
+        )
+    ) {
+
+        base =
+            new Date();
+    }
+
+
+    const diaMs =
+        24 *
+        60 *
+        60 *
+        1000;
+
+
+    // Aproximadamente o mesmo período do ano anterior.
+    const centro =
+        new Date(
+            base.getTime() -
+            365 *
+            diaMs
+        );
+
+
+    const dtIni =
+        new Date(
+            centro.getTime() -
+            15 *
+            diaMs
+        );
+
+
+    const dtFim =
+        new Date(
+            centro.getTime() +
+            15 *
+            diaMs
+        );
+
+
+    const limiteDtFimBx =
+        new Date(
+            Date.now() -
+            2 *
+            60 *
+            60 *
+            1000
+        );
+
+
+    if (
+        dtFim.getTime() >
+        limiteDtFimBx.getTime()
+    ) {
+
+        dtFim.setTime(
+            limiteDtFimBx.getTime()
+        );
+    }
+
+
+    if (
+        dtIni.getTime() >=
+        dtFim.getTime()
+    ) {
+
+        return null;
+    }
+
+
+    return {
+        dtIni,
+        dtFim
+    };
+}
+
+
+async function tentarResolverMatriculaHistoricaRapidaEsocial(
+    evento
+) {
+
+    // ========================================================
+    // CACHE PRIMEIRO
+    // ========================================================
+
+    const cache =
+        await garantirMatriculaOficialEvento(
+            evento,
+            {
+                criarPendencia:
+                    false
+            }
+        );
+
+
+    if (
+        cache?.encontrada
+    ) {
+
+        return {
+            ...cache,
+            criterio:
+                'CACHE_OFICIAL'
+        };
+    }
+
+
+    const tpInsc =
+        String(
+            evento?.tp_insc_empregador ||
+            ''
+        ).trim();
+
+
+    const nrInsc =
+        normalizarDocumentoEsocial(
+            evento?.nr_insc_empregador ||
+            ''
+        );
+
+
+    const cpf =
+        normalizarCpfEsocial(
+            evento?.cpf ||
+            ''
+        );
+
+
+    if (
+        !tpInsc ||
+        !nrInsc ||
+        cpf.length !== 11
+    ) {
+
+        return {
+            encontrada:
+                false,
+            motivo:
+                'DADOS_VINCULO_INVALIDOS'
+        };
+    }
+
+
+    if (
+        bxBloqueadoPorCalendario()
+    ) {
+
+        return {
+            encontrada:
+                false,
+            motivo:
+                'BX_BLOQUEADO_DIAS_1_A_7'
+        };
+    }
+
+
+    const janela =
+        montarJanelaHistoricaRapidaVinculoEsocial(
+            evento
+        );
+
+
+    if (
+        !janela
+    ) {
+
+        return {
+            encontrada:
+                false,
+            motivo:
+                'JANELA_HISTORICA_NAO_DISPONIVEL'
+        };
+    }
+
+
+    if (
+        !await workerPodeConsumirBx(
+            tpInsc,
+            nrInsc,
+            1
+        )
+    ) {
+
+        return {
+            encontrada:
+                false,
+            motivo:
+                'LIMITE_DIARIO_WORKER_BX'
+        };
+    }
+
+
+    await registrarAcessoWorkerBx(
+        tpInsc,
+        nrInsc,
+        'front-vinculo-identificadores'
+    );
+
+
+    const consulta =
+        await consultarIdentificadoresEventosTrabalhadorBx({
+            tpInsc,
+            nrInsc,
+            cpf,
+            dtIni:
+                janela.dtIni,
+            dtFim:
+                janela.dtFim
+        });
+
+
+    if (
+        consulta?.soapFault
+    ) {
+
+        return {
+            encontrada:
+                false,
+            motivo:
+                'SOAP_FAULT_VINCULO_HISTORICO',
+            error:
+                consulta.faultString ||
+                null
+        };
+    }
+
+
+    const codigo =
+        String(
+            consulta?.cdResposta ||
+            ''
+        );
+
+
+    if (
+        ![
+            '201',
+            '203',
+            '406'
+        ].includes(
+            codigo
+        )
+    ) {
+
+        return {
+            encontrada:
+                false,
+            motivo:
+                'CONSULTA_HISTORICA_NAO_CONCLUIDA',
+            cdResposta:
+                codigo,
+            error:
+                consulta?.descResposta ||
+                null
+        };
+    }
+
+
+    const identificadores =
+        Array.isArray(
+            consulta?.identificadores
+        )
+            ? consulta.identificadores
+            : [];
+
+
+    if (
+        !identificadores.length
+    ) {
+
+        return {
+            encontrada:
+                false,
+            motivo:
+                'SEM_EVENTOS_HISTORICOS_NA_JANELA',
+            periodoConsultado: {
+                dtIni:
+                    consulta.dtIni,
+                dtFim:
+                    consulta.dtFim
+            }
+        };
+    }
+
+
+    if (
+        !await workerPodeConsumirBx(
+            tpInsc,
+            nrInsc,
+            1
+        )
+    ) {
+
+        return {
+            encontrada:
+                false,
+            motivo:
+                'LIMITE_DIARIO_WORKER_BX_ANTES_DOWNLOAD'
+        };
+    }
+
+
+    await registrarAcessoWorkerBx(
+        tpInsc,
+        nrInsc,
+        'front-vinculo-download'
+    );
+
+
+    const download =
+        await baixarEventosBxEmLoteParaMatricula({
+            tpInsc,
+            nrInsc,
+            identificadores
+        });
+
+
+    const candidatos =
+        (
+            Array.isArray(
+                download?.eventosInterpretados
+            )
+                ? download.eventosInterpretados
+                : []
+        )
+            .filter(
+                item =>
+                    [
+                        'S-2200',
+                        'S-2190',
+                        'S-2220',
+                        'S-2240'
+                    ].includes(
+                        String(
+                            item?.tipoEvento ||
+                            ''
+                        )
+                            .trim()
+                            .toUpperCase()
+                    ) &&
+                    normalizarCpfEsocial(
+                        item?.cpf
+                    ) === cpf &&
+                    String(
+                        item?.matricula ||
+                        ''
+                    ).trim()
+            );
+
+
+    const dataAdmissao =
+        await completarDataAdmissaoEventoEsocial(
+            evento
+        );
+
+
+    const selecao =
+        escolherVinculoOficialBxParaPendencia(
+            candidatos,
+            dataAdmissao ||
+            null
+        );
+
+
+    if (
+        !selecao?.vinculo
+    ) {
+
+        return {
+            encontrada:
+                false,
+            motivo:
+                selecao?.criterio ||
+                'VINCULO_HISTORICO_NAO_RESOLVIDO',
+            periodoConsultado: {
+                dtIni:
+                    consulta.dtIni,
+                dtFim:
+                    consulta.dtFim
+            }
+        };
+    }
+
+
+    const salvo =
+        await salvarVinculoOficialEsocial(
+            selecao.vinculo
+        );
+
+
+    const aplicado =
+        await aplicarVinculoOficialNoEvento(
+            evento,
+            salvo ||
+            selecao.vinculo,
+            'bx'
+        );
+
+
+    console.log(
+        '🔗 Vínculo oficial resolvido pela verificação do front:',
+        {
+            cpf,
+            matricula:
+                aplicado.matricula,
+            criterio:
+                selecao.criterio,
+            dtIni:
+                consulta.dtIni,
+            dtFim:
+                consulta.dtFim
+        }
+    );
+
+
+    return {
+        ...aplicado,
+        encontrada:
+            true,
+        criterio:
+            selecao.criterio,
+        origem:
+            'bx-historico-rapido',
+        periodoConsultado: {
+            dtIni:
+                consulta.dtIni,
+            dtFim:
+                consulta.dtFim
+        }
+    };
+}
+
+
+
+// ============================================================
+// PREPARAÇÃO E-SOCIAL SEM NOVA CONSULTA BX
+// ============================================================
+//
+// Fluxo operacional do front-end:
+//
+// 1) SOC informa o que precisa ser analisado no período;
+// 2) ANDRA usa primeiro o histórico/cache eSocial já disponível;
+// 3) se a matrícula ainda não existir, cria/mantém a pendência para
+//    o worker automático;
+// 4) nenhuma nova chamada ao BX é feita por estas rotas;
+// 5) o envio continua exclusivamente manual.
+//
+// Assim o botão do período e a lupa não desperdiçam acessos BX nem
+// provocam HTTP 429 por cliques repetidos.
+// ============================================================
+
+function normalizarRegistroBxBancoParaComparacao(
+    registro
+) {
+
+    if (
+        !registro ||
+        typeof registro !== 'object'
+    ) {
+
+        return null;
+    }
+
+
+    return {
+
+        tipoEvento:
+            String(
+                registro.tipo_evento ||
+                ''
+            )
+                .trim()
+                .toUpperCase(),
+
+        tpInscEmpregador:
+            String(
+                registro.tp_insc_empregador ||
+                ''
+            ).trim(),
+
+        nrInscEmpregador:
+            String(
+                registro.nr_insc_empregador ||
+                ''
+            ).trim(),
+
+        cpf:
+            normalizarCpfEsocial(
+                registro.cpf ||
+                ''
+            ),
+
+        matricula:
+            String(
+                registro.matricula ||
+                ''
+            ).trim(),
+
+        codCateg:
+            String(
+                registro.cod_categ ||
+                ''
+            ).trim(),
+
+        dataReferencia:
+            registro.data_referencia ||
+            null,
+
+        idEvento:
+            registro.id_evento_esocial ||
+            null,
+
+        numeroRecibo:
+            registro.numero_recibo ||
+            null,
+
+        xmlEvento:
+            registro.xml_evento ||
+            null,
+
+        xmlRecibo:
+            registro.xml_recibo ||
+            null
+    };
+}
+
+
+async function buscarEventosDoTrabalhadorNoCacheBx(
+    evento
+) {
+
+    if (
+        !evento ||
+        typeof evento !== 'object'
+    ) {
+
+        return [];
+    }
+
+
+    const tipoEvento =
+        String(
+            evento.tipo_evento ||
+            evento.tipoEvento ||
+            ''
+        )
+            .trim()
+            .toUpperCase();
+
+
+    const tpInsc =
+        String(
+            evento.tp_insc_empregador ||
+            evento.tpInscEmpregador ||
+            ''
+        ).trim();
+
+
+    const nrInsc =
+        normalizarDocumentoEsocial(
+            evento.nr_insc_empregador ||
+            evento.nrInscEmpregador ||
+            ''
+        );
+
+
+    const cpf =
+        normalizarCpfEsocial(
+            evento.cpf ||
+            ''
+        );
+
+
+    if (
+        !tipoEvento ||
+        !tpInsc ||
+        !nrInsc ||
+        cpf.length !== 11
+    ) {
+
+        return [];
+    }
+
+
+    const {
+        data,
+        error
+    } =
+        await getSupabase()
+            .from(
+                'esocial_eventos_bx'
+            )
+            .select(
+                'tipo_evento,tp_insc_empregador,nr_insc_empregador,cpf,matricula,cod_categ,data_referencia,id_evento_esocial,numero_recibo,xml_evento,xml_recibo,consultado_em'
+            )
+            .eq(
+                'tp_insc_empregador',
+                tpInsc
+            )
+            .eq(
+                'nr_insc_empregador',
+                nrInsc
+            )
+            .eq(
+                'cpf',
+                cpf
+            )
+            .eq(
+                'tipo_evento',
+                tipoEvento
+            )
+            .order(
+                'consultado_em',
+                {
+                    ascending:
+                        false
+                }
+            )
+            .limit(
+                100
+            );
+
+
+    if (
+        error
+    ) {
+
+        throw error;
+    }
+
+
+    return (
+        Array.isArray(data)
+            ? data
+            : []
+    )
+        .map(
+            normalizarRegistroBxBancoParaComparacao
+        )
+        .filter(
+            Boolean
+        );
+}
+
+
+async function prepararEventoLocalEsocialSemConsultaBx(
+    evento
+) {
+
+    if (
+        !evento ||
+        !evento.id
+    ) {
+
+        return {
+            success:
+                false,
+            motivo:
+                'EVENTO_INVALIDO',
+            evento:
+                evento ||
+                null
+        };
+    }
+
+
+    const db =
+        getSupabase();
+
+
+    // ========================================================
+    // 1. MATRÍCULA: CACHE PRIMEIRO; FILA SE AINDA NÃO EXISTIR
+    // ========================================================
+
+    let matricula =
+        null;
+
+
+    try {
+
+        matricula =
+            await garantirMatriculaOficialEvento(
+                evento,
+                {
+                    criarPendencia:
+                        true
+                }
+            );
+
+    } catch (
+        error
+    ) {
+
+        console.warn(
+            '⚠️ Preparação local: falha ao garantir matrícula:',
+            {
+                eventoId:
+                    evento.id,
+                cpf:
+                    evento.cpf,
+                error:
+                    error?.message ||
+                    String(error)
+            }
+        );
+    }
+
+
+    // Recarregar, pois o cache pode ter atualizado a matrícula.
+    let {
+        data:
+            eventoAtual,
+        error:
+            erroReload
+    } =
+        await db
+            .from(
+                'esocial_eventos'
+            )
+            .select('*')
+            .eq(
+                'id',
+                evento.id
+            )
+            .single();
+
+
+    if (
+        erroReload
+    ) {
+
+        throw erroReload;
+    }
+
+
+    // ========================================================
+    // 2. EVENTO ATUAL: VER SOMENTE NO CACHE/HISTÓRICO LOCAL
+    // ========================================================
+
+    const eventosBxCache =
+        await buscarEventosDoTrabalhadorNoCacheBx(
+            eventoAtual
+        );
+
+
+    const dataReferencia =
+        obterDataReferenciaEventoLocalBx(
+            eventoAtual
+        );
+
+
+    const candidatosMesmaData =
+        eventosBxCache.filter(
+            bx =>
+                String(
+                    bx.dataReferencia ||
+                    ''
+                ).substring(0, 10) ===
+                dataReferencia
+        );
+
+
+    // Se existe exatamente um evento oficial da mesma data no cache,
+    // a própria ocorrência também é uma fonte segura da matrícula.
+    if (
+        !matriculaEventoEhOficial(
+            eventoAtual
+        ) &&
+        candidatosMesmaData.length === 1 &&
+        String(
+            candidatosMesmaData[0].matricula ||
+            ''
+        ).trim()
+    ) {
+
+        const vinculoCacheEvento =
+            candidatosMesmaData[0];
+
+
+        const salvo =
+            await salvarVinculoOficialEsocial(
+                vinculoCacheEvento
+            );
+
+
+        await aplicarVinculoOficialNoEvento(
+            eventoAtual,
+            salvo || {
+                ...vinculoCacheEvento,
+                matricula_esocial:
+                    vinculoCacheEvento.matricula,
+                cod_categ:
+                    vinculoCacheEvento.codCateg
+            },
+            'cache_esocial'
+        );
+
+
+        const reload =
+            await db
+                .from(
+                    'esocial_eventos'
+                )
+                .select('*')
+                .eq(
+                    'id',
+                    evento.id
+                )
+                .single();
+
+
+        if (
+            reload.error
+        ) {
+
+            throw reload.error;
+        }
+
+
+        eventoAtual =
+            reload.data;
+    }
+
+
+    const correspondente =
+        eventosBxCache.find(
+            bx =>
+                eventoBxCorrespondeAoEventoLocal(
+                    eventoAtual,
+                    bx
+                )
+        ) ||
+        null;
+
+
+    if (
+        correspondente
+    ) {
+
+        const agora =
+            new Date()
+                .toISOString();
+
+
+        const {
+            error:
+                erroUpdate
+        } =
+            await db
+                .from(
+                    'esocial_eventos'
+                )
+                .update({
+
+                    verificado_esocial_em:
+                        agora,
+
+                    verificacao_esocial_completa:
+                        true,
+
+                    existe_no_esocial:
+                        true,
+
+                    id_evento_esocial_existente:
+                        correspondente.idEvento ||
+                        null,
+
+                    numero_recibo_existente:
+                        correspondente.numeroRecibo ||
+                        null,
+
+                    updated_at:
+                        agora
+                })
+                .eq(
+                    'id',
+                    eventoAtual.id
+                );
+
+
+        if (
+            erroUpdate
+        ) {
+
+            throw erroUpdate;
+        }
+
+
+        const reload =
+            await db
+                .from(
+                    'esocial_eventos'
+                )
+                .select('*')
+                .eq(
+                    'id',
+                    eventoAtual.id
+                )
+                .single();
+
+
+        if (
+            reload.error
+        ) {
+
+            throw reload.error;
+        }
+
+
+        eventoAtual =
+            reload.data;
+    }
+
+
+    const enriquecido =
+        enriquecerEventoParaFrontendEsocial(
+            eventoAtual
+        );
+
+
+    let situacaoPreparacao =
+        'aguardando_verificacao';
+
+
+    if (
+        enriquecido.emitido_esocial ===
+        true
+    ) {
+
+        situacaoPreparacao =
+            'ja_emitido';
+
+    } else if (
+        enriquecido.matricula_oficial_pronta !==
+        true
+    ) {
+
+        situacaoPreparacao =
+            'aguardando_matricula';
+
+    } else if (
+        String(
+            enriquecido.tipo_evento ||
+            ''
+        ).toUpperCase() ===
+            'S-2240' &&
+        enriquecido.s2240_pronto_para_emissao !==
+            true
+    ) {
+
+        situacaoPreparacao =
+            's2240_aguardando_dados';
+
+    } else if (
+        enriquecido.confirmado_nao_emitido ===
+        true &&
+        String(
+            enriquecido.tipo_evento ||
+            ''
+        ).toUpperCase() ===
+            'S-2220'
+    ) {
+
+        situacaoPreparacao =
+            'pronto_envio';
+
+    } else if (
+        enriquecido.confirmado_nao_emitido ===
+        true
+    ) {
+
+        situacaoPreparacao =
+            'confirmado_nao_emitido';
+    }
+
+
+    return {
+
+        success:
+            true,
+
+        semConsumoBx:
+            true,
+
+        situacaoPreparacao,
+
+        evento:
+            enriquecido,
+
+        cacheEventoAtualEncontrado:
+            Boolean(
+                correspondente
+            ),
+
+        matricula: {
+
+            encontrada:
+                enriquecido.matricula_oficial_pronta ===
+                true,
+
+            valor:
+                enriquecido.matricula ||
+                null,
+
+            origem:
+                enriquecido.matricula_origem ||
+                matricula?.origem ||
+                null,
+
+            pendenciaCriada:
+                enriquecido.matricula_oficial_pronta !==
+                true
+        }
+    };
+}
+
+
+function resumirPreparacaoPeriodoEsocial(
+    resultados
+) {
+
+    const resumo = {
+
+        total:
+            0,
+
+        jaEmitidos:
+            0,
+
+        prontosEnvio:
+            0,
+
+        aguardandoMatricula:
+            0,
+
+        aguardandoVerificacao:
+            0,
+
+        s2240AguardandoDados:
+            0,
+
+        confirmadosNaoEmitidos:
+            0,
+
+        erros:
+            0
+    };
+
+
+    for (
+        const item
+        of (
+            Array.isArray(resultados)
+                ? resultados
+                : []
+        )
+    ) {
+
+        resumo.total++;
+
+
+        if (
+            !item?.success
+        ) {
+
+            resumo.erros++;
+            continue;
+        }
+
+
+        switch (
+            item.situacaoPreparacao
+        ) {
+
+            case 'ja_emitido':
+                resumo.jaEmitidos++;
+                break;
+
+            case 'pronto_envio':
+                resumo.prontosEnvio++;
+                break;
+
+            case 'aguardando_matricula':
+                resumo.aguardandoMatricula++;
+                break;
+
+            case 's2240_aguardando_dados':
+                resumo.s2240AguardandoDados++;
+                break;
+
+            case 'confirmado_nao_emitido':
+                resumo.confirmadosNaoEmitidos++;
+                break;
+
+            default:
+                resumo.aguardandoVerificacao++;
+                break;
+        }
+    }
+
+
+    return resumo;
+}
+
+
+router.post(
+    '/preparar-evento-esocial/:id',
+
+    async (
+        req,
+        res
+    ) => {
+
+        try {
+
+            const id =
+                String(
+                    req.params.id ||
+                    ''
+                ).trim();
+
+
+            if (
+                !id
+            ) {
+
+                return res
+                    .status(400)
+                    .json({
+                        success:
+                            false,
+                        error:
+                            'ID do evento não informado.'
+                    });
+            }
+
+
+            // Aproveitar qualquer XML já baixado/importado anteriormente.
+            await backfillVinculosDoCacheBxExistente();
+
+
+            const {
+                data:
+                    evento,
+                error
+            } =
+                await getSupabase()
+                    .from(
+                        'esocial_eventos'
+                    )
+                    .select('*')
+                    .eq(
+                        'id',
+                        id
+                    )
+                    .single();
+
+
+            if (
+                error
+            ) {
+
+                throw error;
+            }
+
+
+            const resultado =
+                await prepararEventoLocalEsocialSemConsultaBx(
+                    evento
+                );
+
+
+            return res.json({
+                ...resultado,
+                somenteLeitura:
+                    true,
+                semConsumoBx:
+                    true,
+                workerResponsavelPorBx:
+                    resultado?.matricula?.encontrada !==
+                    true
+            });
+
+        } catch (
+            error
+        ) {
+
+            console.error(
+                '❌ Erro preparando evento eSocial sem BX:',
+                error?.message ||
+                error
+            );
+
+
+            return res
+                .status(500)
+                .json({
+                    success:
+                        false,
+                    semConsumoBx:
+                        true,
+                    error:
+                        error?.message ||
+                        String(error)
+                });
+        }
+    }
+);
+
+
+router.post(
+    '/preparar-periodo-esocial',
+
+    async (
+        req,
+        res
+    ) => {
+
+        try {
+
+            const idsRecebidos =
+                Array.isArray(
+                    req.body?.eventoIds
+                )
+                    ? req.body.eventoIds
+                    : [];
+
+
+            const eventoIds =
+                Array.from(
+                    new Set(
+                        idsRecebidos
+                            .map(
+                                id =>
+                                    String(
+                                        id ||
+                                        ''
+                                    ).trim()
+                            )
+                            .filter(
+                                Boolean
+                            )
+                    )
+                )
+                    .slice(
+                        0,
+                        500
+                    );
+
+
+            if (
+                !eventoIds.length
+            ) {
+
+                return res.json({
+                    success:
+                        true,
+                    semConsumoBx:
+                        true,
+                    message:
+                        'Nenhum evento informado para preparação.',
+                    resumo:
+                        resumirPreparacaoPeriodoEsocial([]),
+                    resultados:
+                        []
+                });
+            }
+
+
+            // Reaproveita tudo o que já foi baixado/importado sem consultar BX.
+            const vinculosRecuperados =
+                await backfillVinculosDoCacheBxExistente();
+
+
+            const {
+                data:
+                    eventos,
+                error
+            } =
+                await getSupabase()
+                    .from(
+                        'esocial_eventos'
+                    )
+                    .select('*')
+                    .in(
+                        'id',
+                        eventoIds
+                    );
+
+
+            if (
+                error
+            ) {
+
+                throw error;
+            }
+
+
+            const porId =
+                new Map(
+                    (
+                        Array.isArray(eventos)
+                            ? eventos
+                            : []
+                    )
+                        .map(
+                            evento => [
+                                String(
+                                    evento.id
+                                ),
+                                evento
+                            ]
+                        )
+                );
+
+
+            const resultados =
+                [];
+
+
+            for (
+                const id
+                of eventoIds
+            ) {
+
+                const evento =
+                    porId.get(
+                        id
+                    );
+
+
+                if (
+                    !evento
+                ) {
+
+                    resultados.push({
+                        success:
+                            false,
+                        eventoId:
+                            id,
+                        error:
+                            'Evento não encontrado no banco.'
+                    });
+
+                    continue;
+                }
+
+
+                try {
+
+                    const preparado =
+                        await prepararEventoLocalEsocialSemConsultaBx(
+                            evento
+                        );
+
+
+                    resultados.push({
+                        eventoId:
+                            id,
+                        ...preparado
+                    });
+
+                } catch (
+                    errorItem
+                ) {
+
+                    resultados.push({
+                        success:
+                            false,
+                        eventoId:
+                            id,
+                        cpf:
+                            evento.cpf ||
+                            null,
+                        error:
+                            errorItem?.message ||
+                            String(errorItem)
+                    });
+                }
+            }
+
+
+            const resumo =
+                resumirPreparacaoPeriodoEsocial(
+                    resultados
+                );
+
+
+            return res.json({
+
+                success:
+                    true,
+
+                semConsumoBx:
+                    true,
+
+                somenteLeitura:
+                    true,
+
+                vinculosRecuperadosDoCache:
+                    Number(
+                        vinculosRecuperados ||
+                        0
+                    ),
+
+                workerMatriculasAtivo:
+                    String(
+                        process.env.ESOCIAL_MATRICULA_WORKER_ATIVO ||
+                        'true'
+                    )
+                        .trim()
+                        .toLowerCase() !==
+                        'false',
+
+                message:
+                    'Período preparado com cache local. ' +
+                    'Vínculos ainda ausentes permanecem na fila automática.',
+
+                resumo,
+
+                resultados
+            });
+
+        } catch (
+            error
+        ) {
+
+            console.error(
+                '❌ Erro preparando período eSocial:',
+                error?.message ||
+                error
+            );
+
+
+            return res
+                .status(500)
+                .json({
+                    success:
+                        false,
+                    semConsumoBx:
+                        true,
+                    error:
+                        error?.message ||
+                        String(error)
+                });
+        }
+    }
+);
+
+
 router.post(
     '/sincronizar-esocial-existente/:id',
 
@@ -31932,10 +34558,8 @@ router.post(
                 return res
                     .status(400)
                     .json({
-
                         success:
                             false,
-
                         error:
                             'ID do evento não informado.'
                     });
@@ -31949,7 +34573,6 @@ router.post(
             const {
                 data:
                     evento,
-
                 error:
                     erroBusca
             } =
@@ -31980,19 +34603,13 @@ router.post(
                 return res
                     .status(404)
                     .json({
-
                         success:
                             false,
-
                         error:
                             'Evento não encontrado.'
                     });
             }
 
-
-            // ====================================================
-            // TIPO
-            // ====================================================
 
             const tipoEvento =
                 String(
@@ -32015,19 +34632,13 @@ router.post(
                 return res
                     .status(400)
                     .json({
-
                         success:
                             false,
-
                         error:
                             'A sincronização BX está disponível somente para S-2220 e S-2240.'
                     });
             }
 
-
-            // ====================================================
-            // CPF
-            // ====================================================
 
             const cpf =
                 normalizarCpfEsocial(
@@ -32042,19 +34653,13 @@ router.post(
                 return res
                     .status(400)
                     .json({
-
                         success:
                             false,
-
                         error:
                             'CPF inválido no evento local.'
                     });
             }
 
-
-            // ====================================================
-            // EMPREGADOR
-            // ====================================================
 
             const tpInsc =
                 String(
@@ -32078,10 +34683,8 @@ router.post(
                 return res
                     .status(400)
                     .json({
-
                         success:
                             false,
-
                         error:
                             'Empregador não identificado no evento local.'
                     });
@@ -32089,9 +34692,28 @@ router.post(
 
 
             // ====================================================
-            // PERÍODO BX
+            // 1. VÍNCULO JÁ CONHECIDO?
             //
-            // 2 horas de margem de segurança.
+            // Não consome BX. O cache oficial é sempre a primeira
+            // fonte para a matrícula.
+            // ====================================================
+
+            let vinculoTrabalhista =
+                await garantirMatriculaOficialEvento(
+                    evento,
+                    {
+                        criarPendencia:
+                            false
+                    }
+                );
+
+
+            // ====================================================
+            // 2. VERIFICAR O EVENTO ATUAL NO eSOCIAL
+            //
+            // Mantemos a janela de recepção recente. Para eventos
+            // recentes ela permite confirmar com segurança se o
+            // evento atual já apareceu no BX.
             // ====================================================
 
             const margemSegurancaBxMs =
@@ -32130,10 +34752,8 @@ router.post(
                     return res
                         .status(400)
                         .json({
-
                             success:
                                 false,
-
                             error:
                                 'dtFim inválida.'
                         });
@@ -32178,10 +34798,8 @@ router.post(
                     return res
                         .status(400)
                         .json({
-
                             success:
                                 false,
-
                             error:
                                 'dtIni inválida.'
                         });
@@ -32192,32 +34810,76 @@ router.post(
                 dtIni =
                     new Date(
                         dtFim.getTime() -
-                        (
-                            30 *
-                            24 *
-                            60 *
-                            60 *
-                            1000
-                        )
+                        30 *
+                        24 *
+                        60 *
+                        60 *
+                        1000
                     );
             }
 
 
-            // ====================================================
-            // 1. CONSULTAR IDENTIFICADORES
-            // ====================================================
+            if (
+                bxBloqueadoPorCalendario()
+            ) {
+
+                return res
+                    .status(429)
+                    .json({
+                        success:
+                            false,
+                        verificacaoCompleta:
+                            false,
+                        jaExisteNoEsocial:
+                            false,
+                        motivo:
+                            'BX_BLOQUEADO_DIAS_1_A_7',
+                        vinculoTrabalhista,
+                        error:
+                            'A consulta BX fica bloqueada nos dias 1 a 7.'
+                    });
+            }
+
+
+            if (
+                !await workerPodeConsumirBx(
+                    tpInsc,
+                    nrInsc,
+                    1
+                )
+            ) {
+
+                return res
+                    .status(429)
+                    .json({
+                        success:
+                            false,
+                        verificacaoCompleta:
+                            false,
+                        jaExisteNoEsocial:
+                            false,
+                        motivo:
+                            'LIMITE_DIARIO_WORKER_BX',
+                        vinculoTrabalhista,
+                        error:
+                            'Limite diário de consultas BX atingido para este empregador.'
+                    });
+            }
+
+
+            await registrarAcessoWorkerBx(
+                tpInsc,
+                nrInsc,
+                'front-evento-identificadores'
+            );
+
 
             const consulta =
                 await consultarIdentificadoresEventosTrabalhadorBx({
-
                     tpInsc,
-
                     nrInsc,
-
                     cpf,
-
                     dtIni,
-
                     dtFim
                 });
 
@@ -32229,21 +34891,17 @@ router.post(
                 return res
                     .status(502)
                     .json({
-
                         success:
                             false,
-
                         etapa:
                             'consultar-identificadores',
-
                         soapFault:
                             true,
-
                         faultCode:
                             consulta.faultCode,
-
                         error:
-                            consulta.faultString
+                            consulta.faultString,
+                        vinculoTrabalhista
                     });
             }
 
@@ -32268,84 +34926,206 @@ router.post(
                 return res
                     .status(422)
                     .json({
-
                         success:
                             false,
-
                         etapa:
                             'consultar-identificadores',
-
                         cdResposta:
                             consulta.cdResposta,
-
                         descResposta:
                             consulta.descResposta,
-
                         dtIni:
                             consulta.dtIni,
-
                         dtFim:
-                            consulta.dtFim
+                            consulta.dtFim,
+                        vinculoTrabalhista
                     });
             }
 
 
-            // ====================================================
-            // 2. DOWNLOAD
-            //
-            // AGORA UM ID POR VEZ.
-            //
-            // Nunca mais mandamos a lista inteira de IDs.
-            // ====================================================
-
-            const resultadoDownload =
-                await baixarEventosBxUmPorUm({
-
-                    tpInsc,
-
-                    nrInsc,
-
-                    identificadores:
-                        consulta.identificadores,
-
-                    eventoLocal:
-                        evento,
-
-                    /*
-                     * 1 acesso já foi usado pela consulta.
-                     *
-                     * Colocamos no máximo 8 downloads nesta
-                     * execução e deixamos uma margem.
-                     */
-
-                    maxDownloads:
-                        8
-                });
+            const identificadores =
+                Array.isArray(
+                    consulta.identificadores
+                )
+                    ? consulta.identificadores
+                    : [];
 
 
-            const vinculoBx =
-                await aplicarMatriculaOficialBxNoEvento(
-                    evento,
-                    resultadoDownload.eventosInterpretados
-                );
+            let eventosInterpretados =
+                [];
 
 
-            const correspondente =
-                resultadoDownload.correspondente ||
+            let retornoDownload =
                 null;
 
 
+            if (
+                identificadores.length
+            ) {
+
+                if (
+                    !await workerPodeConsumirBx(
+                        tpInsc,
+                        nrInsc,
+                        1
+                    )
+                ) {
+
+                    return res
+                        .status(429)
+                        .json({
+                            success:
+                                false,
+                            verificacaoCompleta:
+                                false,
+                            jaExisteNoEsocial:
+                                false,
+                            motivo:
+                                'LIMITE_DIARIO_WORKER_BX_ANTES_DOWNLOAD',
+                            vinculoTrabalhista,
+                            error:
+                                'O limite diário BX foi atingido antes do download dos eventos.'
+                        });
+                }
+
+
+                await registrarAcessoWorkerBx(
+                    tpInsc,
+                    nrInsc,
+                    'front-evento-download'
+                );
+
+
+                const download =
+                    await baixarEventosBxEmLoteParaMatricula({
+                        tpInsc,
+                        nrInsc,
+                        identificadores
+                    });
+
+
+                eventosInterpretados =
+                    Array.isArray(
+                        download?.eventosInterpretados
+                    )
+                        ? download.eventosInterpretados
+                        : [];
+
+
+                retornoDownload =
+                    download?.retorno ||
+                    null;
+
+
+                // Os eventos baixados também podem conter a
+                // matrícula oficial. Reaplicar o cache depois do
+                // download evita esperar outro ciclo do worker.
+                const cacheDepoisDownload =
+                    await garantirMatriculaOficialEvento(
+                        evento,
+                        {
+                            criarPendencia:
+                                false
+                        }
+                    );
+
+
+                if (
+                    cacheDepoisDownload?.encontrada
+                ) {
+
+                    vinculoTrabalhista =
+                        cacheDepoisDownload;
+                }
+            }
+
+
             // ====================================================
-            // 3. COMPLETUDE
+            // 3. SE O EVENTO ATUAL NÃO TROUXE A MATRÍCULA,
+            //    TENTAR UMA JANELA HISTÓRICA RÁPIDA.
             //
-            // Se achamos o evento:
-            // NÃO precisamos considerar consulta completa para
-            // bloquear reenvio.
-            //
-            // Se NÃO achamos:
-            // só liberaremos no futuro se absolutamente tudo tiver
-            // sido analisado.
+            // Ex.: periódico atual em 31/08/2026 e S-2220 anterior
+            // recebido em agosto/2025.
             // ====================================================
+
+            if (
+                tipoEvento === 'S-2220' &&
+                !vinculoTrabalhista?.encontrada
+            ) {
+
+                try {
+
+                    const rapido =
+                        await tentarResolverMatriculaHistoricaRapidaEsocial(
+                            evento
+                        );
+
+
+                    if (
+                        rapido?.encontrada
+                    ) {
+
+                        vinculoTrabalhista =
+                            rapido;
+                    }
+
+                } catch (
+                    erroVinculoRapido
+                ) {
+
+                    console.warn(
+                        '⚠️ Não foi possível resolver o vínculo na busca histórica rápida:',
+                        erroVinculoRapido?.message ||
+                        erroVinculoRapido
+                    );
+                }
+            }
+
+
+            // ====================================================
+            // 4. SE AINDA NÃO HÁ MATRÍCULA, GARANTIR QUE O
+            //    WORKER CONTINUE PROCURANDO EM BACKGROUND.
+            // ====================================================
+
+            if (
+                tipoEvento === 'S-2220' &&
+                !vinculoTrabalhista?.encontrada
+            ) {
+
+                const pendente =
+                    await garantirMatriculaOficialEvento(
+                        evento,
+                        {
+                            criarPendencia:
+                                true
+                        }
+                    );
+
+
+                if (
+                    pendente?.encontrada
+                ) {
+
+                    vinculoTrabalhista =
+                        pendente;
+                }
+            }
+
+
+            // ====================================================
+            // 5. COMPARAR O EVENTO ATUAL
+            // ====================================================
+
+            const correspondente =
+                eventosInterpretados.find(
+                    item =>
+                        eventoBxCorrespondeAoEventoLocal(
+                            evento,
+                            item
+                        )
+                ) ||
+                null;
+
 
             const consultaIdentificadoresCompleta =
                 Boolean(
@@ -32353,15 +35133,72 @@ router.post(
                 );
 
 
+            const quantidadeArquivos =
+                Array.isArray(
+                    retornoDownload?.arquivos
+                )
+                    ? retornoDownload.arquivos.length
+                    : 0;
+
+
+            const todosProcessados =
+                !identificadores.length ||
+                (
+                    String(
+                        retornoDownload?.cdResposta ||
+                        ''
+                    ) === '201' &&
+                    quantidadeArquivos >=
+                        identificadores.length
+                );
+
+
+            const dataReferencia =
+                obterDataReferenciaEventoLocalBx(
+                    evento
+                );
+
+
+            let eventoForaJanelaSegura =
+                false;
+
+
+            if (
+                dataReferencia
+            ) {
+
+                const dataReferenciaDate =
+                    new Date(
+                        `${dataReferencia}T00:00:00-03:00`
+                    );
+
+
+                if (
+                    !Number.isNaN(
+                        dataReferenciaDate.getTime()
+                    )
+                ) {
+
+                    eventoForaJanelaSegura =
+                        dataReferenciaDate.getTime() <
+                        (
+                            Date.now() -
+                            30 *
+                            24 *
+                            60 *
+                            60 *
+                            1000
+                        );
+                }
+            }
+
+
             const verificacaoCompleta =
                 !correspondente &&
                 consultaIdentificadoresCompleta &&
-                resultadoDownload.todosProcessados;
+                todosProcessados &&
+                !eventoForaJanelaSegura;
 
-
-            // ====================================================
-            // 4. ATUALIZAR EVENTO LOCAL
-            // ====================================================
 
             const agora =
                 new Date()
@@ -32377,32 +35214,24 @@ router.post(
                         'esocial_eventos'
                     )
                     .update({
-
                         verificado_esocial_em:
                             agora,
-
                         verificacao_esocial_completa:
                             verificacaoCompleta,
-
                         verificacao_esocial_dt_ini:
                             consulta.dtIni,
-
                         verificacao_esocial_dt_fim:
                             consulta.dtFim,
-
                         existe_no_esocial:
                             Boolean(
                                 correspondente
                             ),
-
                         id_evento_esocial_existente:
                             correspondente?.idEvento ||
                             null,
-
                         numero_recibo_existente:
                             correspondente?.numeroRecibo ||
                             null,
-
                         updated_at:
                             agora
                     })
@@ -32420,151 +35249,127 @@ router.post(
             }
 
 
-            // ====================================================
-            // 5. RESPOSTA
-            // ====================================================
+            Object.assign(
+                evento,
+                {
+                    verificado_esocial_em:
+                        agora,
+                    verificacao_esocial_completa:
+                        verificacaoCompleta,
+                    verificacao_esocial_dt_ini:
+                        consulta.dtIni,
+                    verificacao_esocial_dt_fim:
+                        consulta.dtFim,
+                    existe_no_esocial:
+                        Boolean(
+                            correspondente
+                        ),
+                    id_evento_esocial_existente:
+                        correspondente?.idEvento ||
+                        null,
+                    numero_recibo_existente:
+                        correspondente?.numeroRecibo ||
+                        null
+                }
+            );
+
+
+            const matriculaOficialPronta =
+                matriculaEventoEhOficial(
+                    evento
+                );
+
+
+            const podeEnviar =
+                tipoEvento === 'S-2220' &&
+                !correspondente &&
+                verificacaoCompleta &&
+                matriculaOficialPronta;
+
 
             return res.json({
-
                 success:
                     true,
-
                 somenteLeitura:
                     true,
-
                 ambienteConsultado:
                     1,
-
                 eventoLocalId:
                     evento.id,
-
                 tipoEventoLocal:
                     tipoEvento,
-
                 cpf,
-
                 empregador: {
-
                     tpInsc,
-
                     nrInsc
                 },
-
                 periodoRecepcaoConsultado: {
-
                     dtIni:
                         consulta.dtIni,
-
                     dtFim:
                         consulta.dtFim
                 },
-
                 consultaIdentificadores: {
-
                     cdResposta:
                         consulta.cdResposta,
-
                     descResposta:
                         consulta.descResposta,
-
                     quantidadeTotalEncontrada:
                         consulta.qtdeTotEvtsConsulta,
-
                     quantidadeRetornada:
-                        consulta.identificadores.length,
-
+                        identificadores.length,
                     consultaCompleta:
                         consultaIdentificadoresCompleta,
-
                     dhUltimoEvtRetornado:
                         consulta.dhUltimoEvtRetornado ||
                         null
                 },
-
                 download: {
-
                     modo:
-                        'individual-sequencial',
-
+                        'lote-unico-controlado',
                     quantidadeIdsRecebidos:
-                        resultadoDownload.quantidadeIdsRecebidos,
-
-                    quantidadeIdsTentados:
-                        resultadoDownload.quantidadeIdsTentados,
-
-                    idsTentados:
-                        resultadoDownload.idsTentados,
-
+                        identificadores.length,
                     quantidadeEventosInterpretados:
-                        resultadoDownload.eventosInterpretados.length,
-
-                    quantidadeFalhas:
-                        resultadoDownload.falhas.length,
-
-                    falhas:
-                        resultadoDownload.falhas,
-
-                    interrompidoPorCorrespondencia:
-                        resultadoDownload.interrompidoPorCorrespondencia,
-
-                    todosProcessados:
-                        resultadoDownload.todosProcessados
+                        eventosInterpretados.length,
+                    todosProcessados
                 },
-
                 verificacaoCompleta,
-
-                vinculoTrabalhista:
-                    vinculoBx,
-
+                eventoForaJanelaSegura,
+                vinculoTrabalhista,
+                matriculaPendente:
+                    !matriculaOficialPronta,
                 jaExisteNoEsocial:
                     Boolean(
                         correspondente
                     ),
-
                 eventoCorrespondente:
                     correspondente
                         ? {
-
                             tipoEvento:
                                 correspondente.tipoEvento,
-
                             idEvento:
                                 correspondente.idEvento,
-
                             numeroRecibo:
                                 correspondente.numeroRecibo,
-
                             cpf:
                                 correspondente.cpf,
-
                             matricula:
                                 correspondente.matricula,
-
                             codCateg:
                                 correspondente.codCateg,
-
                             dataReferencia:
                                 correspondente.dataReferencia
                         }
                         : null,
-
-                podeEnviar:
-                    false,
-
+                podeEnviar,
                 motivoBloqueio:
                     correspondente
-                        ? (
-                            'Evento já existe no eSocial. Não pode ser reenviado.'
-                        )
-                        : (
-                            verificacaoCompleta
-                                ? (
-                                    'Verificação concluída. A liberação do envio em Produção ainda não foi habilitada.'
-                                )
-                                : (
-                                    'Verificação incompleta. Envio deve permanecer bloqueado.'
-                                )
-                        )
+                        ? 'Evento já existe no eSocial. Não pode ser reenviado.'
+                        : !verificacaoCompleta
+                            ? 'A situação do evento ainda não pôde ser confirmada com segurança.'
+                            : !matriculaOficialPronta
+                                ? 'O evento não foi encontrado, mas a matrícula oficial ainda está sendo localizada.'
+                                : null
             });
 
 
@@ -32582,10 +35387,8 @@ router.post(
             return res
                 .status(500)
                 .json({
-
                     success:
                         false,
-
                     error:
                         error?.message ||
                         String(
@@ -32595,6 +35398,7 @@ router.post(
         }
     }
 );
+
 
 // ============================================================
 // STATUS DA INTEGRAÇÃO
