@@ -24394,10 +24394,87 @@ async function criarOuAtualizarPendenciaMatriculaEsocial(
                 existente?.tentativas ||
                 0
             ),
+        proxima_tentativa_em:
+            existente?.proxima_tentativa_em ||
+            null,
         updated_at:
             new Date()
                 .toISOString()
     };
+
+
+    // ========================================================
+    // MIGRAÇÃO DA FILA ANTIGA PARA A BUSCA HISTÓRICA V5
+    // ========================================================
+    //
+    // A v5.0 passou a interpretar janela_indice como índice da busca
+    // histórica para S-2220 não admissional. Pendências criadas pelas
+    // versões anteriores podiam carregar um índice já avançado, porém
+    // calculado ao redor da admissão. Nesse caso o worker começava no
+    // bloco histórico errado.
+    //
+    // Reiniciamos UMA ÚNICA VEZ somente quando:
+    // - é S-2220 que deve priorizar histórico;
+    // - a pendência já existia;
+    // - o índice antigo é maior que zero;
+    // - não há evidência de que a busca histórica nova já começou.
+    // ========================================================
+
+    const historicoV5JaInicializado =
+        /HISTORICO_V5|estrat[eé]gia historico_evento/i.test(
+            `${existente?.motivo || ''} ${existente?.ultimo_erro || ''}`
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+        );
+
+
+    const deveMigrarFilaHistoricaV5 =
+        Boolean(
+            existente &&
+            eventoS2220PriorizaHistoricoMatricula(
+                evento
+            ) &&
+            Number(
+                existente?.janela_indice ||
+                0
+            ) > 0 &&
+            !historicoV5JaInicializado
+        );
+
+
+    if (
+        deveMigrarFilaHistoricaV5
+    ) {
+
+        dados.status =
+            'pendente';
+
+        dados.motivo =
+            'MIGRADO_HISTORICO_V5';
+
+        dados.ultimo_erro =
+            '[HISTORICO_V5] Índice antigo da fila reiniciado para a busca histórica progressiva.';
+
+        dados.janela_indice =
+            0;
+
+        dados.proxima_tentativa_em =
+            null;
+
+        console.log(
+            '🔄 Pendência migrada para busca histórica v5:',
+            {
+                eventoId,
+                cpf:
+                    chave.cpf,
+                indiceAnterior:
+                    Number(
+                        existente?.janela_indice ||
+                        0
+                    )
+            }
+        );
+    }
 
 
     if (
@@ -26454,6 +26531,7 @@ async function processarUmaPendenciaMatriculaEsocial(
                         0
                     ) + 1,
                 ultimo_erro:
+                    `${janela.estrategia === 'historico_evento' ? '[HISTORICO_V5] ' : ''}` +
                     `Nenhum evento encontrado na janela BX ` +
                     `(estratégia ${janela.estrategia || 'admissao'}, ` +
                     `deslocamento ${janela.deslocamentoDias} dias).`,
@@ -26711,6 +26789,7 @@ async function processarUmaPendenciaMatriculaEsocial(
                 'VINCULO_OFICIAL_NAO_RESOLVIDO',
             ultimo_erro:
                 (
+                    `${janela.estrategia === 'historico_evento' ? '[HISTORICO_V5] ' : ''}` +
                     `A janela BX retornou ${candidatos.length} evento(s) de vínculo, ` +
                     `mas a matrícula oficial não pôde ser escolhida com segurança. ` +
                     `Critério: ${selecaoVinculo.criterio || '-'}; ` +
@@ -28731,6 +28810,101 @@ async function statusMatriculasEsocial() {
 // ============================================================
 // ROTAS DE DIAGNÓSTICO / TESTE DA FILA
 // ============================================================
+
+
+router.get(
+    '/matriculas-esocial/pendencia-evento/:eventoId',
+    async (
+        req,
+        res
+    ) => {
+
+        try {
+
+            const eventoId =
+                String(
+                    req.params.eventoId ||
+                    ''
+                ).trim();
+
+
+            if (
+                !eventoId
+            ) {
+
+                return res
+                    .status(400)
+                    .json({
+                        success:
+                            false,
+                        error:
+                            'ID do evento não informado.'
+                    });
+            }
+
+
+            const {
+                data,
+                error
+            } =
+                await getSupabase()
+                    .from(
+                        'esocial_matriculas_pendentes'
+                    )
+                    .select(
+                        '*'
+                    )
+                    .eq(
+                        'evento_exemplo_id',
+                        eventoId
+                    )
+                    .order(
+                        'created_at',
+                        {
+                            ascending:
+                                true
+                        }
+                    );
+
+
+            if (
+                error
+            ) {
+
+                throw error;
+            }
+
+
+            return res.json({
+                success:
+                    true,
+                semConsumoBx:
+                    true,
+                eventoId,
+                pendencias:
+                    Array.isArray(data)
+                        ? data
+                        : []
+            });
+
+        } catch (
+            error
+        ) {
+
+            return res
+                .status(500)
+                .json({
+                    success:
+                        false,
+                    semConsumoBx:
+                        true,
+                    error:
+                        error?.message ||
+                        String(error)
+                });
+        }
+    }
+);
 
 
 router.post(
