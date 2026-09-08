@@ -1,3 +1,4 @@
+// SERVER/ROTA eSOCIAL - AJUSTE v4.9: nrInsc empregador canônico (raiz CNPJ) + reconciliação cache BX
 'use strict';
 
 // ============================================================
@@ -3638,7 +3639,8 @@ function montarXmlSolicitacaoDownloadPorNrReciboBx({
 
 
     const numeroInscricao =
-        normalizarDocumentoEsocial(
+        normalizarNrInscEmpregadorEsocial(
+            tipoInscricao,
             nrInsc
         );
 
@@ -4133,17 +4135,12 @@ function normalizarGrupoS2220(
 
 
     let nrInscEmpregador =
-        String(
+        normalizarNrInscEmpregadorEsocial(
+            tpInscEmpregador,
             empresa
                 ?.nr_insc_empregador_esocial ||
             ''
-        )
-            .replace(
-                /[^0-9A-Za-z]/g,
-                ''
-            )
-            .toUpperCase()
-            .trim();
+        );
 
 
     // ========================================================
@@ -4168,9 +4165,9 @@ function normalizarGrupoS2220(
     ) {
 
         nrInscEmpregador =
-            cnpjUnidade.substring(
-                0,
-                8
+            normalizarNrInscEmpregadorEsocial(
+                tpInscEmpregador,
+                cnpjUnidade
             );
     }
 
@@ -15495,6 +15492,118 @@ function normalizarDocumentoEsocial(
 
 
 // ============================================================
+// NORMALIZAR NRINSC DO EMPREGADOR eSOCIAL
+//
+// Para tpInsc=1 (CNPJ), o eSocial usa a RAIZ do CNPJ (8 dígitos)
+// em ideEmpregador.nrInsc. Alguns cadastros antigos guardavam o
+// CNPJ completo (14 dígitos), o que impedia o cruzamento com o BX.
+// ============================================================
+
+function normalizarNrInscEmpregadorEsocial(
+    tpInsc,
+    valor
+) {
+
+    const tipo =
+        String(
+            tpInsc ||
+            ''
+        ).trim();
+
+
+    const documento =
+        normalizarDocumentoEsocial(
+            valor
+        );
+
+
+    if (
+        !documento
+    ) {
+
+        return '';
+    }
+
+
+    if (
+        tipo === '1'
+    ) {
+
+        const digitos =
+            documento.replace(
+                /\D/g,
+                ''
+            );
+
+
+        if (
+            digitos.length >= 8
+        ) {
+
+            return digitos.substring(
+                0,
+                8
+            );
+        }
+    }
+
+
+    if (
+        tipo === '2'
+    ) {
+
+        const digitos =
+            documento.replace(
+                /\D/g,
+                ''
+            );
+
+
+        if (
+            digitos.length
+        ) {
+
+            return digitos.substring(
+                0,
+                11
+            );
+        }
+    }
+
+
+    return documento;
+}
+
+
+function nrInscEmpregadorEquivalenteEsocial(
+    tpInsc,
+    valorA,
+    valorB
+) {
+
+    const a =
+        normalizarNrInscEmpregadorEsocial(
+            tpInsc,
+            valorA
+        );
+
+
+    const b =
+        normalizarNrInscEmpregadorEsocial(
+            tpInsc,
+            valorB
+        );
+
+
+    return Boolean(
+        a &&
+        b &&
+        a === b
+    );
+}
+
+
+// ============================================================
 // COLETAR CONTEÚDO ASN.1
 // ============================================================
 
@@ -16018,7 +16127,8 @@ function montarLoteEsocial({
 
 
     const nrInscEmpregador =
-        normalizarDocumentoEsocial(
+        normalizarNrInscEmpregadorEsocial(
+            tpInscEmpregador,
             primeiro.nr_insc_empregador ||
             primeiro.nrInscEmpregador ||
             ''
@@ -16065,7 +16175,8 @@ function montarLoteEsocial({
 
 
         const nr =
-            normalizarDocumentoEsocial(
+            normalizarNrInscEmpregadorEsocial(
+                tp,
                 evento.nr_insc_empregador ||
                 evento.nrInscEmpregador ||
                 ''
@@ -18841,7 +18952,8 @@ function montarXmlConsultaIdentificadoresTrabalhadorBx({
 
 
     const numeroInscricao =
-        normalizarDocumentoEsocial(
+        normalizarNrInscEmpregadorEsocial(
+            tipoInscricao,
             nrInsc
         );
 
@@ -20100,7 +20212,8 @@ function montarXmlSolicitacaoDownloadPorIdBx({
 
 
     const numeroInscricao =
-        normalizarDocumentoEsocial(
+        normalizarNrInscEmpregadorEsocial(
+            tipoInscricao,
             nrInsc
         );
 
@@ -22351,7 +22464,8 @@ function dadosChaveVinculoMatricula(
 
 
     const nrInsc =
-        normalizarDocumentoEsocial(
+        normalizarNrInscEmpregadorEsocial(
+            tpInsc,
             evento?.nr_insc_empregador ||
             evento?.nrInscEmpregador ||
             ''
@@ -22427,6 +22541,8 @@ async function buscarVinculoOficialCacheEsocial(
     }
 
 
+    // Não filtrar nrInsc diretamente no SQL: registros antigos podem
+    // ter sido gravados com o CNPJ completo, enquanto o BX usa a raiz.
     const {
         data,
         error
@@ -22443,10 +22559,6 @@ async function buscarVinculoOficialCacheEsocial(
                 chave.tpInsc
             )
             .eq(
-                'nr_insc_empregador',
-                chave.nrInsc
-            )
-            .eq(
                 'cpf',
                 chave.cpf
             )
@@ -22458,7 +22570,7 @@ async function buscarVinculoOficialCacheEsocial(
                 }
             )
             .limit(
-                20
+                100
             );
 
 
@@ -22471,11 +22583,23 @@ async function buscarVinculoOficialCacheEsocial(
 
 
     const vinculos =
-        Array.isArray(
-            data
+        (
+            Array.isArray(
+                data
+            )
+                ? data
+                : []
         )
-            ? data
-            : [];
+            .filter(
+                item =>
+                    nrInscEmpregadorEquivalenteEsocial(
+                        chave.tpInsc,
+                        item?.nr_insc_empregador ||
+                        item?.nrInscEmpregador ||
+                        '',
+                        chave.nrInsc
+                    )
+            );
 
 
     if (
@@ -22515,14 +22639,52 @@ async function buscarVinculoOficialCacheEsocial(
 
 
     // ========================================================
-    // 2) SE SÓ EXISTE UM VÍNCULO, NÃO HÁ AMBIGUIDADE
+    // 2) UMA ÚNICA MATRÍCULA OFICIAL PARA CPF + EMPREGADOR
+    //
+    // Registros legados podem existir duplicados (CNPJ completo e
+    // raiz), mas se todos apontam para a mesma matrícula não há
+    // ambiguidade de vínculo.
     // ========================================================
 
-    if (
-        vinculos.length === 1
+    const porMatricula =
+        new Map();
+
+
+    for (
+        const item
+        of vinculos
     ) {
 
-        return vinculos[0];
+        const matricula =
+            String(
+                item?.matricula_esocial ||
+                item?.matricula ||
+                ''
+            ).trim();
+
+
+        if (
+            matricula &&
+            !porMatricula.has(
+                matricula
+            )
+        ) {
+
+            porMatricula.set(
+                matricula,
+                item
+            );
+        }
+    }
+
+
+    if (
+        porMatricula.size === 1
+    ) {
+
+        return Array.from(
+            porMatricula.values()
+        )[0];
     }
 
 
@@ -22563,7 +22725,7 @@ async function buscarVinculoOficialCacheEsocial(
     }
 
 
-    // Mais de um vínculo e sem data exata: não arriscar.
+    // Mais de uma matrícula e sem dado suficiente: não arriscar.
     return null;
 }
 
@@ -22621,6 +22783,54 @@ async function aplicarVinculoOficialNoEvento(
         ).trim();
 
 
+    const tpInscEvento =
+        String(
+            evento.tp_insc_empregador ||
+            evento.tpInscEmpregador ||
+            ''
+        ).trim();
+
+
+    const tpInscOficial =
+        String(
+            vinculo.tp_insc_empregador ||
+            vinculo.tpInscEmpregador ||
+            tpInscEvento ||
+            ''
+        ).trim();
+
+
+    const nrInscEventoBruto =
+        normalizarDocumentoEsocial(
+            evento.nr_insc_empregador ||
+            evento.nrInscEmpregador ||
+            ''
+        );
+
+
+    const nrInscOficial =
+        normalizarNrInscEmpregadorEsocial(
+            tpInscOficial,
+            vinculo.nr_insc_empregador ||
+            vinculo.nrInscEmpregador ||
+            nrInscEventoBruto
+        );
+
+
+    const empregadorAlterado =
+        Boolean(
+            (
+                tpInscOficial &&
+                tpInscEvento &&
+                tpInscOficial !== tpInscEvento
+            ) ||
+            (
+                nrInscOficial &&
+                nrInscEventoBruto !== nrInscOficial
+            )
+        );
+
+
     // Data oficial do vínculo vinda do eSocial/BX/cache.
     // Mantemos separada de data_admissao, que pode ter origem SOC.
     const dataAdmissaoOficial =
@@ -22661,7 +22871,8 @@ async function aplicarVinculoOficialNoEvento(
 
     const alterada =
         matriculaAlterada ||
-        categoriaAlterada;
+        categoriaAlterada ||
+        empregadorAlterado;
 
 
     // ========================================================
@@ -22730,6 +22941,19 @@ async function aplicarVinculoOficialNoEvento(
 
 
     const atualizacao = {
+        tp_insc_empregador:
+            tpInscOficial ||
+            tpInscEvento ||
+            null,
+
+        nr_insc_empregador:
+            nrInscOficial ||
+            normalizarNrInscEmpregadorEsocial(
+                tpInscEvento,
+                nrInscEventoBruto
+            ) ||
+            null,
+
         matricula:
             matriculaOficial,
 
@@ -22874,7 +23098,8 @@ async function resolverEventosLocaisComVinculoEsocial(
 
 
     const nrInsc =
-        normalizarDocumentoEsocial(
+        normalizarNrInscEmpregadorEsocial(
+            tpInsc,
             vinculo?.nr_insc_empregador ||
             vinculo?.nrInscEmpregador ||
             ''
@@ -22921,10 +23146,6 @@ async function resolverEventosLocaisComVinculoEsocial(
                 tpInsc
             )
             .eq(
-                'nr_insc_empregador',
-                nrInsc
-            )
-            .eq(
                 'cpf',
                 cpf
             )
@@ -22953,6 +23174,16 @@ async function resolverEventosLocaisComVinculoEsocial(
                 ? data
                 : []
         )
+            .filter(
+                evento =>
+                    nrInscEmpregadorEquivalenteEsocial(
+                        tpInsc,
+                        evento.nr_insc_empregador ||
+                        evento.nrInscEmpregador ||
+                        '',
+                        nrInsc
+                    )
+            )
             .filter(
                 evento => {
 
@@ -23092,7 +23323,8 @@ async function salvarVinculoOficialEsocial(
 
 
     const nrInsc =
-        normalizarDocumentoEsocial(
+        normalizarNrInscEmpregadorEsocial(
+            tpInsc,
             vinculo?.nrInscEmpregador ||
             vinculo?.nr_insc_empregador ||
             ''
@@ -23275,10 +23507,6 @@ async function salvarVinculoOficialEsocial(
                     tpInsc
                 )
                 .eq(
-                    'nr_insc_empregador',
-                    nrInsc
-                )
-                .eq(
                     'cpf',
                     cpf
                 );
@@ -23301,6 +23529,15 @@ async function salvarVinculoOficialEsocial(
                         ? vinculosMesmoCpf
                         : []
                 )
+                    .filter(
+                        item =>
+                            nrInscEmpregadorEquivalenteEsocial(
+                                tpInsc,
+                                item?.nr_insc_empregador ||
+                                '',
+                                nrInsc
+                            )
+                    )
                     .map(
                         item =>
                             String(
@@ -23389,7 +23626,8 @@ async function salvarVinculosOficiaisDoBx(
 
 
         const nrInsc =
-            normalizarDocumentoEsocial(
+            normalizarNrInscEmpregadorEsocial(
+                tpInsc,
                 eventoBx?.nrInscEmpregador ||
                 eventoBx?.nr_insc_empregador ||
                 ''
@@ -24848,6 +25086,20 @@ async function obterConsumoWorkerBxHoje(
             .iso;
 
 
+    const tipo =
+        String(
+            tpInsc ||
+            ''
+        ).trim();
+
+
+    const nrCanonico =
+        normalizarNrInscEmpregadorEsocial(
+            tipo,
+            nrInsc
+        );
+
+
     const {
         data,
         error
@@ -24865,16 +25117,8 @@ async function obterConsumoWorkerBxHoje(
             )
             .eq(
                 'tp_insc_empregador',
-                tpInsc
-            )
-            .eq(
-                'nr_insc_empregador',
-                nrInsc
-            )
-            .limit(
-                1
-            )
-            .maybeSingle();
+                tipo
+            );
 
 
     if (
@@ -24885,17 +25129,63 @@ async function obterConsumoWorkerBxHoje(
     }
 
 
-    return data ||
-        {
-            data_referencia:
-                hoje,
-            tp_insc_empregador:
-                tpInsc,
-            nr_insc_empregador:
-                nrInsc,
-            quantidade:
+    const equivalentes =
+        (
+            Array.isArray(data)
+                ? data
+                : []
+        )
+            .filter(
+                item =>
+                    nrInscEmpregadorEquivalenteEsocial(
+                        tipo,
+                        item?.nr_insc_empregador ||
+                        '',
+                        nrCanonico
+                    )
+            );
+
+
+    const quantidadeTotal =
+        equivalentes.reduce(
+            (total, item) =>
+                total +
+                Number(
+                    item?.quantidade ||
+                    0
+                ),
+            0
+        );
+
+
+    const registroCanonico =
+        equivalentes.find(
+            item =>
+                normalizarDocumentoEsocial(
+                    item?.nr_insc_empregador ||
+                    ''
+                ) ===
+                nrCanonico
+        ) ||
+        null;
+
+
+    return {
+        ...(registroCanonico || {}),
+        data_referencia:
+            hoje,
+        tp_insc_empregador:
+            tipo,
+        nr_insc_empregador:
+            nrCanonico,
+        quantidade:
+            quantidadeTotal,
+        quantidade_canonica:
+            Number(
+                registroCanonico?.quantidade ||
                 0
-        };
+            )
+    };
 }
 
 
@@ -24921,12 +25211,19 @@ async function registrarAcessoWorkerBx(
         data_referencia:
             atual.data_referencia,
         tp_insc_empregador:
-            tpInsc,
+            String(
+                tpInsc ||
+                ''
+            ).trim(),
         nr_insc_empregador:
-            nrInsc,
+            normalizarNrInscEmpregadorEsocial(
+                tpInsc,
+                nrInsc
+            ),
         quantidade:
             Number(
-                atual.quantidade ||
+                atual.quantidade_canonica ??
+                atual.quantidade ??
                 0
             ) + 1,
         ultimo_tipo:
@@ -25386,6 +25683,21 @@ async function obterEventoExemploPendencia(
     }
 
 
+    const tpInsc =
+        String(
+            pendencia?.tp_insc_empregador ||
+            ''
+        ).trim();
+
+
+    const nrInsc =
+        normalizarNrInscEmpregadorEsocial(
+            tpInsc,
+            pendencia?.nr_insc_empregador ||
+            ''
+        );
+
+
     const {
         data,
         error
@@ -25399,11 +25711,7 @@ async function obterEventoExemploPendencia(
             )
             .eq(
                 'tp_insc_empregador',
-                pendencia.tp_insc_empregador
-            )
-            .eq(
-                'nr_insc_empregador',
-                pendencia.nr_insc_empregador
+                tpInsc
             )
             .eq(
                 'cpf',
@@ -25421,9 +25729,8 @@ async function obterEventoExemploPendencia(
                 }
             )
             .limit(
-                1
-            )
-            .maybeSingle();
+                100
+            );
 
 
     if (
@@ -25434,7 +25741,22 @@ async function obterEventoExemploPendencia(
     }
 
 
-    return data ||
+    return (
+        Array.isArray(
+            data
+        )
+            ? data
+            : []
+    ).find(
+        evento =>
+            nrInscEmpregadorEquivalenteEsocial(
+                tpInsc,
+                evento?.nr_insc_empregador ||
+                evento?.nrInscEmpregador ||
+                '',
+                nrInsc
+            )
+    ) ||
         null;
 }
 
@@ -25675,7 +25997,8 @@ async function processarUmaPendenciaMatriculaEsocial(
 
 
     const nrInsc =
-        normalizarDocumentoEsocial(
+        normalizarNrInscEmpregadorEsocial(
+            tpInsc,
             pendencia.nr_insc_empregador ||
             evento.nr_insc_empregador ||
             ''
@@ -28824,8 +29147,37 @@ function eventoBxCorrespondeAoEventoLocal(
     }
 
 
+    const tpInscLocal =
+        String(
+            evento.tp_insc_empregador ||
+            evento.tpInscEmpregador ||
+            ''
+        ).trim();
+
+
+    const tpInscBx =
+        String(
+            bx.tpInscEmpregador ||
+            bx.tp_insc_empregador ||
+            tpInscLocal ||
+            ''
+        ).trim();
+
+
+    if (
+        tpInscLocal &&
+        tpInscBx &&
+        tpInscLocal !== tpInscBx
+    ) {
+
+        return false;
+    }
+
+
     const nrInscLocal =
-        normalizarDocumentoEsocial(
+        normalizarNrInscEmpregadorEsocial(
+            tpInscLocal ||
+            tpInscBx,
             evento.nr_insc_empregador ||
             evento.nrInscEmpregador ||
             ''
@@ -28833,8 +29185,11 @@ function eventoBxCorrespondeAoEventoLocal(
 
 
     const nrInscBx =
-        normalizarDocumentoEsocial(
+        normalizarNrInscEmpregadorEsocial(
+            tpInscBx ||
+            tpInscLocal,
             bx.nrInscEmpregador ||
+            bx.nr_insc_empregador ||
             ''
         );
 
@@ -28987,7 +29342,14 @@ async function salvarEventosBxNoBanco(
                             null,
 
                         nr_insc_empregador:
-                            item.nrInscEmpregador ||
+                            normalizarNrInscEmpregadorEsocial(
+                                item.tpInscEmpregador ||
+                                item.tp_insc_empregador ||
+                                '',
+                                item.nrInscEmpregador ||
+                                item.nr_insc_empregador ||
+                                ''
+                            ) ||
                             null,
 
                         cpf:
@@ -29703,10 +30065,23 @@ async function localizarEventosLocaisDoXmlEsocial(
     // E SOMENTE aceitamos se resultar em UM único registro.
     // ========================================================
 
+    const tpInscImportado =
+        String(
+            eventoImportado
+                .tpInscEmpregador ||
+            eventoImportado
+                .tp_insc_empregador ||
+            ''
+        ).trim();
+
+
     const nrInscImportado =
-        normalizarDocumentoEsocial(
+        normalizarNrInscEmpregadorEsocial(
+            tpInscImportado,
             eventoImportado
                 .nrInscEmpregador ||
+            eventoImportado
+                .nr_insc_empregador ||
             ''
         );
 
@@ -29715,10 +30090,35 @@ async function localizarEventosLocaisDoXmlEsocial(
         candidatosCpf.filter(
             evento => {
 
+                const tpInscLocal =
+                    String(
+                        evento
+                            .tp_insc_empregador ||
+                        evento
+                            .tpInscEmpregador ||
+                        ''
+                    ).trim();
+
+
+                if (
+                    tpInscImportado &&
+                    tpInscLocal &&
+                    tpInscImportado !==
+                        tpInscLocal
+                ) {
+
+                    return false;
+                }
+
+
                 const nrInscLocal =
-                    normalizarDocumentoEsocial(
+                    normalizarNrInscEmpregadorEsocial(
+                        tpInscLocal ||
+                        tpInscImportado,
                         evento
                             .nr_insc_empregador ||
+                        evento
+                            .nrInscEmpregador ||
                         ''
                     );
 
@@ -32197,8 +32597,10 @@ router.post(
 
 
             const nrInsc =
-                normalizarDocumentoEsocial(
+                normalizarNrInscEmpregadorEsocial(
+                    tpInsc,
                     evento.nr_insc_empregador ||
+                    evento.nrInscEmpregador ||
                     ''
                 );
 
@@ -32585,8 +32987,10 @@ async function verificarEventoExistenteNoEsocialAntesDoEnvio(
 
 
     const nrInsc =
-        normalizarDocumentoEsocial(
+        normalizarNrInscEmpregadorEsocial(
+            tpInsc,
             evento.nr_insc_empregador ||
+            evento.nrInscEmpregador ||
             ''
         );
 
@@ -33161,7 +33565,8 @@ async function tentarResolverMatriculaHistoricaRapidaEsocial(
 
 
     const nrInsc =
-        normalizarDocumentoEsocial(
+        normalizarNrInscEmpregadorEsocial(
+            tpInsc,
             evento?.nr_insc_empregador ||
             ''
         );
@@ -33605,7 +34010,8 @@ async function buscarEventosDoTrabalhadorNoCacheBx(
 
 
     const nrInsc =
-        normalizarDocumentoEsocial(
+        normalizarNrInscEmpregadorEsocial(
+            tpInsc,
             evento.nr_insc_empregador ||
             evento.nrInscEmpregador ||
             ''
@@ -33646,10 +34052,6 @@ async function buscarEventosDoTrabalhadorNoCacheBx(
                 tpInsc
             )
             .eq(
-                'nr_insc_empregador',
-                nrInsc
-            )
-            .eq(
                 'cpf',
                 cpf
             )
@@ -33665,7 +34067,7 @@ async function buscarEventosDoTrabalhadorNoCacheBx(
                 }
             )
             .limit(
-                100
+                200
             );
 
 
@@ -33682,6 +34084,15 @@ async function buscarEventosDoTrabalhadorNoCacheBx(
             ? data
             : []
     )
+        .filter(
+            registro =>
+                nrInscEmpregadorEquivalenteEsocial(
+                    tpInsc,
+                    registro?.nr_insc_empregador ||
+                    '',
+                    nrInsc
+                )
+        )
         .map(
             normalizarRegistroBxBancoParaComparacao
         )
@@ -34631,8 +35042,10 @@ router.post(
 
 
             const nrInsc =
-                normalizarDocumentoEsocial(
+                normalizarNrInscEmpregadorEsocial(
+                    tpInsc,
                     evento.nr_insc_empregador ||
+                    evento.nrInscEmpregador ||
                     ''
                 );
 
@@ -39816,16 +40229,12 @@ function gerarXmlS2220(
 
 
     const nrInsc =
-        String(
+        normalizarNrInscEmpregadorEsocial(
+            tpInsc,
             evento.nr_insc_empregador ||
             evento.nrInscEmpregador ||
             ''
-        )
-            .replace(
-                /[^0-9A-Za-z]/g,
-                ''
-            )
-            .toUpperCase();
+        );
 
 
     if (
@@ -39842,9 +40251,7 @@ function gerarXmlS2220(
 
     if (
         tpInsc === '1' &&
-        ![8, 14].includes(
-            nrInsc.length
-        )
+        nrInsc.length !== 8
     ) {
 
         throw new Error(
@@ -40780,15 +41187,13 @@ function gerarXmlS2240(
 
 
     const nrInsc =
-        primeiroTexto(
-            evento.nr_insc_empregador,
-            evento.nrInscEmpregador
-        )
-            .replace(
-                /[^0-9A-Za-z]/g,
-                ''
+        normalizarNrInscEmpregadorEsocial(
+            tpInsc,
+            primeiroTexto(
+                evento.nr_insc_empregador,
+                evento.nrInscEmpregador
             )
-            .toUpperCase();
+        );
 
 
     if (
@@ -40807,12 +41212,7 @@ function gerarXmlS2240(
 
     if (
         tpInsc === '1' &&
-        ![
-            8,
-            14
-        ].includes(
-            nrInsc.length
-        )
+        nrInsc.length !== 8
     ) {
         throw new Error(
             `nrInsc do empregador inválido: ${nrInsc.length} posições.`
