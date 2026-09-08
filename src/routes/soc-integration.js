@@ -12007,6 +12007,91 @@ let cacheCertificadoEsocial =
 
 
 // ============================================================
+// OBTER CERTIFICADO A1 (ARQUIVO LOCAL OU BASE64)
+//
+// No Render, prefira ESOCIAL_CERT_BASE64 para não versionar o
+// arquivo .pfx/.p12 no GitHub. Localmente, ESOCIAL_CERT_PATH
+// continua funcionando normalmente.
+// ============================================================
+
+let cachePfxBufferEsocial = null;
+
+function obterPfxBufferEsocial() {
+
+    if (cachePfxBufferEsocial) {
+        return cachePfxBufferEsocial;
+    }
+
+    const base64Configurado =
+        String(
+            process.env.ESOCIAL_CERT_BASE64 ||
+            ''
+        ).trim();
+
+    if (base64Configurado) {
+
+        const base64Limpo =
+            base64Configurado
+                .replace(
+                    /^data:application\/(?:x-pkcs12|pkcs12);base64,/i,
+                    ''
+                )
+                .replace(/\s+/g, '');
+
+        let buffer;
+
+        try {
+            buffer = Buffer.from(base64Limpo, 'base64');
+        } catch (error) {
+            throw new Error(
+                'ESOCIAL_CERT_BASE64 inválido. Não foi possível decodificar o certificado.'
+            );
+        }
+
+        if (!buffer || !buffer.length) {
+            throw new Error(
+                'ESOCIAL_CERT_BASE64 está vazio ou inválido.'
+            );
+        }
+
+        cachePfxBufferEsocial = buffer;
+        return cachePfxBufferEsocial;
+    }
+
+    const caminhoConfigurado =
+        String(
+            process.env.ESOCIAL_CERT_PATH ||
+            ''
+        ).trim();
+
+    if (!caminhoConfigurado) {
+        throw new Error(
+            'Configure ESOCIAL_CERT_BASE64 ou ESOCIAL_CERT_PATH.'
+        );
+    }
+
+    const caminhoCertificado =
+        path.isAbsolute(caminhoConfigurado)
+            ? caminhoConfigurado
+            : path.resolve(
+                process.cwd(),
+                caminhoConfigurado
+            );
+
+    if (!fs.existsSync(caminhoCertificado)) {
+        throw new Error(
+            `Certificado A1 não encontrado em ${caminhoCertificado}`
+        );
+    }
+
+    cachePfxBufferEsocial =
+        fs.readFileSync(caminhoCertificado);
+
+    return cachePfxBufferEsocial;
+}
+
+
+// ============================================================
 // CARREGAR CERTIFICADO A1
 // ============================================================
 
@@ -12024,28 +12109,11 @@ function carregarCertificadoEsocial() {
     // CONFIGURAÇÃO
     // ========================================================
 
-    const caminhoConfigurado =
-        String(
-            process.env.ESOCIAL_CERT_PATH ||
-            ''
-        ).trim();
-
-
     const senha =
         String(
             process.env.ESOCIAL_CERT_PASSWORD ||
             ''
         );
-
-
-    if (
-        !caminhoConfigurado
-    ) {
-
-        throw new Error(
-            'ESOCIAL_CERT_PATH não configurado.'
-        );
-    }
 
 
     if (
@@ -12058,38 +12126,12 @@ function carregarCertificadoEsocial() {
     }
 
 
-    const caminhoCertificado =
-        path.isAbsolute(
-            caminhoConfigurado
-        )
-            ? caminhoConfigurado
-
-            : path.resolve(
-                process.cwd(),
-                caminhoConfigurado
-            );
-
-
-    if (
-        !fs.existsSync(
-            caminhoCertificado
-        )
-    ) {
-
-        throw new Error(
-            `Certificado A1 não encontrado em ${caminhoCertificado}`
-        );
-    }
-
-
     // ========================================================
     // LER PFX
     // ========================================================
 
     const pfxBuffer =
-        fs.readFileSync(
-            caminhoCertificado
-        );
+        obterPfxBufferEsocial();
 
 
     let p12;
@@ -16342,14 +16384,6 @@ function enviarSoapEsocial({
             reject
         ) => {
 
-            const caminhoConfigurado =
-                String(
-                    process.env
-                        .ESOCIAL_CERT_PATH ||
-                    ''
-                ).trim();
-
-
             const senha =
                 String(
                     process.env
@@ -16358,41 +16392,13 @@ function enviarSoapEsocial({
                 );
 
 
-            if (
-                !caminhoConfigurado
-            ) {
+            let pfxBuffer;
 
-                return reject(
-                    new Error(
-                        'ESOCIAL_CERT_PATH não configurado.'
-                    )
-                );
-            }
-
-
-            const caminhoCertificado =
-                path.isAbsolute(
-                    caminhoConfigurado
-                )
-                    ? caminhoConfigurado
-
-                    : path.resolve(
-                        process.cwd(),
-                        caminhoConfigurado
-                    );
-
-
-            if (
-                !fs.existsSync(
-                    caminhoCertificado
-                )
-            ) {
-
-                return reject(
-                    new Error(
-                        'Certificado A1 não encontrado.'
-                    )
-                );
+            try {
+                pfxBuffer =
+                    obterPfxBufferEsocial();
+            } catch (error) {
+                return reject(error);
             }
 
 
@@ -16430,9 +16436,7 @@ function enviarSoapEsocial({
                             'POST',
 
                         pfx:
-                            fs.readFileSync(
-                                caminhoCertificado
-                            ),
+                            pfxBuffer,
 
                         passphrase:
                             senha,
@@ -19277,13 +19281,6 @@ async function chamarMetodoSoapBxViaWsdl({
     // CERTIFICADO
     // ========================================================
 
-    const caminhoConfigurado =
-        String(
-            process.env.ESOCIAL_CERT_PATH ||
-            ''
-        ).trim();
-
-
     const senha =
         String(
             process.env.ESOCIAL_CERT_PASSWORD ||
@@ -19291,43 +19288,8 @@ async function chamarMetodoSoapBxViaWsdl({
         );
 
 
-    if (
-        !caminhoConfigurado
-    ) {
-
-        throw new Error(
-            'ESOCIAL_CERT_PATH não configurado.'
-        );
-    }
-
-
-    const caminhoCertificado =
-        path.isAbsolute(
-            caminhoConfigurado
-        )
-            ? caminhoConfigurado
-            : path.resolve(
-                process.cwd(),
-                caminhoConfigurado
-            );
-
-
-    if (
-        !fs.existsSync(
-            caminhoCertificado
-        )
-    ) {
-
-        throw new Error(
-            `Certificado A1 não encontrado: ${caminhoCertificado}`
-        );
-    }
-
-
     const pfx =
-        fs.readFileSync(
-            caminhoCertificado
-        );
+        obterPfxBufferEsocial();
 
 
     // ========================================================
