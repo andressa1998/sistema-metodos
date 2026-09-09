@@ -72,32 +72,124 @@ let boletoStatusFiltro = 'todos';
 let dadosBoletos = [];
 let boletosFiltrados = [];
 
-// ========================= FUNÇÃO NORMALIZAR UNIDADE MELHORADA =========================
+// ========================= NORMALIZAÇÃO / IDENTIFICAÇÃO SEGURA DE UNIDADES =========================
 function normalizarUnidade(nome) {
   if (!nome) return '';
-  let normalizado = nome.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-  normalizado = normalizado.replace(/[()\-.,/]/g, ' ');
-  
+
+  let normalizado = String(nome)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[()\-.,/]/g, ' ');
+
+  // IMPORTANTE:
+  // "APOIO" NÃO pode ser removido. Ele identifica uma unidade diferente da matriz.
+  // Ex.: "AMOR SAUDE SAO JOAO DEL REI" e
+  //      "AMOR SAUDE SAO JOAO DEL REI - APOIO" precisam gerar chaves diferentes.
   const sufixos = [
     ' LTDA', ' LTDA.', ' S/A', ' S.A.', ' ME', ' EIRELI', ' SS', ' S/S',
     ' ADMINISTRADORA', ' ADMINISTRADORA DE CARTOES',
-    ' SERVICOS', ' MEDICOS', ' ODONTOLOGICOS', ' CLINICA', ' APOIO',
+    ' SERVICOS', ' MEDICOS', ' ODONTOLOGICOS', ' CLINICA',
     ' DE ', ' DO ', ' DA ', ' DAS ', ' DOS ', ' E '
   ];
+
   sufixos.forEach(suf => {
     const regex = new RegExp(`\\s*${suf.trim()}$`, 'i');
     normalizado = normalizado.replace(regex, '');
   });
-  
-  normalizado = normalizado.replace(/[áàâãä]/gi, 'a');
-  normalizado = normalizado.replace(/[éèêë]/gi, 'e');
-  normalizado = normalizado.replace(/[íìîï]/gi, 'i');
-  normalizado = normalizado.replace(/[óòôõö]/gi, 'o');
-  normalizado = normalizado.replace(/[úùûü]/gi, 'u');
-  normalizado = normalizado.replace(/[ç]/gi, 'c');
-  
+
   normalizado = normalizado.replace(/\s+/g, ' ').trim().toUpperCase();
   return normalizado;
+}
+
+// Retorna true quando o nome representa explicitamente uma clínica de APOIO.
+function isUnidadeApoio(nome) {
+  if (!nome) return false;
+
+  const limpo = String(nome)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[()\-.,/]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase();
+
+  return /\bAPOIO\b/.test(limpo);
+}
+
+// Impede que uma unidade APOIO seja comparada com a matriz (e vice-versa).
+function unidadesSaoCompativeis(nomePlanilha, nomeUnidadeBanco) {
+  return isUnidadeApoio(nomePlanilha) === isUnidadeApoio(nomeUnidadeBanco);
+}
+
+// Localiza uma unidade com segurança.
+// Prioridade: nome exato da unidade -> razão social exata -> correspondência parcial ÚNICA.
+// Em todos os casos, APOIO só pode casar com APOIO.
+function encontrarUnidadeSegura(nomeReferencia, todasUnidades) {
+  const chaveNorm = normalizarUnidade(nomeReferencia);
+  if (!chaveNorm) return null;
+
+  const candidatosCompativeis = (todasUnidades || []).filter(u =>
+    u && unidadesSaoCompativeis(nomeReferencia, u.unidade)
+  );
+
+  const escolherUnico = (lista, motivo) => {
+    const unicos = [];
+    const ids = new Set();
+
+    for (const item of lista) {
+      const id = item.id ?? `${item.unidade}|${item.razao_social || ''}`;
+      if (!ids.has(id)) {
+        ids.add(id);
+        unicos.push(item);
+      }
+    }
+
+    if (unicos.length === 1) {
+      console.log(`   ✅ Unidade encontrada por ${motivo}: "${unicos[0].unidade}"`);
+      return unicos[0];
+    }
+
+    if (unicos.length > 1) {
+      console.warn(
+        `   ⚠️ Correspondência ambígua por ${motivo} para "${nomeReferencia}":`,
+        unicos.map(u => u.unidade)
+      );
+    }
+
+    return null;
+  };
+
+  // 1) Primeiro tenta o NOME DA UNIDADE. Isso é mais seguro que razão social,
+  // pois matriz e apoio podem compartilhar a mesma razão social.
+  let encontrados = candidatosCompativeis.filter(u =>
+    normalizarUnidade(u.unidade) === chaveNorm
+  );
+  let unidadeEncontrada = escolherUnico(encontrados, 'NOME EXATO');
+  if (unidadeEncontrada) return unidadeEncontrada;
+
+  // 2) Razão social exata, mas somente entre unidades do mesmo tipo (apoio/não apoio).
+  encontrados = candidatosCompativeis.filter(u =>
+    u.razao_social && normalizarUnidade(u.razao_social) === chaveNorm
+  );
+  unidadeEncontrada = escolherUnico(encontrados, 'RAZÃO SOCIAL EXATA');
+  if (unidadeEncontrada) return unidadeEncontrada;
+
+  // 3) Fallback parcial. Só aceita quando existe UM ÚNICO candidato compatível.
+  // Nunca escolhe o primeiro resultado silenciosamente.
+  encontrados = candidatosCompativeis.filter(u => {
+    const unidadeNorm = normalizarUnidade(u.unidade);
+    const razaoNorm = u.razao_social ? normalizarUnidade(u.razao_social) : '';
+
+    const matchUnidade = unidadeNorm &&
+      (unidadeNorm.includes(chaveNorm) || chaveNorm.includes(unidadeNorm));
+
+    const matchRazao = razaoNorm &&
+      (razaoNorm.includes(chaveNorm) || chaveNorm.includes(razaoNorm));
+
+    return matchUnidade || matchRazao;
+  });
+
+  return escolherUnico(encontrados, 'CORRESPONDÊNCIA PARCIAL ÚNICA');
 }
 
 function normalizarCnpj(cnpj) {
@@ -703,62 +795,16 @@ async function processarUpload(file) {
   const unidadesNaoEncontradas = [];
 
   for (let chaveNorm of unidadesNaPlanilha) {
-    let unidadeEncontrada = null;
-    
     console.log(`🔍 Buscando unidade: "${chaveNorm}"`);
-    
-    for (let u of todasUnidades) {
-      if (u.razao_social) {
-        const razaoNorm = normalizarUnidade(u.razao_social);
-        if (razaoNorm === chaveNorm) {
-          unidadeEncontrada = u;
-          console.log(`   ✅ Encontrado por RAZÃO SOCIAL: "${u.unidade}"`);
-          break;
-        }
-      }
-    }
-    
-    if (!unidadeEncontrada) {
-      for (let u of todasUnidades) {
-        const unidadeNorm = normalizarUnidade(u.unidade);
-        if (unidadeNorm === chaveNorm) {
-          unidadeEncontrada = u;
-          console.log(`   ✅ Encontrado por NOME: "${u.unidade}"`);
-          break;
-        }
-      }
-    }
-    
-    if (!unidadeEncontrada) {
-      for (let u of todasUnidades) {
-        if (u.razao_social) {
-          const razaoNorm = normalizarUnidade(u.razao_social);
-          if (razaoNorm.includes(chaveNorm) || chaveNorm.includes(razaoNorm)) {
-            unidadeEncontrada = u;
-            console.log(`   ✅ Encontrado por RAZÃO SOCIAL (contém): "${u.unidade}"`);
-            break;
-          }
-        }
-      }
-    }
-    
-    if (!unidadeEncontrada) {
-      for (let u of todasUnidades) {
-        const unidadeNorm = normalizarUnidade(u.unidade);
-        if (unidadeNorm.includes(chaveNorm) || chaveNorm.includes(unidadeNorm)) {
-          unidadeEncontrada = u;
-          console.log(`   ✅ Encontrado por NOME (contém): "${u.unidade}"`);
-          break;
-        }
-      }
-    }
-    
+
+    const unidadeEncontrada = encontrarUnidadeSegura(chaveNorm, todasUnidades);
+
     if (unidadeEncontrada) {
       unidadesEncontradas[chaveNorm] = unidadeEncontrada;
       console.log(`✅ Unidade mapeada: "${chaveNorm}" → "${unidadeEncontrada.unidade}"`);
     } else {
       unidadesNaoEncontradas.push(chaveNorm);
-      console.warn(`❌ Unidade NÃO encontrada: "${chaveNorm}"`);
+      console.warn(`❌ Unidade NÃO encontrada ou ambígua: "${chaveNorm}"`);
     }
   }
 
@@ -842,10 +888,18 @@ async function processarUpload(file) {
     
     console.log(`   📋 Exames encontrados pela chave "${chavePlanilha}": ${examesDaUnidade.length}`);
     
+    // Só tenta pela razão social quando ela representa o MESMO TIPO de unidade.
+    // Isso impede que a razão social compartilhada da matriz alimente a clínica APOIO.
     if (examesDaUnidade.length === 0 && unidade.razao_social) {
       const razaoNorm = normalizarUnidade(unidade.razao_social);
       console.log(`   🔍 Tentando pela razão social: "${razaoNorm}"`);
-      examesDaUnidade = examesPorUnidade[razaoNorm] || [];
+
+      if (unidadesSaoCompativeis(razaoNorm, unidade.unidade)) {
+        examesDaUnidade = examesPorUnidade[razaoNorm] || [];
+      } else {
+        console.log(`   ⛔ Razão social ignorada para evitar mistura MATRIZ/APOIO.`);
+      }
+
       if (examesDaUnidade.length > 0) {
         console.log(`   ✅ Encontrado pela razão social!`);
       }
@@ -861,17 +915,35 @@ async function processarUpload(file) {
     }
     
     if (examesDaUnidade.length === 0) {
-      console.log(`   🔍 Busca forçada em todas as chaves...`);
+      console.log(`   🔍 Busca forçada segura em todas as chaves...`);
       const razaoNorm = unidade.razao_social ? normalizarUnidade(unidade.razao_social) : '';
       const unidadeNorm = normalizarUnidade(unidade.unidade);
+      const candidatosExames = [];
       
       for (let [chave, exames] of Object.entries(examesPorUnidade)) {
-        if ((razaoNorm && (chave.includes(razaoNorm) || razaoNorm.includes(chave))) ||
-            (unidadeNorm && (chave.includes(unidadeNorm) || unidadeNorm.includes(chave)))) {
-          examesDaUnidade = exames;
-          console.log(`   ✅ Encontrado na chave: "${chave}"`);
-          break;
+        // Regra principal: APOIO nunca pode puxar exames da matriz e vice-versa.
+        if (!unidadesSaoCompativeis(chave, unidade.unidade)) {
+          continue;
         }
+
+        const matchRazao = razaoNorm &&
+          (chave.includes(razaoNorm) || razaoNorm.includes(chave));
+        const matchUnidade = unidadeNorm &&
+          (chave.includes(unidadeNorm) || unidadeNorm.includes(chave));
+
+        if (matchRazao || matchUnidade) {
+          candidatosExames.push({ chave, exames });
+        }
+      }
+
+      if (candidatosExames.length === 1) {
+        examesDaUnidade = candidatosExames[0].exames;
+        console.log(`   ✅ Encontrado na chave segura: "${candidatosExames[0].chave}"`);
+      } else if (candidatosExames.length > 1) {
+        console.warn(
+          `   ⚠️ Mais de uma chave possível para ${nomeUnidade}. Nenhum exame foi associado automaticamente:`,
+          candidatosExames.map(c => c.chave)
+        );
       }
     }
 
@@ -6138,25 +6210,8 @@ async function processarPlanilhaVidas() {
 
         console.log(`📋 ${todasUnidades.length} unidades encontradas no banco`);
 
-        // Criar mapa de unidades normalizadas
-        const mapaUnidades = {};
-        todasUnidades.forEach(u => {
-            const norm = normalizarUnidade(u.unidade);
-            if (!mapaUnidades[norm]) {
-                mapaUnidades[norm] = [];
-            }
-            mapaUnidades[norm].push(u);
-            
-            if (u.razao_social) {
-                const razaoNorm = normalizarUnidade(u.razao_social);
-                if (!mapaUnidades[razaoNorm]) {
-                    mapaUnidades[razaoNorm] = [];
-                }
-                mapaUnidades[razaoNorm].push(u);
-            }
-        });
-
-        console.log(`📋 ${Object.keys(mapaUnidades).length} chaves normalizadas`);
+        // A busca de unidade usa a mesma regra segura do upload de exames.
+        // Assim, clínicas APOIO e matriz permanecem separadas também na atualização de vidas.
 
         const resultados = [];
         let atualizados = 0;
@@ -6178,25 +6233,11 @@ async function processarPlanilhaVidas() {
                 continue;
             }
 
-            // Buscar a unidade pelo nome normalizado
-            const nomeNorm = normalizarUnidade(nomeUnidade);
-            let unidadeEncontrada = null;
+            // Buscar a unidade com proteção MATRIZ x APOIO.
+            const unidadeEncontrada = encontrarUnidadeSegura(nomeUnidade, todasUnidades);
 
-            // Buscar no mapa
-            if (mapaUnidades[nomeNorm]) {
-                unidadeEncontrada = mapaUnidades[nomeNorm][0];
-                console.log(`✅ Encontrada por nome normalizado: "${nomeUnidade}" -> "${unidadeEncontrada.unidade}"`);
-            }
-
-            // Se não encontrou, tentar busca parcial
-            if (!unidadeEncontrada) {
-                for (const [key, unidades] of Object.entries(mapaUnidades)) {
-                    if (key.includes(nomeNorm) || nomeNorm.includes(key)) {
-                        unidadeEncontrada = unidades[0];
-                        console.log(`✅ Encontrada por match parcial: "${nomeUnidade}" -> "${unidadeEncontrada.unidade}"`);
-                        break;
-                    }
-                }
+            if (unidadeEncontrada) {
+                console.log(`✅ Unidade correta: "${nomeUnidade}" -> "${unidadeEncontrada.unidade}"`);
             }
 
             if (!unidadeEncontrada) {
