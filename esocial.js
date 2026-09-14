@@ -2183,6 +2183,137 @@ function renderizarTabelaEventosESocial() {
 
 
     // ========================================================
+    // AGRUPAR POR COLABORADOR (VÍNCULO)
+    //
+    // Uma linha por pessoa em vez de uma linha por evento —
+    // evita repetir S-2220/S-2240 em linhas separadas da mesma
+    // pessoa. Se a busca/filtro deixou só um dos dois eventos na
+    // lista, tenta completar o outro a partir do histórico
+    // completo, pra manter os botões de ação funcionando.
+    // ========================================================
+
+    const gruposPorColaborador =
+        new Map();
+
+    eventosESocial.forEach(
+        evento => {
+
+            const chave =
+                normalizarChaveVinculoESocial(
+                    evento
+                );
+
+            if (
+                !gruposPorColaborador.has(
+                    chave
+                )
+            ) {
+
+                gruposPorColaborador.set(
+                    chave,
+                    {
+                        chave,
+                        eventoS2220: null,
+                        eventoS2240: null
+                    }
+                );
+            }
+
+            const grupo =
+                gruposPorColaborador.get(
+                    chave
+                );
+
+            const tipo =
+                String(
+                    evento.tipo_evento ||
+                    ''
+                )
+                    .trim()
+                    .toUpperCase();
+
+            if (
+                tipo === 'S-2220' &&
+                !grupo.eventoS2220
+            ) {
+
+                grupo.eventoS2220 =
+                    evento;
+
+            } else if (
+                tipo === 'S-2240' &&
+                !grupo.eventoS2240
+            ) {
+
+                grupo.eventoS2240 =
+                    evento;
+            }
+        }
+    );
+
+    const fonteCompletaESocial =
+        eventosESocialHistorico.length
+            ? eventosESocialHistorico
+            : eventosESocialBase;
+
+    gruposPorColaborador.forEach(
+        grupo => {
+
+            if (
+                grupo.eventoS2220 &&
+                grupo.eventoS2240
+            ) {
+
+                return;
+            }
+
+            fonteCompletaESocial.forEach(
+                evento => {
+
+                    if (
+                        normalizarChaveVinculoESocial(evento) !==
+                        grupo.chave
+                    ) {
+
+                        return;
+                    }
+
+                    const tipo =
+                        String(
+                            evento.tipo_evento ||
+                            ''
+                        )
+                            .trim()
+                            .toUpperCase();
+
+                    if (
+                        tipo === 'S-2220' &&
+                        !grupo.eventoS2220
+                    ) {
+
+                        grupo.eventoS2220 =
+                            evento;
+
+                    } else if (
+                        tipo === 'S-2240' &&
+                        !grupo.eventoS2240
+                    ) {
+
+                        grupo.eventoS2240 =
+                            evento;
+                    }
+                }
+            );
+        }
+    );
+
+    const pessoasESocial =
+        Array.from(
+            gruposPorColaborador.values()
+        );
+
+
+    // ========================================================
     // PAGINAÇÃO
     // ========================================================
 
@@ -2199,12 +2330,12 @@ function renderizarTabelaEventosESocial() {
             inicio +
             REGISTROS_POR_PAGINA,
 
-            eventosESocial.length
+            pessoasESocial.length
         );
 
 
     const pagina =
-        eventosESocial.slice(
+        pessoasESocial.slice(
             inicio,
             fim
         );
@@ -2219,7 +2350,59 @@ function renderizarTabelaEventosESocial() {
     // ========================================================
 
     pagina.forEach(
-        evento => {
+        grupo => {
+
+            // ====================================================
+            // EVENTO RELEVANTE DO GRUPO
+            //
+            // Uma linha por pessoa: os botões de ação (enviar,
+            // verificar, cancelar etc.) agem sobre o evento que
+            // ainda precisa de trabalho, seguindo a "próxima
+            // ação" calculada pro vínculo inteiro.
+            // ====================================================
+
+            const eventoSemente =
+                grupo.eventoS2220 ||
+                grupo.eventoS2240;
+
+            if (
+                !eventoSemente
+            ) {
+
+                return;
+            }
+
+            const proximaAcaoSemente =
+                obterResumoColaboradorESocial(
+                    eventoSemente
+                ).proximaAcao.texto ||
+                '';
+
+            let evento;
+
+            if (
+                proximaAcaoSemente.includes('S-2240') &&
+                grupo.eventoS2240
+            ) {
+
+                evento =
+                    grupo.eventoS2240;
+
+            } else if (
+                proximaAcaoSemente.includes('S-2220') &&
+                grupo.eventoS2220
+            ) {
+
+                evento =
+                    grupo.eventoS2220;
+
+            } else {
+
+                evento =
+                    grupo.eventoS2220 ||
+                    grupo.eventoS2240;
+            }
+
 
             // ====================================================
             // STATUS REAL DO SOC
@@ -2736,13 +2919,13 @@ const resumoColaborador =
                     </td>
 
                     <td>${
-                        codigoTipoEvento === 'S-2220'
+                        grupo.eventoS2220
                             ? htmlBadgeResumoESocial(resumoColaborador.s2220)
                             : '<span class="text-muted">—</span>'
                     }</td>
 
                     <td>${
-                        codigoTipoEvento === 'S-2240'
+                        grupo.eventoS2240
                             ? htmlBadgeResumoESocial(resumoColaborador.s2240)
                             : '<span class="text-muted">—</span>'
                     }</td>
@@ -3118,7 +3301,7 @@ const resumoColaborador =
 
     atualizarPaginacaoESocial(
         Math.ceil(
-            eventosESocial.length /
+            pessoasESocial.length /
             REGISTROS_POR_PAGINA
         )
     );
