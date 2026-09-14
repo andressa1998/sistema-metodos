@@ -1584,3 +1584,35 @@
 {"level":"info","message":"Ambiente: development","timestamp":"2026-09-14T15:07:19.999Z"}
 {"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-14T15:07:19.999Z"}
 {"level":"info","message":"GET /api/soc/debug-consulta-identificadores-bx?tpInsc=1&nrInsc=36996042&cpf=75358891234&dtIni=2026-08-19T12:00:00Z&dtFim=2026-09-14T10:00:00Z&baixar=1 200 - 13870ms - ::1","timestamp":"2026-09-14T15:07:37.650Z"}
+{"level":"info","message":"Servidor rodando na porta 3099","timestamp":"2026-09-14T16:02:21.857Z"}
+{"level":"info","message":"Ambiente: development","timestamp":"2026-09-14T16:02:21.859Z"}
+{"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-14T16:02:21.859Z"}
+{"level":"info","message":"GET /api/soc/debug-responsaveis-ppra?empresaTrabalho=2126494 200 - 349ms - ::1","timestamp":"2026-09-14T16:02:26.001Z"}
+{"level":"info","message":"GET /api/soc/debug-responsaveis-ppra?empresaTrabalho=2126494 200 - 230ms - ::1","timestamp":"2026-09-14T16:02:48.161Z"}
+{"level":"info","message":"Servidor rodando na porta 3099","timestamp":"2026-09-14T16:03:08.174Z"}
+{"level":"info","message":"Ambiente: development","timestamp":"2026-09-14T16:03:08.175Z"}
+{"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-14T16:03:08.176Z"}
+{"level":"info","message":"GET /api/soc/debug-responsaveis-ppra?empresaTrabalho=2126494&filtroUnidade=SAO%20MATEUS 200 - 285ms - ::1","timestamp":"2026-09-14T16:03:12.294Z"}
+{"level":"info","message":"GET /api/soc/debug-responsaveis-ppra?empresaTrabalho=2126494&filtroUnidade=MATEUS 200 - 155ms - ::1","timestamp":"2026-09-14T16:03:17.377Z"}
+{"level":"info","message":"Servidor rodando na porta 3099","timestamp":"2026-09-14T16:03:45.419Z"}
+{"level":"info","message":"Ambiente: development","timestamp":"2026-09-14T16:03:45.421Z"}
+{"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-14T16:03:45.422Z"}
+{"level":"info","message":"GET /api/soc/debug-funcionario-219968?cpf=29746798898&codigoEmpresa=2126494&codigoFuncionario=2363 200 - 501ms - ::1","timestamp":"2026-09-14T16:03:49.722Z"}
+{"level":"info","message":"Servidor rodando na porta 3099","timestamp":"2026-09-14T16:04:40.462Z"}
+{"level":"info","message":"Ambiente: development","timestamp":"2026-09-14T16:04:40.464Z"}
+{"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-14T16:04:40.464Z"}
+{"level":"info","message":"GET /api/soc/debug-responsavel-s2240-direto?empresaTrabalho=2126494&codigoUnidade=43&dataReferencia=2026-09-01 200 - 2416ms - ::1","timestamp":"2026-09-14T16:04:46.737Z"}
+{"level":"info","message":"Servidor rodando na porta 3099","timestamp":"2026-09-14T16:06:57.212Z"}
+{"level":"info","message":"Ambiente: development","timestamp":"2026-09-14T16:06:57.214Z"}
+{"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-14T16:06:57.215Z"}
+{"level":"info","message":"GET /api/soc/debug-responsavel-s2240-direto?empresaTrabalho=2126494&codigoUnidade=43&dataReferencia=2026-09-01&prefetchPessoas=1 200 - 2889ms - ::1","timestamp":"2026-09-14T16:07:03.944Z"}
+{"level":"info","message":"Servidor rodando na porta 3099","timestamp":"2026-09-14T16:08:21.872Z"}
+{"level":"info","message":"Ambiente: development","timestamp":"2026-09-14T16:08:21.875Z"}
+{"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-14T16:08:21.876Z"}
+{"level":"info","message":"GET /api/soc/debug-regra-s2240-completa?cpf=29746798898&codigoEmpresa=2126494&codigoFuncionario=2363&colaborador=PATRICIA&tpExameOcup=0&dataExame=2026-09-02&idFicha=370141788 200 - 7456ms - ::1","timestamp":"2026-09-14T16:08:33.142Z"}
+{"level":"info","message":"GET /api/soc/debug-responsaveis-ppra?empresaTrabalho=1649454 200 - 167ms - ::1","timestamp":"2026-09-14T16:08:53.143Z"}
+{"level":"info","message":"Servidor rodando na porta 3099","timestamp":"2026-09-14T17:03:03.166Z"}
+{"level":"info","message":"Ambiente: development","timestamp":"2026-09-14T17:03:03.168Z"}
+{"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-14T17:03:03.168Z"}
+{"level":"info","message":"GET /api/soc/debug-regra-s2240-completa?cpf=29746798898&codigoEmpresa=2126494&codigoFuncionario=2363&colaborador=PATRICIA&tpExameOcup=0&dataExame=2026-09-02&idFicha=370141788 200 - 8105ms - ::1","timestamp":"2026-09-14T17:03:15.072Z"}
+{"level":"info","message":"GET /api/soc/debug-regra-s2240-completa?cpf=75358891234&codigoEmpresa=1649454&codigoFuncionario=636&colaborador=MARIA&tpExameOcup=0&dataExame=2026-08-21&idFicha=368921477 200 - 3210ms - ::1","timestamp":"2026-09-14T17:03:24.137Z"}
