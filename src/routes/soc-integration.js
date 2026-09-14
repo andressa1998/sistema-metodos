@@ -29141,6 +29141,257 @@ router.post(
 );
 
 
+// ============================================================
+// BUSCAR MATRÍCULA AGORA (BOTÃO "BUSCAR AGORA" DO FRONT)
+//
+// Diferente de /preparar-evento-esocial, que só olha o cache
+// pra não gastar cota, esta rota faz UMA tentativa real de
+// consulta BX pro evento específico, na hora, quando o usuário
+// clica pedindo explicitamente. Ainda respeita bloqueio de
+// calendário e limite diário por empregador.
+// ============================================================
+
+router.post(
+    '/matriculas-esocial/buscar-agora/:eventoId',
+    async (
+        req,
+        res
+    ) => {
+
+        try {
+
+            const eventoId =
+                String(
+                    req.params.eventoId ||
+                    ''
+                ).trim();
+
+
+            if (
+                !eventoId
+            ) {
+
+                return res
+                    .status(400)
+                    .json({
+                        success:
+                            false,
+                        error:
+                            'ID do evento não informado.'
+                    });
+            }
+
+
+            const {
+                data:
+                    evento,
+                error:
+                    erroBusca
+            } =
+                await getSupabase()
+                    .from(
+                        'esocial_eventos'
+                    )
+                    .select('*')
+                    .eq(
+                        'id',
+                        eventoId
+                    )
+                    .single();
+
+
+            if (
+                erroBusca
+            ) {
+
+                throw erroBusca;
+            }
+
+
+            if (
+                !evento
+            ) {
+
+                return res
+                    .status(404)
+                    .json({
+                        success:
+                            false,
+                        error:
+                            'Evento não encontrado.'
+                    });
+            }
+
+
+            // ====================================================
+            // 1) CACHE PRIMEIRO — sem custo de cota
+            // ====================================================
+
+            const viaCache =
+                await garantirMatriculaOficialEvento(
+                    evento,
+                    {
+                        criarPendencia:
+                            false
+                    }
+                );
+
+
+            if (
+                viaCache?.encontrada
+            ) {
+
+                return res.json({
+                    success:
+                        true,
+                    resolvida:
+                        true,
+                    origem:
+                        viaCache.origem ||
+                        'cache_esocial',
+                    matricula:
+                        viaCache.matricula
+                });
+            }
+
+
+            // ====================================================
+            // 2) GARANTIR PENDÊNCIA (cria se não existir)
+            // ====================================================
+
+            const pendencia =
+                await criarOuAtualizarPendenciaMatriculaEsocial(
+                    evento
+                );
+
+
+            if (
+                !pendencia
+            ) {
+
+                return res
+                    .status(400)
+                    .json({
+                        success:
+                            false,
+                        error:
+                            'Não foi possível montar a pendência (dados do empregador/CPF/admissão incompletos).'
+                    });
+            }
+
+
+            if (
+                pendencia.status ===
+                'resolvido'
+            ) {
+
+                return res.json({
+                    success:
+                        true,
+                    resolvida:
+                        true,
+                    origem:
+                        'cache_esocial',
+                    matricula:
+                        evento.matricula ||
+                        null
+                });
+            }
+
+
+            // ====================================================
+            // 3) BLOQUEIOS
+            // ====================================================
+
+            if (
+                bxBloqueadoPorCalendario()
+            ) {
+
+                return res
+                    .status(429)
+                    .json({
+                        success:
+                            false,
+                        resolvida:
+                            false,
+                        motivo:
+                            'BX_BLOQUEADO_DIAS_1_A_7',
+                        error:
+                            'A consulta BX fica bloqueada nos dias 1 a 7 do mês. Tente novamente depois.'
+                    });
+            }
+
+
+            const tpInsc =
+                String(
+                    pendencia.tp_insc_empregador ||
+                    ''
+                ).trim();
+
+            const nrInsc =
+                normalizarNrInscEmpregadorEsocial(
+                    tpInsc,
+                    pendencia.nr_insc_empregador ||
+                    ''
+                );
+
+
+            if (
+                !await workerPodeConsumirBx(
+                    tpInsc,
+                    nrInsc,
+                    1
+                )
+            ) {
+
+                return res
+                    .status(429)
+                    .json({
+                        success:
+                            false,
+                        resolvida:
+                            false,
+                        motivo:
+                            'LIMITE_DIARIO_WORKER_BX',
+                        error:
+                            'Limite diário de consultas ao eSocial já foi atingido para este empregador hoje. Tente novamente amanhã.'
+                    });
+            }
+
+
+            // ====================================================
+            // 4) TENTATIVA REAL, AGORA
+            // ====================================================
+
+            const resultado =
+                await processarUmaPendenciaMatriculaEsocial(
+                    pendencia
+                );
+
+
+            return res.json({
+                success:
+                    true,
+                ...resultado
+            });
+
+        } catch (
+            error
+        ) {
+
+            return res
+                .status(500)
+                .json({
+                    success:
+                        false,
+                    error:
+                        error?.message ||
+                        String(error)
+                });
+        }
+    }
+);
+
 
 // ============================================================
 // ROTAS DE DIAGNÓSTICO / TESTE DO AUTOENVIO
@@ -33370,11 +33621,20 @@ async function verificarEventoExistenteNoEsocialAntesDoEnvio(
     // ========================================================
     // NOVOS EVENTOS SOB CONTROLE EXCLUSIVO
     //
-    // NÃO CONSULTA BX.
-    //
-    // Nossa base + SOC + nossos próprios envios passam a ser
-    // a fonte de controle depois da data de corte.
+    // A regra de data (nossa base é a fonte de controle depois
+    // do corte) sozinha NÃO é garantia suficiente para um envio
+    // real e irreversível. Se já existir uma verificação ao vivo
+    // recente (menos de 2h) no eSocial, reaproveitamos o
+    // resultado para não gastar cota BX à toa. Caso contrário,
+    // caímos para a consulta BX real abaixo, como qualquer
+    // outro evento.
     // ========================================================
+
+    const FRESCOR_VERIFICACAO_BX_MS =
+        2 *
+        60 *
+        60 *
+        1000;
 
     if (
         eventoSobControleExclusivoEsocial(
@@ -33382,46 +33642,111 @@ async function verificarEventoExistenteNoEsocialAntesDoEnvio(
         )
     ) {
 
-        return {
+        const verificadoEm =
+            evento.verificado_esocial_em
+                ? new Date(
+                    evento.verificado_esocial_em
+                )
+                : null;
 
-            success:
-                true,
+        const verificacaoRecente =
+            Boolean(
+                evento.verificacao_esocial_completa === true &&
+                verificadoEm &&
+                !Number.isNaN(
+                    verificadoEm.getTime()
+                ) &&
+                (
+                    Date.now() -
+                    verificadoEm.getTime()
+                ) < FRESCOR_VERIFICACAO_BX_MS
+            );
 
-            verificacaoCompleta:
-                true,
+        if (
+            verificacaoRecente
+        ) {
 
-            jaExisteNoEsocial:
-                false,
+            return {
 
-            origem:
-                'controle-exclusivo',
+                success:
+                    true,
 
-            eventoForaJanelaSegura:
-                false,
+                verificacaoCompleta:
+                    true,
 
-            dataReferencia:
-                obterDataReferenciaEventoLocalBx(
-                    evento
-                ),
+                jaExisteNoEsocial:
+                    Boolean(
+                        evento.existe_no_esocial
+                    ),
 
-            correspondente:
-                null,
+                origem:
+                    'controle-exclusivo-verificacao-recente',
 
-            consulta: {
-
-                realizada:
+                eventoForaJanelaSegura:
                     false,
 
-                motivo:
-                    'Evento posterior à data de início do controle exclusivo.'
-            },
+                dataReferencia:
+                    obterDataReferenciaEventoLocalBx(
+                        evento
+                    ),
 
-            download: {
+                correspondente:
+                    evento.existe_no_esocial
+                        ? {
 
-                realizado:
-                    false
-            }
-        };
+                            tipoEvento,
+
+                            idEvento:
+                                String(
+                                    evento.id_evento_esocial_existente ||
+                                    ''
+                                ).trim() ||
+                                null,
+
+                            numeroRecibo:
+                                String(
+                                    evento.numero_recibo_existente ||
+                                    ''
+                                ).trim() ||
+                                null,
+
+                            cpf:
+                                normalizarCpfEsocial(
+                                    evento.cpf
+                                ),
+
+                            matricula:
+                                String(
+                                    evento.matricula ||
+                                    ''
+                                ).trim(),
+
+                            dataReferencia:
+                                obterDataReferenciaEventoLocalBx(
+                                    evento
+                                )
+                        }
+                        : null,
+
+                consulta: {
+
+                    realizada:
+                        false,
+
+                    motivo:
+                        'Reaproveitada verificação BX ao vivo recente (menos de 2h).'
+                },
+
+                download: {
+
+                    realizado:
+                        false
+                }
+            };
+        }
+
+        // Sem verificação recente: seguimos para a consulta BX
+        // real logo abaixo, mesmo estando sob controle exclusivo.
     }
 
 
@@ -33529,6 +33854,76 @@ async function verificarEventoExistenteNoEsocialAntesDoEnvio(
                 1000
             )
         );
+
+
+    // ========================================================
+    // SEM CONSULTA BX DISPONÍVEL AGORA?
+    //
+    // Nunca envie sem conseguir confirmar. Bloqueio de
+    // calendário ou limite diário do empregador impedem a
+    // consulta real, então o envio fica bloqueado até dar
+    // para verificar de novo.
+    // ========================================================
+
+    if (
+        bxBloqueadoPorCalendario()
+    ) {
+
+        return {
+
+            success:
+                false,
+
+            verificacaoCompleta:
+                false,
+
+            jaExisteNoEsocial:
+                false,
+
+            etapa:
+                'bloqueio-calendario',
+
+            error:
+                'A consulta BX fica bloqueada nos dias 1 a 7 do mês; ' +
+                'não é possível confirmar com segurança antes do envio.'
+        };
+    }
+
+
+    if (
+        !await workerPodeConsumirBx(
+            tpInsc,
+            nrInsc,
+            1
+        )
+    ) {
+
+        return {
+
+            success:
+                false,
+
+            verificacaoCompleta:
+                false,
+
+            jaExisteNoEsocial:
+                false,
+
+            etapa:
+                'limite-diario-bx',
+
+            error:
+                'Limite diário de consultas BX atingido para este empregador; ' +
+                'não é possível confirmar com segurança antes do envio.'
+        };
+    }
+
+
+    await registrarAcessoWorkerBx(
+        tpInsc,
+        nrInsc,
+        'verificar-antes-envio'
+    );
 
 
     let consulta;
@@ -43549,7 +43944,8 @@ function eventoSobControleExclusivoEsocial(
 }
 
 function enriquecerEventoParaFrontendEsocial(
-    evento
+    evento,
+    pendenciaMatricula
 ) {
 
     if (
@@ -43560,6 +43956,38 @@ function enriquecerEventoParaFrontendEsocial(
 
         return evento;
     }
+
+
+    // ========================================================
+    // PROCURAÇÃO ELETRÔNICA PENDENTE
+    //
+    // Quando a fila de matrículas (esocial_matriculas_pendentes)
+    // fica travada em erro porque o solicitante não tem
+    // procuração eletrônica para o empregador, isso é um
+    // bloqueio real no eSocial (fora do nosso controle) e
+    // precisa aparecer para quem vai regularizar no portal.
+    // ========================================================
+
+    const procuracaoEletronicaPendente =
+        Boolean(
+            pendenciaMatricula &&
+            /procuração eletrônica/i.test(
+                String(
+                    pendenciaMatricula.ultimo_erro ||
+                    ''
+                )
+            )
+        );
+
+
+    const matriculaPendenciaErro =
+        pendenciaMatricula
+            ? String(
+                pendenciaMatricula.ultimo_erro ||
+                ''
+            ).trim() ||
+              null
+            : null;
 
 
     // ========================================================
@@ -44047,7 +44475,13 @@ function enriquecerEventoParaFrontendEsocial(
                 : ambienteBanco,
 
         origem_status_esocial:
-            origemStatus
+            origemStatus,
+
+        procuracao_eletronica_pendente:
+            procuracaoEletronicaPendente,
+
+        matricula_pendencia_erro:
+            matriculaPendenciaErro
     };
 }
 
@@ -44224,6 +44658,95 @@ router.get(
 
 
             // ====================================================
+            // PENDÊNCIAS DE MATRÍCULA EM ERRO
+            //
+            // Buscamos em lote para marcar no front quais eventos
+            // estão travados por falta de procuração eletrônica
+            // (ou outro erro real do eSocial), sem precisar de
+            // uma consulta extra por linha.
+            // ====================================================
+
+            const idsEventos =
+                (
+                    Array.isArray(
+                        data
+                    )
+                        ? data
+                        : []
+                )
+                    .map(
+                        item =>
+                            String(
+                                item?.id ||
+                                ''
+                            )
+                    )
+                    .filter(
+                        Boolean
+                    );
+
+
+            const pendenciasPorEventoId =
+                new Map();
+
+
+            if (
+                idsEventos.length
+            ) {
+
+                const {
+                    data:
+                        pendencias,
+                    error:
+                        erroPendencias
+                } =
+                    await getSupabase()
+                        .from(
+                            'esocial_matriculas_pendentes'
+                        )
+                        .select(
+                            'evento_exemplo_id, status, ultimo_erro, updated_at'
+                        )
+                        .eq(
+                            'status',
+                            'erro'
+                        )
+                        .in(
+                            'evento_exemplo_id',
+                            idsEventos
+                        );
+
+
+                if (
+                    erroPendencias
+                ) {
+
+                    throw erroPendencias;
+                }
+
+
+                for (
+                    const pendencia
+                    of (
+                        Array.isArray(
+                            pendencias
+                        )
+                            ? pendencias
+                            : []
+                    )
+                ) {
+
+                    pendenciasPorEventoId.set(
+                        String(
+                            pendencia.evento_exemplo_id
+                        ),
+                        pendencia
+                    );
+                }
+            }
+
+
+            // ====================================================
             // ENRIQUECER
             // ====================================================
 
@@ -44238,7 +44761,13 @@ router.get(
                     .map(
                         item =>
                             enriquecerEventoParaFrontendEsocial(
-                                item
+                                item,
+                                pendenciasPorEventoId.get(
+                                    String(
+                                        item?.id ||
+                                        ''
+                                    )
+                                )
                             )
                     );
 

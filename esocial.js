@@ -2034,6 +2034,16 @@ let fimAcompanhamentoPreparacaoEsocial = 0;
             ])
         );
 
+        const eventoComProcuracaoPendente = relacionados.find(
+            item => item.procuracao_eletronica_pendente === true
+        );
+
+        const procuracaoPendente = Boolean(eventoComProcuracaoPendente);
+
+        const procuracaoMensagem = eventoComProcuracaoPendente
+            ? String(eventoComProcuracaoPendente.matricula_pendencia_erro || '').trim()
+            : '';
+
         const s2220 = resumoTipoEventoColaboradorESocial(relacionados, 'S-2220');
         const s2240 = resumoTipoEventoColaboradorESocial(relacionados, 'S-2240');
 
@@ -2042,6 +2052,14 @@ let fimAcompanhamentoPreparacaoEsocial = 0;
             classe: 'secondary',
             icone: 'fa-link'
         };
+
+        if (!matriculaOficial && procuracaoPendente) {
+            proximaAcao = {
+                texto: 'Regularizar procuração eletrônica',
+                classe: 'danger',
+                icone: 'fa-file-signature'
+            };
+        }
 
         if (matriculaOficial) {
             if (s2220.estado !== 'confirmado') {
@@ -2071,6 +2089,8 @@ let fimAcompanhamentoPreparacaoEsocial = 0;
             matriculaOficial,
             dataAdmissaoEsocial,
             ultimaVerificacao,
+            procuracaoPendente,
+            procuracaoMensagem,
             s2220,
             s2240,
             proximaAcao
@@ -2693,11 +2713,17 @@ const resumoColaborador =
                                         ${escaparHtml(resumoColaborador.matriculaOficial)}
                                     </div>
                                 `
-                                : `
-                                    <span class="badge bg-secondary-subtle text-secondary-emphasis border">
-                                        <i class="fas fa-hourglass-half me-1"></i>Aguardando vínculo
-                                    </span>
-                                `
+                                : resumoColaborador.procuracaoPendente
+                                    ? `
+                                        <span class="badge bg-danger-subtle text-danger-emphasis border border-danger-subtle" title="${escaparHtml(resumoColaborador.procuracaoMensagem || '')}">
+                                            <i class="fas fa-file-signature me-1"></i>Procuração eletrônica pendente
+                                        </span>
+                                    `
+                                    : `
+                                        <span class="badge bg-secondary-subtle text-secondary-emphasis border">
+                                            <i class="fas fa-hourglass-half me-1"></i>Aguardando vínculo
+                                        </span>
+                                    `
                         }
                         <div class="esocial-last-check mt-2">
                             <i class="fas fa-history me-1"></i>
@@ -7768,9 +7794,11 @@ async function verificarEventoNoESocial(
 
         // ====================================================
         // IMPORTANTE:
-        // A lupa NÃO faz mais consulta BX direta.
-        // Ela usa somente cache/histórico local e garante que o
-        // vínculo esteja na fila automática quando necessário.
+        // Primeiro olha só cache/histórico local (sem custo).
+        // Se a matrícula ainda não estiver disponível, o passo
+        // 'aguardando_matricula' abaixo faz UMA tentativa real
+        // de consulta BX na hora, pra atender o clique explícito
+        // do usuário (respeitando cota diária/calendário).
         // ====================================================
 
         const response =
@@ -7900,10 +7928,110 @@ async function verificarEventoNoESocial(
         ) {
 
             mostrarAlertaESocial(
-                'A matrícula oficial ainda não está disponível no cache. ' +
-                'O vínculo está na fila automática do eSocial. Não é necessário clicar novamente.',
-                'warning'
+                `Buscando a matrícula oficial de ${evento.colaborador || 'colaborador'} agora...`,
+                'info'
             );
+
+            try {
+
+                const respostaBusca =
+                    await fetch(
+                        apiUrl(
+                            `/api/soc/matriculas-esocial/buscar-agora/` +
+                            `${encodeURIComponent(id)}`
+                        ),
+                        {
+                            method:
+                                'POST',
+                            headers:
+                                criarHeaders(
+                                    token,
+                                    true
+                                ),
+                            body:
+                                JSON.stringify({})
+                        }
+                    );
+
+                const textoBusca =
+                    await respostaBusca.text();
+
+                let resultadoBusca =
+                    {};
+
+                try {
+
+                    resultadoBusca =
+                        textoBusca
+                            ? JSON.parse(
+                                textoBusca
+                            )
+                            : {};
+
+                } catch (errorJsonBusca) {
+
+                    resultadoBusca = {
+                        success:
+                            false,
+                        error:
+                            textoBusca ||
+                            'Resposta inválida do servidor.'
+                    };
+                }
+
+
+                if (
+                    respostaBusca.status ===
+                    429
+                ) {
+
+                    mostrarAlertaESocial(
+                        resultadoBusca.error ||
+                        'Não foi possível consultar agora (limite diário atingido ou bloqueio de calendário). ' +
+                        'O vínculo continua na fila automática.',
+                        'warning'
+                    );
+
+                } else if (
+                    resultadoBusca.resolvida
+                ) {
+
+                    mostrarAlertaESocial(
+                        'Matrícula oficial encontrada agora' +
+                        (resultadoBusca.matricula
+                            ? `: ${resultadoBusca.matricula}.`
+                            : '.'),
+                        'success'
+                    );
+
+                } else if (
+                    resultadoBusca.success ===
+                    false
+                ) {
+
+                    mostrarAlertaESocial(
+                        resultadoBusca.error ||
+                        'Não foi possível buscar agora.',
+                        'warning'
+                    );
+
+                } else {
+
+                    mostrarAlertaESocial(
+                        'Ainda não foi encontrada matrícula para este colaborador nesta tentativa. ' +
+                        'O vínculo continua na fila automática e vai tentar novamente mais tarde.',
+                        'warning'
+                    );
+                }
+
+            } catch (errorBusca) {
+
+                mostrarAlertaESocial(
+                    'O vínculo está na fila automática, mas não foi possível buscar agora: ' +
+                    errorBusca.message,
+                    'warning'
+                );
+            }
 
             iniciarAcompanhamentoPreparacaoEsocial([
                 String(id)
