@@ -385,7 +385,21 @@ app.use(
 
 app.use(
     express.static(
-        path.join(__dirname, '/')
+        path.join(__dirname, '/'),
+        {
+            // Sem isso, navegadores podem cachear index.html/app.js/
+            // esocial.js por conta própria (cache heurístico) mesmo
+            // sem o servidor mandar isso explicitamente — fazendo
+            // deploys novos não aparecerem até um refresh forçado.
+            // Força sempre revalidar com o servidor (ETag/304), que
+            // é barato e garante a versão mais nova.
+            setHeaders: (res) => {
+                res.setHeader(
+                    'Cache-Control',
+                    'no-cache'
+                );
+            }
+        }
     )
 );
 
