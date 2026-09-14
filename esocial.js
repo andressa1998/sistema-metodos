@@ -2737,16 +2737,9 @@ const resumoColaborador =
            const podeEnviar =
     persistido &&
 
-    // Somente S-2220 por enquanto
-    String(
-        evento.tipo_evento ||
-        ''
-    )
-        .trim()
-        .toUpperCase() ===
-        'S-2220' &&
-
-    // Backend precisa autorizar tentativa
+    // Backend decide S-2220 x S-2240 e se já tem tudo pronto
+    // (matrícula, e pro S-2240 também responsável ambiental e
+    // risco/GHE resolvidos) — ver pode_emitir no backend.
     evento.pode_emitir ===
         true &&
 
@@ -3045,7 +3038,7 @@ const resumoColaborador =
                             <!-- VERIFICAR MATRÍCULA / EVENTO NO E-SOCIAL -->
 
                             ${
-    codigoTipoEvento === 'S-2220' &&
+    (codigoTipoEvento === 'S-2220' || codigoTipoEvento === 'S-2240') &&
     evento.emitido_esocial !== true &&
     evento.ja_emitido !== true &&
     !temRecibo
