@@ -11802,6 +11802,43 @@ async function aplicarRegraEventosEsocial(
                 ''
             ).trim();
 
+
+        // ========================================================
+        // PRONTIDÃO REAL DO S-2240
+        //
+        // Só fica pronto quando de fato temos responsável
+        // ambiental e característica de risco/GHE resolvidos —
+        // sem isso faltaria campo obrigatório no XML.
+        // ========================================================
+
+        const motivosBloqueioS2240 =
+            [];
+
+        if (
+            !consultaResponsaveisAmbientaisOk ||
+            !responsaveisAmbientaisSoc.length
+        ) {
+
+            motivosBloqueioS2240.push(
+                'responsável ambiental não localizado'
+            );
+        }
+
+        if (
+            !consultaCaracteristicasOk ||
+            !caracteristicasRiscosFuncionario.length
+        ) {
+
+            motivosBloqueioS2240.push(
+                'características de risco/GHE não localizadas'
+            );
+        }
+
+        const s2240Pronto =
+            motivosBloqueioS2240.length ===
+            0;
+
+
         resultado.push({
 
             ...eventoOriginal,
@@ -11917,16 +11954,23 @@ async function aplicarRegraEventosEsocial(
 
 
             /*
-             * IMPORTANTE:
+             * PRONTIDÃO REAL, BASEADA NOS DADOS ENCONTRADOS.
              *
-             * ainda não estamos autorizando transmissão
-             * automática do S-2240.
+             * Antes disso, o S-2240 nunca ficava pronto (flag fixa
+             * em false). Agora só fica pronto quando efetivamente
+             * temos responsável ambiental E característica de
+             * risco/GHE resolvidos — sem isso, faltaria campo
+             * obrigatório no XML. O envio em Produção continua
+             * exigindo, além disso, ESOCIAL_PERMITIR_S2240_PRODUCAO=true
+             * (segunda trava, separada desta).
              */
             s2240ProntoParaEmissao:
-                false,
+                s2240Pronto,
 
             bloqueioEmissaoS2240:
-                'S-2240 ainda em fase de montagem e validação técnica.'
+                s2240Pronto
+                    ? null
+                    : `Dados incompletos para emissão: ${motivosBloqueioS2240.join('; ')}.`
         });
 
 
