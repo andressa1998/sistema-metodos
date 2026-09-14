@@ -2107,8 +2107,15 @@ function criarIndiceEmpresas(
     const porId =
         new Map();
 
+    // Um código SOC pode ser compartilhado por várias empresas/CNPJs
+    // reais dentro da mesma holding (ex.: DOP tem 19 unidades sob um
+    // único código SOC). Nesse caso, "porCodigoSoc" não pode apontar
+    // com confiança para uma única empresa — ver codigosSocAmbiguos.
     const porCodigoSoc =
         new Map();
+
+    const codigosSocAmbiguos =
+        new Set();
 
     const porCnpj =
         new Map();
@@ -2146,16 +2153,26 @@ function criarIndiceEmpresas(
 
 
         if (
-            codigoSoc &&
-            !porCodigoSoc.has(
-                codigoSoc
-            )
+            codigoSoc
         ) {
 
-            porCodigoSoc.set(
-                codigoSoc,
-                empresa
-            );
+            if (
+                porCodigoSoc.has(
+                    codigoSoc
+                )
+            ) {
+
+                codigosSocAmbiguos.add(
+                    codigoSoc
+                );
+
+            } else {
+
+                porCodigoSoc.set(
+                    codigoSoc,
+                    empresa
+                );
+            }
         }
 
 
@@ -2198,6 +2215,7 @@ function criarIndiceEmpresas(
     return {
         porId,
         porCodigoSoc,
+        codigosSocAmbiguos,
         porCnpj,
         porCnpjBase
     };
@@ -2294,12 +2312,26 @@ function localizarEmpresaDoRegistro(
         codigoEmpresaSoc
     ) {
 
-        const porSoc =
+        // Código SOC ambíguo (várias empresas/CNPJs reais sob o
+        // mesmo código) — sem o CNPJ da unidade no registro, não há
+        // como saber qual é a correta. Melhor não resolver do que
+        // adivinhar errado e arquivar o evento sob o CNPJ errado.
+        const ambiguo =
             indiceEmpresas
-                .porCodigoSoc
-                ?.get(
+                .codigosSocAmbiguos
+                ?.has(
                     codigoEmpresaSoc
                 );
+
+
+        const porSoc =
+            ambiguo
+                ? null
+                : indiceEmpresas
+                    .porCodigoSoc
+                    ?.get(
+                        codigoEmpresaSoc
+                    );
 
 
         if (
