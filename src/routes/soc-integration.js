@@ -25226,6 +25226,75 @@ async function adiarPendenciaPorLimiteDiarioBx(
 }
 
 
+// Detecta o fault real do governo ("É possível enviar somente 10
+// solicitações por dia. Seu limite está esgotado. Tente novamente
+// amanhã.") — diferente do nosso autolimite (workerPodeConsumirBx),
+// este vem do próprio eSocial e só libera na virada do dia. Continuar
+// tentando outras pendências do mesmo empregador no mesmo dia só
+// desperdiça as poucas tentativas restantes contra um erro garantido.
+function mensagemIndicaLimiteDiarioGovernoBx(
+    mensagem
+) {
+
+    const texto =
+        String(
+            mensagem ||
+            ''
+        ).toLowerCase();
+
+
+    return texto.includes('solicitações por dia') ||
+        (
+            texto.includes('limite') &&
+            texto.includes('esgotado')
+        );
+}
+
+
+// Ao detectar o limite diário real do governo para um empregador,
+// tira do restante do ciclo de hoje todas as outras pendências ativas
+// desse mesmo empregador (elas voltariam a falhar do mesmo jeito),
+// em vez de deixar o worker gastar as vagas do ciclo nelas.
+async function adiarDemaisPendenciasDoEmpregadorBx(
+    tpInsc,
+    nrInsc,
+    pendenciaIdExcluir
+) {
+
+    const { data, error } =
+        await getSupabase()
+            .from('esocial_matriculas_pendentes')
+            .update({
+                status:
+                    'aguardando_janela',
+                ultimo_erro:
+                    'Limite diário BX atingido para este empregador (detectado em outra pendência). Nova tentativa após a virada do dia no horário de Brasília.',
+                proxima_tentativa_em:
+                    proximaTentativaAposLimiteDiarioBx(),
+                updated_at:
+                    new Date()
+                        .toISOString()
+            })
+            .eq('tp_insc_empregador', tpInsc)
+            .eq('nr_insc_empregador', nrInsc)
+            .neq('id', pendenciaIdExcluir)
+            .in('status', ['pendente', 'erro'])
+            .select('id');
+
+    if (error) {
+
+        console.error(
+            '❌ Falha ao adiar demais pendências do empregador após limite diário BX:',
+            error?.message || error
+        );
+
+        return 0;
+    }
+
+    return Array.isArray(data) ? data.length : 0;
+}
+
+
 function bxBloqueadoPorCalendario() {
 
     const {
@@ -27248,6 +27317,57 @@ async function processarFilaMatriculasEsocial({
                             mensagem
                     }
                 );
+
+
+                if (
+                    mensagemIndicaLimiteDiarioGovernoBx(
+                        mensagem
+                    )
+                ) {
+
+                    // Fault real do governo, não do nosso autolimite.
+                    // Retentar em 1h é desperdício garantido — só volta
+                    // a fazer sentido amanhã. Também tira as demais
+                    // pendências deste mesmo empregador do resto do
+                    // ciclo de hoje, para não gastar as vagas do worker
+                    // em tentativas fadadas a falhar.
+                    await adiarPendenciaPorLimiteDiarioBx(
+                        pendencia.id,
+                        'LIMITE_DIARIO_GOVERNO_BX'
+                    );
+
+                    const adiadas =
+                        await adiarDemaisPendenciasDoEmpregadorBx(
+                            pendencia.tp_insc_empregador,
+                            pendencia.nr_insc_empregador,
+                            pendencia.id
+                        );
+
+                    if (
+                        adiadas > 0
+                    ) {
+
+                        console.log(
+                            `⏭️ Limite diário BX do governo detectado para empregador ${pendencia.nr_insc_empregador}. ` +
+                            `${adiadas} outra(s) pendência(s) do mesmo empregador adiadas para amanhã.`
+                        );
+                    }
+
+                    resultados.push({
+                        id:
+                            pendencia.id,
+                        cpf:
+                            pendencia.cpf,
+                        resolvida:
+                            false,
+                        motivo:
+                            'LIMITE_DIARIO_GOVERNO_BX',
+                        error:
+                            mensagem
+                    });
+
+                    continue;
+                }
 
 
                 await atualizarPendenciaMatricula(
