@@ -866,6 +866,14 @@ async function processarUpload(file) {
   const unidadesEncontradas = {};
   const unidadesNaoEncontradas = [];
 
+  // Mapa por ID da unidade (não por texto da planilha) para os exames
+  // sobreviverem mesmo quando a mesma unidade acaba entrando em
+  // unidadesEncontradas por duas chaves de texto diferentes (uma vinda
+  // do "Prestador vinculado" da planilha, outra do campo "unidade" do
+  // cadastro, quando o texto usado em cada lugar não é idêntico).
+  const examesPorUnidadeId = {};
+  const idsUnidadesEncontradasNaPlanilha = new Set();
+
   for (let chaveNorm of unidadesNaPlanilha) {
     console.log(`🔍 Buscando unidade: "${chaveNorm}"`);
 
@@ -873,6 +881,15 @@ async function processarUpload(file) {
 
     if (unidadeEncontrada) {
       unidadesEncontradas[chaveNorm] = unidadeEncontrada;
+      idsUnidadesEncontradasNaPlanilha.add(unidadeEncontrada.id);
+
+      if (!examesPorUnidadeId[unidadeEncontrada.id]) {
+        examesPorUnidadeId[unidadeEncontrada.id] = [];
+      }
+      examesPorUnidadeId[unidadeEncontrada.id].push(
+        ...(examesPorUnidade[chaveNorm] || [])
+      );
+
       console.log(`✅ Unidade mapeada: "${chaveNorm}" → "${unidadeEncontrada.unidade}"`);
     } else {
       unidadesNaoEncontradas.push(chaveNorm);
@@ -883,8 +900,16 @@ async function processarUpload(file) {
   for (let unidade of todasUnidades) {
     const temMensalidade = unidade.mensalidade && unidade.mensalidade > 0;
     const temVidas = unidade.vidas && unidade.vidas > 0 && unidade.qtd_vidas && unidade.qtd_vidas > 0;
-    
+
     if (temMensalidade || temVidas) {
+      // Se essa unidade já foi encontrada via planilha (por ID), não
+      // criar uma segunda entrada com outra chave de texto — isso é
+      // o que fazia os exames sumirem: a segunda entrada não tinha
+      // acesso aos exames indexados pela chave da planilha.
+      if (idsUnidadesEncontradasNaPlanilha.has(unidade.id)) {
+        continue;
+      }
+
       const chave = normalizarUnidade(unidade.unidade);
       if (!unidadesEncontradas[chave]) {
         unidadesEncontradas[chave] = unidade;
@@ -923,12 +948,14 @@ async function processarUpload(file) {
   for (let chavePlanilha in unidadesEncontradas) {
     const unidade = unidadesEncontradas[chavePlanilha];
     const nomeUnidade = unidade.unidade;
-    
-    if (unidadesProcessadas.has(nomeUnidade)) {
+
+    // Dedup por ID (não por nome) — mais robusto caso a mesma unidade
+    // apareça sob duas chaves de texto diferentes.
+    if (unidadesProcessadas.has(unidade.id)) {
       console.log(`⏭️ Unidade já processada: ${nomeUnidade}`);
       continue;
     }
-    unidadesProcessadas.add(nomeUnidade);
+    unidadesProcessadas.add(unidade.id);
 
     console.log(`🔄 Processando: ${nomeUnidade}`);
     console.log(`   Chave planilha: "${chavePlanilha}"`);
@@ -956,11 +983,13 @@ async function processarUpload(file) {
       };
     }
 
-    // Os exames devem vir SOMENTE da chave original da planilha que foi
-    // mapeada para esta unidade. Não fazemos fallback por razão social/nome,
-    // pois matriz e apoio podem compartilhar nomes/razões muito parecidos.
-    // Assim, um exame da matriz nunca "vaza" para APOIO e vice-versa.
-    const examesDaUnidade = examesPorUnidade[chavePlanilha] || [];
+    // Os exames vêm do mapa indexado por ID da unidade (não pelo texto
+    // da chave da planilha) — isso garante que os exames sejam achados
+    // mesmo quando esta mesma unidade também tem mensalidade/vidas e
+    // acabou aparecendo em unidadesEncontradas por uma chave diferente
+    // da usada para indexar os exames. Continua sem fallback por nome
+    // solto, então matriz e apoio nunca se misturam.
+    const examesDaUnidade = examesPorUnidadeId[unidade.id] || [];
 
     if (examesDaUnidade.length === 0) {
       console.log(`   ℹ️ Nenhum exame na planilha para a chave "${chavePlanilha}". Mensalidade/vidas serão mantidas normalmente.`);
