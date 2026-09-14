@@ -3304,6 +3304,35 @@ const resumoColaborador =
 }
 
 
+                            <!-- VERIFICAR DE VERDADE (AO VIVO, CONSOME COTA BX) -->
+
+                            ${
+    (codigoTipoEvento === 'S-2220' || codigoTipoEvento === 'S-2240') &&
+    evento.emitido_esocial !== true &&
+    evento.ja_emitido !== true &&
+    !temRecibo
+        ? `
+            <button
+                type="button"
+                class="
+                    btn
+                    btn-outline-warning
+                    btn-verificar-real-esocial
+                "
+                data-id="${escaparHtml(
+                    evento.id
+                )}"
+                title="Verificar de verdade no eSocial agora (consulta ao vivo, consome cota diária)"
+            >
+
+                <i class="fas fa-satellite-dish"></i>
+
+            </button>
+        `
+        : ''
+}
+
+
                             <!-- ENVIAR -->
 
                             ${
@@ -3473,6 +3502,23 @@ const resumoColaborador =
 
                 btn.onclick =
                     handleVerificarEventoESocial;
+            }
+        );
+
+
+    // ========================================================
+    // BOTÃO VERIFICAR DE VERDADE (AO VIVO, CONSOME COTA BX)
+    // ========================================================
+
+    document
+        .querySelectorAll(
+            '.btn-verificar-real-esocial'
+        )
+        .forEach(
+            btn => {
+
+                btn.onclick =
+                    handleVerificarStatusRealESocial;
             }
         );
 
@@ -9108,57 +9154,6 @@ function adicionarControlesVerificacaoESocial() {
 
                 btnVerificar.onclick =
                     handleVerificarEventoESocial;
-
-
-                // ================================================
-                // BOTÃO DE VERIFICAÇÃO REAL (AO VIVO, CONSOME BX)
-                // ================================================
-
-                let btnVerificarReal =
-                    linha.querySelector(
-                        '.btn-verificar-real-esocial'
-                    );
-
-
-                if (
-                    !btnVerificarReal
-                ) {
-
-                    btnVerificarReal =
-                        document.createElement(
-                            'button'
-                        );
-
-
-                    btnVerificarReal.type =
-                        'button';
-
-
-                    btnVerificarReal.className =
-                        'btn btn-outline-warning btn-verificar-real-esocial';
-
-
-                    btnVerificarReal.dataset.id =
-                        id;
-
-
-                    btnVerificarReal.title =
-                        'Verificar de verdade no eSocial agora (consulta ao vivo, consome cota diária)';
-
-
-                    btnVerificarReal.innerHTML =
-                        '<i class="fas fa-satellite-dish"></i>';
-
-
-                    btnVerificar.insertAdjacentElement(
-                        'afterend',
-                        btnVerificarReal
-                    );
-                }
-
-
-                btnVerificarReal.onclick =
-                    handleVerificarStatusRealESocial;
             }
         }
     );
