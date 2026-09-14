@@ -5455,6 +5455,139 @@ async function verAso(
     );
 }
 
+    // ============================================================
+    // RESOLVER MATRÍCULAS DE UMA HOLDING INTEIRA
+    // ============================================================
+
+    async function resolverMatriculasHolding() {
+
+        const holding = String(
+            document.getElementById('filtroHoldingEvento')?.value || ''
+        ).trim();
+
+        if (!holding) {
+            mostrarAlertaESocial(
+                'Selecione uma holding no filtro antes de resolver as matrículas.',
+                'warning'
+            );
+            return;
+        }
+
+        if (
+            !confirm(
+                `Tentar resolver agora as matrículas pendentes da ` +
+                `holding "${holding}"? Isso consome a cota diária ` +
+                `real de consultas ao eSocial.`
+            )
+        ) {
+            return;
+        }
+
+        const btn = document.getElementById('btnResolverMatriculasHolding');
+        let htmlOriginal = '';
+
+        if (btn) {
+            htmlOriginal = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Resolvendo...';
+        }
+
+        try {
+
+            const token = await obterTokenESocial();
+
+            mostrarAlertaESocial(
+                `Resolvendo matrículas da holding "${holding}"...`,
+                'info'
+            );
+
+            const response = await fetch(
+                apiUrl(
+                    '/api/soc/matriculas-esocial/processar-fila-holding'
+                ),
+                {
+                    method: 'POST',
+                    headers: criarHeaders(token, true),
+                    body: JSON.stringify({
+                        holding,
+                        limite: 15
+                    })
+                }
+            );
+
+            const texto = await response.text();
+            let resultado = {};
+
+            try {
+                resultado = texto ? JSON.parse(texto) : {};
+            } catch (errorJson) {
+                resultado = {
+                    success: false,
+                    error: texto || 'Resposta inválida do servidor.'
+                };
+            }
+
+            if (!response.ok || resultado.success === false) {
+                throw new Error(
+                    resultado.error || `Erro HTTP ${response.status}`
+                );
+            }
+
+            if (resultado.motivo === 'HOLDING_SEM_EMPRESAS_COM_CODIGO_SOC') {
+
+                mostrarAlertaESocial(
+                    `Nenhuma empresa com código SOC encontrada para a ` +
+                    `holding "${holding}".`,
+                    'warning'
+                );
+
+            } else if (resultado.executou === false) {
+
+                mostrarAlertaESocial(
+                    `Não foi possível processar agora: ` +
+                    `${resultado.motivo || 'motivo desconhecido'}.`,
+                    'warning'
+                );
+
+            } else {
+
+                const resultados = resultado.resultados || [];
+                const resolvidos = resultados.filter(
+                    r => r.resolvida
+                ).length;
+
+                mostrarAlertaESocial(
+                    `Processado: ${resolvidos} de ${resultados.length} ` +
+                    `matrícula(s) resolvida(s) agora nesta holding. ` +
+                    `O restante continua na fila automática.`,
+                    resolvidos > 0 ? 'success' : 'info'
+                );
+            }
+
+            await recarregarEventosESocial();
+
+        } catch (error) {
+
+            console.error(
+                '❌ Erro ao resolver matrículas da holding:',
+                error
+            );
+
+            mostrarAlertaESocial(
+                'Não foi possível resolver as matrículas desta ' +
+                'holding: ' + error.message,
+                'warning'
+            );
+
+        } finally {
+
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = htmlOriginal;
+            }
+        }
+    }
+
     async function enviarEventoIndividual(
         id
     ) {
@@ -7367,6 +7500,27 @@ async function initESocial() {
                     event.preventDefault();
 
                     await enviarTodosEventos();
+                };
+        }
+
+
+        // ========================================================
+        // 5b. BOTÃO RESOLVER MATRÍCULAS DA HOLDING
+        // ========================================================
+
+        const btnResolverMatriculasHolding =
+            document.getElementById(
+                'btnResolverMatriculasHolding'
+            );
+
+        if (btnResolverMatriculasHolding) {
+
+            btnResolverMatriculasHolding.onclick =
+                async function (event) {
+
+                    event.preventDefault();
+
+                    await resolverMatriculasHolding();
                 };
         }
 

@@ -27029,7 +27029,8 @@ async function semearFilaMatriculasEsocial() {
 
 
 async function processarFilaMatriculasEsocial({
-    limiteItens = 3
+    limiteItens = 3,
+    codigosEmpresa = null
 } = {}) {
 
     if (
@@ -27068,11 +27069,8 @@ async function processarFilaMatriculasEsocial({
 
     try {
 
-        const {
-            data,
-            error
-        } =
-            await getSupabase()
+        let query =
+            getSupabase()
                 .from(
                     'esocial_matriculas_pendentes'
                 )
@@ -27086,7 +27084,29 @@ async function processarFilaMatriculasEsocial({
                         'erro',
                         'aguardando_janela'
                     ]
-                )
+                );
+
+
+        if (
+            Array.isArray(
+                codigosEmpresa
+            ) &&
+            codigosEmpresa.length
+        ) {
+
+            query =
+                query.in(
+                    'codigo_empresa',
+                    codigosEmpresa
+                );
+        }
+
+
+        const {
+            data,
+            error
+        } =
+            await query
                 .order(
                     'data_evento',
                     {
@@ -27104,7 +27124,11 @@ async function processarFilaMatriculasEsocial({
                     }
                 )
                 .limit(
-                    30
+                    Math.max(
+                        30,
+                        limiteItens *
+                        3
+                    )
                 );
 
 
@@ -29223,6 +29247,162 @@ router.post(
             return res.json(
                 resultado
             );
+
+        } catch (
+            error
+        ) {
+
+            return res
+                .status(
+                    500
+                )
+                .json({
+                    success:
+                        false,
+                    error:
+                        error?.message ||
+                        String(
+                            error
+                        )
+                });
+        }
+    }
+);
+
+
+// ============================================================
+// PROCESSAR FILA DE MATRÍCULAS DE UMA HOLDING INTEIRA
+//
+// Mesmo worker de sempre, só que restrito às empresas (codigo_soc)
+// que pertencem à holding informada. Permite "resolver a holding
+// inteira" em vez de só a fila global ou um colaborador por vez.
+// ============================================================
+
+router.post(
+    '/matriculas-esocial/processar-fila-holding',
+    async (
+        req,
+        res
+    ) => {
+
+        try {
+
+            const holding =
+                String(
+                    req.body?.holding ||
+                    ''
+                ).trim();
+
+
+            if (
+                !holding
+            ) {
+
+                return res
+                    .status(400)
+                    .json({
+                        success:
+                            false,
+                        error:
+                            'holding é obrigatório.'
+                    });
+            }
+
+
+            const limite =
+                Math.min(
+                    30,
+                    Math.max(
+                        1,
+                        Number(
+                            req.body?.limite ||
+                            10
+                        ) ||
+                        10
+                    )
+                );
+
+
+            const {
+                data:
+                    empresasHolding,
+                error:
+                    erroEmpresas
+            } =
+                await getSupabase()
+                    .from(
+                        'precos'
+                    )
+                    .select(
+                        'codigo_soc'
+                    )
+                    .eq(
+                        'holding',
+                        holding
+                    );
+
+
+            if (
+                erroEmpresas
+            ) {
+
+                throw erroEmpresas;
+            }
+
+
+            const codigosEmpresa =
+                Array.from(
+                    new Set(
+                        (
+                            Array.isArray(
+                                empresasHolding
+                            )
+                                ? empresasHolding
+                                : []
+                        )
+                            .map(
+                                item =>
+                                    String(
+                                        item?.codigo_soc ||
+                                        ''
+                                    ).trim()
+                            )
+                            .filter(
+                                Boolean
+                            )
+                    )
+                );
+
+
+            if (
+                !codigosEmpresa.length
+            ) {
+
+                return res.json({
+                    success:
+                        true,
+                    executou:
+                        false,
+                    motivo:
+                        'HOLDING_SEM_EMPRESAS_COM_CODIGO_SOC',
+                    holding
+                });
+            }
+
+
+            const resultado =
+                await processarFilaMatriculasEsocial({
+                    limiteItens:
+                        limite,
+                    codigosEmpresa
+                });
+
+
+            return res.json({
+                ...resultado,
+                holding,
+                codigosEmpresa
+            });
 
         } catch (
             error
