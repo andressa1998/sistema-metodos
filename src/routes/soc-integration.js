@@ -13844,6 +13844,10 @@ async function salvarEventos(
 
                     'divergencias_codigo_agente_soc',
 
+                    'responsaveis_ambientais_soc',
+                    'consulta_responsaveis_ambientais_ok',
+                    'erro_consulta_responsaveis_ambientais',
+
                     's2240_pronto_para_emissao',
                     'bloqueio_emissao_s2240'
                 ].join(', ');
@@ -14361,6 +14365,25 @@ async function salvarEventos(
 
 
             // ====================================================
+            // S-2240 - RESPONSÁVEL AMBIENTAL
+            //
+            // Faltava salvar isso — a prontidão (s2240_pronto_
+            // para_emissao) já considerava esses dados, mas a
+            // coluna nunca era persistida, então gerarXmlS2240
+            // encontrava o campo vazio de novo no próximo envio.
+            // ====================================================
+
+            const responsaveisAmbientaisSocFinal =
+                resolverListaS2240(
+                    [
+                        'responsaveisAmbientaisSoc',
+                        'responsaveis_ambientais_soc'
+                    ],
+                    'responsaveis_ambientais_soc'
+                );
+
+
+            // ====================================================
             // S-2240 - RESOLVER BOOLEANOS
             // ====================================================
 
@@ -14457,6 +14480,16 @@ async function salvarEventos(
                         's2240_pronto_para_emissao'
                     ],
                     's2240_pronto_para_emissao'
+                );
+
+
+            const consultaResponsaveisAmbientaisOkFinal =
+                resolverBooleanoS2240(
+                    [
+                        'consultaResponsaveisAmbientaisOk',
+                        'consulta_responsaveis_ambientais_ok'
+                    ],
+                    'consulta_responsaveis_ambientais_ok'
                 );
 
 
@@ -14563,6 +14596,16 @@ async function salvarEventos(
                         'bloqueio_emissao_s2240'
                     ],
                     'bloqueio_emissao_s2240'
+                );
+
+
+            const erroConsultaResponsaveisAmbientaisFinal =
+                resolverTextoS2240(
+                    [
+                        'erroConsultaResponsaveisAmbientais',
+                        'erro_consulta_responsaveis_ambientais'
+                    ],
+                    'erro_consulta_responsaveis_ambientais'
                 );
 
 
@@ -14934,6 +14977,20 @@ async function salvarEventos(
 
                 divergencias_codigo_agente_soc:
                     divergenciasCodigoAgenteSocFinal,
+
+
+                // ------------------------------------------------
+                // S-2240 - RESPONSÁVEL AMBIENTAL
+                // ------------------------------------------------
+
+                responsaveis_ambientais_soc:
+                    responsaveisAmbientaisSocFinal,
+
+                consulta_responsaveis_ambientais_ok:
+                    consultaResponsaveisAmbientaisOkFinal,
+
+                erro_consulta_responsaveis_ambientais:
+                    erroConsultaResponsaveisAmbientaisFinal,
 
 
                 // ------------------------------------------------
@@ -44305,12 +44362,23 @@ function enriquecerEventoParaFrontendEsocial(
     // ========================================================
     // PODE EMITIR
     //
-    // POR ENQUANTO SOMENTE S-2220.
+    // S-2220 sempre que os demais requisitos baterem. S-2240
+    // só quando o próprio evento já foi marcado como pronto de
+    // verdade (responsável ambiental + risco/GHE resolvidos —
+    // ver aplicarRegraEventosEsocial).
     // ========================================================
 
     const podeEmitir =
-        tipoEvento ===
-            'S-2220' &&
+        (
+            tipoEvento ===
+                'S-2220' ||
+            (
+                tipoEvento ===
+                    'S-2240' &&
+                evento.s2240_pronto_para_emissao ===
+                    true
+            )
+        ) &&
         confirmadoNaoEmitido &&
         matriculaOficialPronta &&
         !emitidoEsocial &&
