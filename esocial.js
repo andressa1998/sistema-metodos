@@ -5253,20 +5253,6 @@ async function verAso(
 
 
                 if (
-                    String(
-                        evento.tipo_evento ||
-                        ''
-                    )
-                        .trim()
-                        .toUpperCase() !==
-                    'S-2220'
-                ) {
-
-                    return false;
-                }
-
-
-                if (
                     evento.pode_emitir !==
                     true
                 ) {
@@ -5360,25 +5346,9 @@ async function verAso(
 
 
                 // ================================================
-                // SOMENTE S-2220 POR ENQUANTO
-                // ================================================
-
-                if (
-                    String(
-                        evento.tipo_evento ||
-                        ''
-                    )
-                        .trim()
-                        .toUpperCase() !==
-                    'S-2220'
-                ) {
-
-                    return false;
-                }
-
-
-                // ================================================
                 // BACKEND PRECISA LIBERAR EXPLICITAMENTE
+                //
+                // pode_emitir já diferencia S-2220 x S-2240 certo.
                 // ================================================
 
                 if (
@@ -6032,26 +6002,10 @@ async function enviarIds(
 
 
                     // ============================================
-                    // SOMENTE S-2220 POR ENQUANTO
-                    // ============================================
-
-                    if (
-                        String(
-                            evento.tipo_evento ||
-                            ''
-                        )
-                            .trim()
-                            .toUpperCase() !==
-                        'S-2220'
-                    ) {
-
-                        return false;
-                    }
-
-
-                    // ============================================
                     // BACKEND PRECISA TER CLASSIFICADO
                     // COMO DISPONÍVEL PARA ENVIO
+                    //
+                    // pode_emitir já diferencia S-2220 x S-2240.
                     // ============================================
 
                     if (
@@ -7404,11 +7358,16 @@ async function initESocial() {
 
         if (btnEnviarTodos) {
 
-            // O fluxo final é manual por seleção.
-            // Não disponibilizar envio em massa sem escolha do usuário.
-            btnEnviarTodos.disabled = true;
-            btnEnviarTodos.style.display = 'none';
-            btnEnviarTodos.onclick = null;
+            btnEnviarTodos.disabled = false;
+            btnEnviarTodos.style.display = '';
+
+            btnEnviarTodos.onclick =
+                async function (event) {
+
+                    event.preventDefault();
+
+                    await enviarTodosEventos();
+                };
         }
 
 
