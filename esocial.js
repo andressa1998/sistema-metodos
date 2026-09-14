@@ -1626,6 +1626,246 @@ let fimAcompanhamentoPreparacaoEsocial = 0;
     }
 
 
+    async function verificarColaboradoresSemAso() {
+
+        const btn =
+            document.getElementById(
+                'btnVerificarSemAso'
+            );
+
+        const statusEl =
+            document.getElementById(
+                'buscarSocStatus'
+            );
+
+        const holding =
+            document.getElementById(
+                'socHolding'
+            )?.value || '';
+
+        const empresaId =
+            document.getElementById(
+                'socEmpresa'
+            )?.value || '';
+
+        const dataInicio =
+            document.getElementById(
+                'socDataInicio'
+            )?.value || '';
+
+        const dataFim =
+            document.getElementById(
+                'socDataFim'
+            )?.value || '';
+
+        if (!dataInicio || !dataFim) {
+
+            if (statusEl) {
+
+                statusEl.innerHTML =
+                    '<div class="alert alert-warning">' +
+                    'Informe a data inicial e a data final.' +
+                    '</div>';
+            }
+
+            return;
+        }
+
+        if (dataInicio > dataFim) {
+
+            if (statusEl) {
+
+                statusEl.innerHTML =
+                    '<div class="alert alert-warning">' +
+                    'A data inicial não pode ser maior que a data final.' +
+                    '</div>';
+            }
+
+            return;
+        }
+
+        if (btn) {
+
+            btn.disabled = true;
+
+            btn.innerHTML =
+                '<i class="fas fa-spinner fa-spin me-1"></i>' +
+                ' Verificando...';
+        }
+
+        if (statusEl) {
+
+            statusEl.innerHTML =
+                '<div class="alert alert-info">' +
+                'Comparando admitidos no período com quem tem ASO admissional no SOC...' +
+                '</div>';
+        }
+
+        try {
+
+            const token =
+                await obterTokenESocial();
+
+            const response =
+                await fetch(
+                    apiUrl(
+                        '/api/soc/colaboradores-sem-aso'
+                    ),
+                    {
+                        method: 'POST',
+                        headers: criarHeaders(token, true),
+                        body: JSON.stringify({
+                            holding,
+                            empresaId,
+                            dataInicio,
+                            dataFim
+                        })
+                    }
+                );
+
+            const textoResposta =
+                await response.text();
+
+            let result = {};
+
+            try {
+
+                result =
+                    textoResposta
+                        ? JSON.parse(textoResposta)
+                        : {};
+
+            } catch (erroJson) {
+
+                throw new Error(
+                    'O servidor retornou uma resposta inválida.'
+                );
+            }
+
+            if (
+                !response.ok ||
+                result.success === false
+            ) {
+
+                throw new Error(
+                    result.error ||
+                    `Erro HTTP ${response.status}`
+                );
+            }
+
+            const empresas =
+                Array.isArray(result.empresas)
+                    ? result.empresas
+                    : [];
+
+            const empresasComErro =
+                empresas.filter(e => e.erro);
+
+            const empresasComGente =
+                empresas.filter(
+                    e =>
+                        Array.isArray(e.colaboradores) &&
+                        e.colaboradores.length
+                );
+
+            if (!empresasComGente.length) {
+
+                let avisoErros = '';
+
+                if (empresasComErro.length) {
+
+                    avisoErros =
+                        '<hr class="my-2">' +
+                        '<strong>Não foi possível checar:</strong><br>' +
+                        empresasComErro
+                            .map(
+                                e =>
+                                    `${escaparHtml(e.unidade)}: ${escaparHtml(e.erro?.message || 'erro desconhecido')}`
+                            )
+                            .join('<br>');
+                }
+
+                if (statusEl) {
+
+                    statusEl.innerHTML =
+                        '<div class="alert alert-success">' +
+                        '<strong>Nenhum colaborador sem ASO admissional encontrado</strong> ' +
+                        'entre os admitidos no período.' +
+                        avisoErros +
+                        '</div>';
+                }
+
+                return;
+            }
+
+            const linhasTabela =
+                empresasComGente
+                    .map(empresa =>
+                        empresa.colaboradores
+                            .map(
+                                c => `
+                                    <tr>
+                                        <td>${escaparHtml(empresa.unidade)}</td>
+                                        <td>${escaparHtml(c.nome)}</td>
+                                        <td>${escaparHtml(c.cargo || '—')}</td>
+                                        <td>${escaparHtml(c.nomeUnidade || '—')}</td>
+                                        <td>${escaparHtml(c.dataAdmissao || '—')}</td>
+                                    </tr>
+                                `
+                            )
+                            .join('')
+                    )
+                    .join('');
+
+            if (statusEl) {
+
+                statusEl.innerHTML =
+                    '<div class="alert alert-warning">' +
+                    `<strong>${result.totalSemAso} colaborador(es)</strong> admitido(s) no período ` +
+                    'sem ASO admissional registrado no SOC:' +
+                    '</div>' +
+                    '<div class="table-responsive">' +
+                    '<table class="table table-sm table-bordered">' +
+                    '<thead><tr>' +
+                    '<th>Empresa</th><th>Colaborador</th><th>Cargo</th>' +
+                    '<th>Unidade (SOC)</th><th>Admissão</th>' +
+                    '</tr></thead>' +
+                    `<tbody>${linhasTabela}</tbody>` +
+                    '</table>' +
+                    '</div>';
+            }
+
+        } catch (error) {
+
+            console.error(
+                '❌ Erro ao verificar colaboradores sem ASO:',
+                error
+            );
+
+            if (statusEl) {
+
+                statusEl.innerHTML =
+                    '<div class="alert alert-danger">' +
+                    '<strong>Erro ao verificar colaboradores sem ASO.</strong>' +
+                    '<br>' +
+                    error.message +
+                    '</div>';
+            }
+
+        } finally {
+
+            if (btn) {
+
+                btn.disabled = false;
+
+                btn.innerHTML =
+                    '<i class="fas fa-user-slash me-1"></i>' +
+                    ' Verificar sem ASO';
+            }
+        }
+    }
+
+
     function pararAcompanhamentoPreparacaoEsocial() {
 
         if (
@@ -7424,6 +7664,33 @@ async function initESocial() {
             console.error(
                 '❌ Botão btnConfirmarBuscaSoc não encontrado'
             );
+        }
+
+
+        const btnVerificarSemAso =
+            document.getElementById(
+                'btnVerificarSemAso'
+            );
+
+        if (btnVerificarSemAso) {
+
+            btnVerificarSemAso.onclick =
+                async function (event) {
+
+                    event.preventDefault();
+
+                    try {
+
+                        await verificarColaboradoresSemAso();
+
+                    } catch (error) {
+
+                        console.error(
+                            '❌ Erro ao verificar colaboradores sem ASO:',
+                            error
+                        );
+                    }
+                };
         }
 
 

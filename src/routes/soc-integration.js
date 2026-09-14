@@ -3028,6 +3028,329 @@ function montarFiltrosS2220({
 }
 
 
+// ============================================================
+// COLABORADORES SEM ASO NO PERÍODO
+//
+// O S-2220 é gerado a partir do ASO: quem nunca fez ASO
+// simplesmente não gera nenhum evento, sem aviso. Para detectar
+// essa lacuna é preciso comparar o cadastro de funcionários
+// ativos no SOC (extração "funcionarios") contra quem de fato
+// tem ASO no período (mesma extração usada para o S-2220).
+// ============================================================
+
+const SOC_SITUACOES_ATIVAS = [
+    'ativo',
+    'ferias',
+    'férias'
+];
+
+async function buscarFuncionariosAtivosSoc(
+    codigoEmpresa
+) {
+
+    const extracao =
+        obterExtracao(
+            'funcionarios'
+        );
+
+    const retorno =
+        await exportarDadosSoc({
+
+            codigo:
+                extracao.codigo,
+
+            chave:
+                extracao.chave,
+
+            empresa:
+                SOC_CONFIG
+                    .empresaPrincipal,
+
+            empresaTrabalho:
+                codigoEmpresa,
+
+            filtros:
+                {}
+        });
+
+    const linhas =
+        localizarArray(
+            retorno
+        );
+
+    return linhas
+        .map(
+            item => ({
+
+                cpf:
+                    normalizarCpf(
+                        primeiroCampo(
+                            item,
+                            [
+                                'CPFFUNCIONARIO',
+                                'cpfFuncionario'
+                            ],
+                            ''
+                        )
+                    ),
+
+                nome:
+                    texto(
+                        primeiroCampo(
+                            item,
+                            [
+                                'NOME',
+                                'nome'
+                            ],
+                            ''
+                        )
+                    ),
+
+                codigoFuncionario:
+                    texto(
+                        primeiroCampo(
+                            item,
+                            [
+                                'CODIGO',
+                                'codigo'
+                            ],
+                            ''
+                        )
+                    ),
+
+                codigoUnidade:
+                    texto(
+                        primeiroCampo(
+                            item,
+                            [
+                                'CODIGOUNIDADE',
+                                'codigoUnidade'
+                            ],
+                            ''
+                        )
+                    ),
+
+                nomeUnidade:
+                    texto(
+                        primeiroCampo(
+                            item,
+                            [
+                                'NOMEUNIDADE',
+                                'nomeUnidade'
+                            ],
+                            ''
+                        )
+                    ),
+
+                cargo:
+                    texto(
+                        primeiroCampo(
+                            item,
+                            [
+                                'NOMECARGO',
+                                'nomeCargo'
+                            ],
+                            ''
+                        )
+                    ),
+
+                situacao:
+                    texto(
+                        primeiroCampo(
+                            item,
+                            [
+                                'SITUACAO',
+                                'situacao'
+                            ],
+                            ''
+                        )
+                    ),
+
+                dataAdmissao:
+                    texto(
+                        primeiroCampo(
+                            item,
+                            [
+                                'DATA_ADMISSAO',
+                                'dataAdmissao'
+                            ],
+                            ''
+                        )
+                    )
+            })
+        )
+        .filter(
+            item =>
+                item.cpf &&
+                SOC_SITUACOES_ATIVAS.includes(
+                    item.situacao
+                        .trim()
+                        .toLowerCase()
+                )
+        );
+}
+
+
+// tpExameOcup '0' = Admissional (ver tiposExameOcup mais acima no arquivo).
+const TP_EXAME_OCUP_ADMISSIONAL =
+    '0';
+
+async function buscarCpfsComAsoAdmissionalNoPeriodoSoc(
+    codigoEmpresa,
+    dataInicioSoc,
+    dataFimSoc
+) {
+
+    const extracao =
+        obterExtracao(
+            's2220'
+        );
+
+    const filtros =
+        montarFiltrosS2220({
+
+            dataInicio:
+                dataInicioSoc,
+
+            dataFim:
+                dataFimSoc
+        });
+
+    const retorno =
+        await exportarDadosSoc({
+
+            codigo:
+                extracao.codigo,
+
+            chave:
+                extracao.chave,
+
+            empresa:
+                codigoEmpresa,
+
+            filtros
+        });
+
+    const linhas =
+        localizarArray(
+            retorno
+        );
+
+    const cpfs =
+        new Set();
+
+    for (
+        const linha
+        of linhas
+    ) {
+
+        const tpExameOcup =
+            texto(
+                primeiroCampo(
+                    linha,
+                    [
+                        'TPEXAMEOCUP',
+                        'tpExameOcup'
+                    ],
+                    ''
+                )
+            );
+
+        if (
+            tpExameOcup !==
+            TP_EXAME_OCUP_ADMISSIONAL
+        ) {
+
+            continue;
+        }
+
+        const cpf =
+            normalizarCpf(
+                primeiroCampo(
+                    linha,
+                    [
+                        'CPFTRAB',
+                        'cpfTrab',
+                        'cpf'
+                    ],
+                    ''
+                )
+            );
+
+        if (
+            cpf
+        ) {
+
+            cpfs.add(
+                cpf
+            );
+        }
+    }
+
+    return cpfs;
+}
+
+
+async function buscarColaboradoresSemAsoSoc({
+    codigoEmpresa,
+    dataInicioSoc,
+    dataFimSoc
+}) {
+
+    const inicioIso =
+        normalizarData(
+            dataInicioSoc
+        );
+
+    const fimIso =
+        normalizarData(
+            dataFimSoc
+        );
+
+    const [
+        funcionariosAtivos,
+        cpfsComAsoAdmissional
+    ] =
+        await Promise.all([
+
+            buscarFuncionariosAtivosSoc(
+                codigoEmpresa
+            ),
+
+            buscarCpfsComAsoAdmissionalNoPeriodoSoc(
+                codigoEmpresa,
+                dataInicioSoc,
+                dataFimSoc
+            )
+        ]);
+
+    // Só quem foi ADMITIDO dentro do período informado. O ASO
+    // admissional é sempre obrigatório e imediato — ao contrário do
+    // periódico, não faz sentido a ausência dele "no mês".
+    const admitidosNoPeriodo =
+        funcionariosAtivos.filter(
+            funcionario => {
+
+                const admissaoIso =
+                    normalizarData(
+                        funcionario.dataAdmissao
+                    );
+
+                return admissaoIso &&
+                    admissaoIso >= inicioIso &&
+                    admissaoIso <= fimIso;
+            }
+        );
+
+    return admitidosNoPeriodo.filter(
+        funcionario =>
+            !cpfsComAsoAdmissional.has(
+                funcionario.cpf
+            )
+    );
+}
+
+
 function criarChaveAsoS2220(
     registro
 ) {
@@ -9774,6 +10097,84 @@ async function consultarResponsaveisAmbientaisS2240(
     return [];
 }
 
+// ============================================================
+// CARGOS COM EXPOSIÇÃO A RISCO OCUPACIONAL (S-2240)
+//
+// Lista fornecida pela empresa: só estes cargos têm agente
+// nocivo/GHE de verdade. Fora dessa lista, a ausência de
+// característica de risco no SOC é o resultado ESPERADO (não
+// uma falha de cadastro) — não faz sentido bloquear o S-2240
+// desses colaboradores esperando um dado que nunca vai existir.
+// ============================================================
+
+const CARGOS_COM_RISCO_ESOCIAL = [
+    'AUXILIAR DE CONSULTORIO',
+    'AUXILIAR DE DENTISTA',
+    'AUXILIAR DE ENFERMAGAM',
+    'AUXILIAR DE ENFERMAGEM',
+    'AUXILIAR DE LABORATORIO',
+    'AUXILIAR DE LABORATORIO DE ANALISES CLINICAS',
+    'AUXILIAR DE SAUDE BUCAL - ASB',
+    'AUXILIAR DE SAUDE BUCAL',
+    'BIOMEDICO',
+    'ENFERMEIRO',
+    'ESTAGIARIA AUXILIAR DE SAUDE BUCAL',
+    'ESTAGIARIO - TECNICO DE ENFERMAGEM',
+    'ESTAGIARIO (a) DE ENFERMAGEM',
+    'ESTAGIARIO (a) TECNICO EM SAUDE BUCAL',
+    'ESTAGIARIO DE BIOMEDICINA',
+    'ESTAGIARIO DE LABORATORIO',
+    'FLEBOTOMISTA',
+    'TECNICA DE ENFERMAGEM',
+    'TECNICA DE LABORATORIO',
+    'TECNICA DE SAUDE BUCAL',
+    'TECNICO (a) DE ANALISE CLINICAS',
+    'TECNICO EM RADIOLOGIA',
+    'MOTORISTA'
+].map(
+    normalizarCargoEsocial
+);
+
+
+function normalizarCargoEsocial(
+    nome
+) {
+
+    return String(
+        nome ||
+        ''
+    )
+        .normalize('NFD')
+        .replace(/[̀-ͯ]/g, '')
+        .replace(/\(.*?\)/g, ' ')
+        .replace(/[^A-Za-z0-9]+/g, ' ')
+        .trim()
+        .toUpperCase();
+}
+
+
+function cargoTemRiscoConhecidoEsocial(
+    cargo
+) {
+
+    if (
+        !cargo
+    ) {
+
+        // Sem cargo informado, não dá para afirmar que não há
+        // risco — mantém a exigência de característica de risco
+        // (comportamento anterior, mais conservador).
+        return true;
+    }
+
+    return CARGOS_COM_RISCO_ESOCIAL.includes(
+        normalizarCargoEsocial(
+            cargo
+        )
+    );
+}
+
+
 async function aplicarRegraEventosEsocial(
     eventos2220
 ) {
@@ -11806,9 +12207,11 @@ async function aplicarRegraEventosEsocial(
         // ========================================================
         // PRONTIDÃO REAL DO S-2240
         //
-        // Só fica pronto quando de fato temos responsável
-        // ambiental e característica de risco/GHE resolvidos —
-        // sem isso faltaria campo obrigatório no XML.
+        // Precisa de responsável ambiental sempre. Característica
+        // de risco/GHE só é exigida quando o CARGO do colaborador
+        // está na lista de cargos com risco conhecido — fora dela,
+        // SOC sem nenhuma característica é o esperado, não falta
+        // de cadastro (ver CARGOS_COM_RISCO_ESOCIAL).
         // ========================================================
 
         const motivosBloqueioS2240 =
@@ -11824,9 +12227,17 @@ async function aplicarRegraEventosEsocial(
             );
         }
 
+        const cargoComRisco =
+            cargoTemRiscoConhecidoEsocial(
+                eventoOriginal.cargoColaborador
+            );
+
         if (
-            !consultaCaracteristicasOk ||
-            !caracteristicasRiscosFuncionario.length
+            cargoComRisco &&
+            (
+                !consultaCaracteristicasOk ||
+                !caracteristicasRiscosFuncionario.length
+            )
         ) {
 
             motivosBloqueioS2240.push(
@@ -47500,6 +47911,178 @@ async function salvarRiscosFuncionario1875(
         `💾 ${registros.length} risco(s) do funcionário salvos no Supabase.`
     );
 }
+
+
+router.post(
+    '/colaboradores-sem-aso',
+    async (
+        req,
+        res
+    ) => {
+
+        try {
+
+            const {
+                empresaId,
+                holding,
+                dataInicio,
+                dataFim
+            } =
+                req.body ||
+                {};
+
+            if (
+                !dataInicio ||
+                !dataFim
+            ) {
+
+                return res
+                    .status(400)
+                    .json({
+                        success:
+                            false,
+                        error:
+                            'dataInicio e dataFim são obrigatórios.'
+                    });
+            }
+
+            const dataInicioSoc =
+                converterDataParaSoc(
+                    dataInicio
+                );
+
+            const dataFimSoc =
+                converterDataParaSoc(
+                    dataFim
+                );
+
+            const empresas =
+                await buscarEmpresasSupabase({
+                    holding,
+                    empresaId
+                });
+
+            if (
+                !empresas.length
+            ) {
+
+                return res.json({
+                    success: true,
+                    totalSemAso: 0,
+                    empresas: []
+                });
+            }
+
+            const resultado =
+                [];
+
+            let totalSemAso =
+                0;
+
+            const codigosSocJaConsultados =
+                new Set();
+
+            for (
+                const empresaCadastro
+                of empresas
+            ) {
+
+                const codigoSoc =
+                    String(
+                        empresaCadastro
+                            .codigo_soc ||
+                        ''
+                    ).trim();
+
+                if (
+                    !codigoSoc ||
+                    codigosSocJaConsultados.has(
+                        codigoSoc
+                    )
+                ) {
+
+                    continue;
+                }
+
+                codigosSocJaConsultados.add(
+                    codigoSoc
+                );
+
+                try {
+
+                    const semAso =
+                        await buscarColaboradoresSemAsoSoc({
+                            codigoEmpresa:
+                                codigoSoc,
+                            dataInicioSoc,
+                            dataFimSoc
+                        });
+
+                    if (
+                        semAso.length
+                    ) {
+
+                        totalSemAso +=
+                            semAso.length;
+
+                        resultado.push({
+                            id:
+                                empresaCadastro.id,
+                            unidade:
+                                empresaCadastro.unidade,
+                            holding:
+                                empresaCadastro.holding ||
+                                null,
+                            codigoSoc,
+                            colaboradores:
+                                semAso
+                        });
+                    }
+
+                } catch (erroEmpresa) {
+
+                    console.error(
+                        `❌ Erro ao checar ASO - ${empresaCadastro.unidade} (SOC ${codigoSoc}):`,
+                        formatarErro(erroEmpresa)
+                    );
+
+                    resultado.push({
+                        id:
+                            empresaCadastro.id,
+                        unidade:
+                            empresaCadastro.unidade,
+                        holding:
+                            empresaCadastro.holding ||
+                            null,
+                        codigoSoc,
+                        erro:
+                            formatarErro(erroEmpresa)
+                    });
+                }
+            }
+
+            res.json({
+                success: true,
+                totalSemAso,
+                empresas: resultado
+            });
+
+        } catch (error) {
+
+            console.error(
+                '❌ Erro em /colaboradores-sem-aso:',
+                formatarErro(error)
+            );
+
+            res
+                .status(500)
+                .json({
+                    success: false,
+                    error: error?.message || String(error)
+                });
+        }
+    }
+);
 
 
 // ============================================================

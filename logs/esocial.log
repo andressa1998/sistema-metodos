@@ -1639,3 +1639,16 @@
 {"level":"info","message":"Ambiente: development","timestamp":"2026-09-14T18:05:43.220Z"}
 {"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-14T18:05:43.220Z"}
 {"level":"info","message":"POST /api/soc/matriculas-esocial/processar-fila-holding 200 - 8838ms - ::1","timestamp":"2026-09-14T18:05:55.881Z"}
+{"level":"info","message":"Servidor rodando na porta 3002","timestamp":"2026-09-14T19:57:48.709Z"}
+{"level":"info","message":"Ambiente: development","timestamp":"2026-09-14T19:57:48.711Z"}
+{"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-14T19:57:48.711Z"}
+{"level":"info","message":"GET /api/soc/debug-funcionarios-soc/2126492 200 - 1976ms - ::1","timestamp":"2026-09-14T19:57:55.546Z"}
+{"level":"info","message":"Servidor rodando na porta 3002","timestamp":"2026-09-14T19:59:32.555Z"}
+{"level":"info","message":"Ambiente: development","timestamp":"2026-09-14T19:59:32.556Z"}
+{"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-14T19:59:32.557Z"}
+{"level":"info","message":"POST /api/soc/colaboradores-sem-aso 200 - 2767ms - ::1","timestamp":"2026-09-14T19:59:44.903Z"}
+{"level":"info","message":"Servidor rodando na porta 3002","timestamp":"2026-09-14T20:01:51.885Z"}
+{"level":"info","message":"Ambiente: development","timestamp":"2026-09-14T20:01:51.887Z"}
+{"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-14T20:01:51.887Z"}
+{"level":"info","message":"POST /api/soc/colaboradores-sem-aso 200 - 964ms - ::1","timestamp":"2026-09-14T20:01:57.686Z"}
+{"level":"info","message":"POST /api/soc/colaboradores-sem-aso 200 - 1339ms - ::1","timestamp":"2026-09-14T20:02:04.928Z"}
