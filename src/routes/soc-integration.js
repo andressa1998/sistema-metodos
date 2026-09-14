@@ -33623,15 +33623,13 @@ async function verificarEventoExistenteNoEsocialAntesDoEnvio(
 
 
     // ========================================================
-    // NOVOS EVENTOS SOB CONTROLE EXCLUSIVO
+    // VERIFICAÇÃO AO VIVO RECENTE (QUALQUER EVENTO)
     //
-    // A regra de data (nossa base é a fonte de controle depois
-    // do corte) sozinha NÃO é garantia suficiente para um envio
-    // real e irreversível. Se já existir uma verificação ao vivo
-    // recente (menos de 2h) no eSocial, reaproveitamos o
-    // resultado para não gastar cota BX à toa. Caso contrário,
-    // caímos para a consulta BX real abaixo, como qualquer
-    // outro evento.
+    // Se já existe uma verificação ao vivo recente (menos de 2h)
+    // no eSocial para este evento — seja ele histórico ou sob
+    // controle exclusivo — reaproveitamos o resultado em vez de
+    // gastar cota BX à toa (ou de bloquear o envio por causa de
+    // uma cota diária já esgotada quando já sabemos a resposta).
     // ========================================================
 
     const FRESCOR_VERIFICACAO_BX_MS =
@@ -33640,117 +33638,165 @@ async function verificarEventoExistenteNoEsocialAntesDoEnvio(
         60 *
         1000;
 
+    const verificadoEm =
+        evento.verificado_esocial_em
+            ? new Date(
+                evento.verificado_esocial_em
+            )
+            : null;
+
+    const verificacaoRecente =
+        Boolean(
+            evento.verificacao_esocial_completa === true &&
+            verificadoEm &&
+            !Number.isNaN(
+                verificadoEm.getTime()
+            ) &&
+            (
+                Date.now() -
+                verificadoEm.getTime()
+            ) < FRESCOR_VERIFICACAO_BX_MS
+        );
+
+    if (
+        verificacaoRecente
+    ) {
+
+        return {
+
+            success:
+                true,
+
+            verificacaoCompleta:
+                true,
+
+            jaExisteNoEsocial:
+                Boolean(
+                    evento.existe_no_esocial
+                ),
+
+            origem:
+                'verificacao-recente',
+
+            eventoForaJanelaSegura:
+                false,
+
+            dataReferencia:
+                obterDataReferenciaEventoLocalBx(
+                    evento
+                ),
+
+            correspondente:
+                evento.existe_no_esocial
+                    ? {
+
+                        tipoEvento,
+
+                        idEvento:
+                            String(
+                                evento.id_evento_esocial_existente ||
+                                ''
+                            ).trim() ||
+                            null,
+
+                        numeroRecibo:
+                            String(
+                                evento.numero_recibo_existente ||
+                                ''
+                            ).trim() ||
+                            null,
+
+                        cpf:
+                            normalizarCpfEsocial(
+                                evento.cpf
+                            ),
+
+                        matricula:
+                            String(
+                                evento.matricula ||
+                                ''
+                            ).trim(),
+
+                        dataReferencia:
+                            obterDataReferenciaEventoLocalBx(
+                                evento
+                            )
+                    }
+                    : null,
+
+            consulta: {
+
+                realizada:
+                    false,
+
+                motivo:
+                    'Reaproveitada verificação BX ao vivo recente (menos de 2h).'
+            },
+
+            download: {
+
+                realizado:
+                    false
+            }
+        };
+    }
+
+
+    // ========================================================
+    // NOVOS EVENTOS SOB CONTROLE EXCLUSIVO
+    //
+    // Sem verificação recente para reaproveitar: a regra de data
+    // (nossa base é a fonte de controle depois do corte) basta
+    // pra eventos futuros/recém-criados. Eventos históricos caem
+    // para a consulta BX real logo abaixo.
+    // ========================================================
+
     if (
         eventoSobControleExclusivoEsocial(
             evento
         )
     ) {
 
-        const verificadoEm =
-            evento.verificado_esocial_em
-                ? new Date(
-                    evento.verificado_esocial_em
-                )
-                : null;
+        return {
 
-        const verificacaoRecente =
-            Boolean(
-                evento.verificacao_esocial_completa === true &&
-                verificadoEm &&
-                !Number.isNaN(
-                    verificadoEm.getTime()
-                ) &&
-                (
-                    Date.now() -
-                    verificadoEm.getTime()
-                ) < FRESCOR_VERIFICACAO_BX_MS
-            );
+            success:
+                true,
 
-        if (
-            verificacaoRecente
-        ) {
+            verificacaoCompleta:
+                true,
 
-            return {
+            jaExisteNoEsocial:
+                false,
 
-                success:
-                    true,
+            origem:
+                'controle-exclusivo',
 
-                verificacaoCompleta:
-                    true,
+            eventoForaJanelaSegura:
+                false,
 
-                jaExisteNoEsocial:
-                    Boolean(
-                        evento.existe_no_esocial
-                    ),
+            dataReferencia:
+                obterDataReferenciaEventoLocalBx(
+                    evento
+                ),
 
-                origem:
-                    'controle-exclusivo-verificacao-recente',
+            correspondente:
+                null,
 
-                eventoForaJanelaSegura:
+            consulta: {
+
+                realizada:
                     false,
 
-                dataReferencia:
-                    obterDataReferenciaEventoLocalBx(
-                        evento
-                    ),
+                motivo:
+                    'Evento posterior à data de início do controle exclusivo.'
+            },
 
-                correspondente:
-                    evento.existe_no_esocial
-                        ? {
+            download: {
 
-                            tipoEvento,
-
-                            idEvento:
-                                String(
-                                    evento.id_evento_esocial_existente ||
-                                    ''
-                                ).trim() ||
-                                null,
-
-                            numeroRecibo:
-                                String(
-                                    evento.numero_recibo_existente ||
-                                    ''
-                                ).trim() ||
-                                null,
-
-                            cpf:
-                                normalizarCpfEsocial(
-                                    evento.cpf
-                                ),
-
-                            matricula:
-                                String(
-                                    evento.matricula ||
-                                    ''
-                                ).trim(),
-
-                            dataReferencia:
-                                obterDataReferenciaEventoLocalBx(
-                                    evento
-                                )
-                        }
-                        : null,
-
-                consulta: {
-
-                    realizada:
-                        false,
-
-                    motivo:
-                        'Reaproveitada verificação BX ao vivo recente (menos de 2h).'
-                },
-
-                download: {
-
-                    realizado:
-                        false
-                }
-            };
-        }
-
-        // Sem verificação recente: seguimos para a consulta BX
-        // real logo abaixo, mesmo estando sob controle exclusivo.
+                realizado:
+                    false
+            }
+        };
     }
 
 
