@@ -8659,6 +8659,196 @@ async function verificarEventoNoESocial(
 
 
 // ============================================================
+// VERIFICAÇÃO REAL (AO VIVO, CONSOME COTA BX)
+//
+// Diferente de verificarEventoNoESocial (que só olha cache
+// local, sem custo), isso pergunta de verdade pro governo se o
+// S-2220/S-2240 já existe, via /sincronizar-esocial-existente.
+// Confere os dois eventos da pessoa (S-2220 e S-2240) quando
+// existirem, num clique só.
+// ============================================================
+
+async function verificarStatusRealESocial(
+    id,
+    botao = null
+) {
+
+    const evento =
+        encontrarEvento(
+            id
+        );
+
+    if (
+        !evento
+    ) {
+
+        mostrarAlertaESocial(
+            'Evento não encontrado na tela.',
+            'warning'
+        );
+
+        return;
+    }
+
+    const irmao =
+        eventosESocial.find(
+            e =>
+                String(e.cpf) === String(evento.cpf) &&
+                String(e.id) !== String(evento.id) &&
+                ['S-2220', 'S-2240'].includes(
+                    String(e.tipo_evento || '').trim().toUpperCase()
+                )
+        );
+
+    const idsParaChecar =
+        irmao
+            ? [evento.id, irmao.id]
+            : [evento.id];
+
+    let htmlBotaoOriginal = '';
+
+    if (botao) {
+        htmlBotaoOriginal = botao.innerHTML;
+        botao.disabled = true;
+        botao.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    }
+
+    try {
+
+        const token =
+            await obterTokenESocial();
+
+        mostrarAlertaESocial(
+            `Consultando o eSocial de verdade para ${evento.colaborador || 'o colaborador'}...`,
+            'info'
+        );
+
+        const resultados = [];
+
+        for (const eid of idsParaChecar) {
+
+            const response =
+                await fetch(
+                    apiUrl(
+                        `/api/soc/sincronizar-esocial-existente/${encodeURIComponent(eid)}`
+                    ),
+                    {
+                        method: 'POST',
+                        headers: criarHeaders(token, true),
+                        body: JSON.stringify({})
+                    }
+                );
+
+            const texto = await response.text();
+            let resultado = {};
+
+            try {
+                resultado = texto ? JSON.parse(texto) : {};
+            } catch (erroJson) {
+                resultado = {
+                    success: false,
+                    error: texto || 'Resposta inválida do servidor.'
+                };
+            }
+
+            resultados.push({
+                id: eid,
+                status: response.status,
+                resultado
+            });
+        }
+
+        const linhas =
+            resultados.map(r => {
+
+                const ev =
+                    encontrarEvento(r.id) ||
+                    {};
+
+                const tipo =
+                    ev.tipo_evento ||
+                    '?';
+
+                if (r.status === 429) {
+                    return `${tipo}: limite diário de consultas ao eSocial atingido para este empregador.`;
+                }
+
+                if (r.resultado?.soapFault) {
+                    const msg = r.resultado.error || '';
+                    if (/procura(ç|c)(ã|a)o/i.test(msg)) {
+                        return `${tipo}: SEM PROCURAÇÃO ELETRÔNICA para consultar este empregador.`;
+                    }
+                    return `${tipo}: erro do eSocial (${msg}).`;
+                }
+
+                if (r.resultado?.success === false) {
+                    return `${tipo}: ${r.resultado.error || 'não foi possível verificar agora.'}`;
+                }
+
+                if (r.resultado?.jaExisteNoEsocial) {
+                    const recibo =
+                        r.resultado.eventoCorrespondente?.numeroRecibo ||
+                        '-';
+                    return `${tipo}: JÁ ENVIADO — recibo ${recibo}.`;
+                }
+
+                if (r.resultado?.podeEnviar) {
+                    return `${tipo}: não encontrado no eSocial — pronto para enviar.`;
+                }
+
+                return `${tipo}: ${r.resultado?.motivoBloqueio || 'situação ainda não confirmada com segurança.'}`;
+            });
+
+        mostrarAlertaESocial(
+            linhas.join(' | '),
+            'success'
+        );
+
+        await carregarEventosESocial();
+
+    } catch (error) {
+
+        console.error(
+            '❌ Erro na verificação real (ao vivo) do eSocial:',
+            error
+        );
+
+        mostrarAlertaESocial(
+            'Não foi possível verificar de verdade no eSocial: ' +
+            error.message,
+            'warning'
+        );
+
+    } finally {
+
+        if (botao) {
+            botao.disabled = false;
+            botao.innerHTML = htmlBotaoOriginal;
+        }
+    }
+}
+
+
+function handleVerificarStatusRealESocial() {
+
+    const id =
+        String(
+            this.dataset.id ||
+            ''
+        ).trim();
+
+    if (!id) {
+        return;
+    }
+
+    verificarStatusRealESocial(
+        id,
+        this
+    );
+}
+
+
+// ============================================================
 // CLIQUE NO BOTÃO VERIFICAR
 // ============================================================
 
@@ -8918,6 +9108,57 @@ function adicionarControlesVerificacaoESocial() {
 
                 btnVerificar.onclick =
                     handleVerificarEventoESocial;
+
+
+                // ================================================
+                // BOTÃO DE VERIFICAÇÃO REAL (AO VIVO, CONSOME BX)
+                // ================================================
+
+                let btnVerificarReal =
+                    linha.querySelector(
+                        '.btn-verificar-real-esocial'
+                    );
+
+
+                if (
+                    !btnVerificarReal
+                ) {
+
+                    btnVerificarReal =
+                        document.createElement(
+                            'button'
+                        );
+
+
+                    btnVerificarReal.type =
+                        'button';
+
+
+                    btnVerificarReal.className =
+                        'btn btn-outline-warning btn-verificar-real-esocial';
+
+
+                    btnVerificarReal.dataset.id =
+                        id;
+
+
+                    btnVerificarReal.title =
+                        'Verificar de verdade no eSocial agora (consulta ao vivo, consome cota diária)';
+
+
+                    btnVerificarReal.innerHTML =
+                        '<i class="fas fa-satellite-dish"></i>';
+
+
+                    btnVerificar.insertAdjacentElement(
+                        'afterend',
+                        btnVerificarReal
+                    );
+                }
+
+
+                btnVerificarReal.onclick =
+                    handleVerificarStatusRealESocial;
             }
         }
     );
