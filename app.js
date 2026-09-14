@@ -17,6 +17,7 @@ let boletosCarregados = false;
 // ========================= MAPEAMENTO DE EXAMES =========================
 const EXAME_MAP = {
   'Avaliação Clínica Ocupacional (Anamnese e Exame físico)': 'exame_clinico',
+  'EXAME CLÍNICO - TÉCNICO': 'exame_clinico',
   'Avaliação Clínica com ênfase Mental (Anamnese e Exame físico)': 'exame_clinico',
   'Audiometria tonal ocupacional': 'audiometria',
   'Avaliação da acuidade visual': 'acuidade_visual',
