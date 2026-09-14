@@ -25140,13 +25140,17 @@ function bxBloqueadoPorCalendario() {
 
 function limiteDiarioWorkerBx() {
 
+    // Autolimite conservador, não um limite documentado do eSocial.
+    // Se a consulta real estourar algum limite do governo, o SOAP
+    // fault correspondente já é tratado (status 'erro' + retentativa
+    // em 1h) — este número só evita rodar sem controle nenhum.
     return Math.min(
-        9,
+        100,
         Math.max(
             1,
             envNumber(
                 'ESOCIAL_BX_LIMITE_WORKER_DIA',
-                6
+                30
             )
         )
     );

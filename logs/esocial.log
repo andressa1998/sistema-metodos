@@ -1509,3 +1509,65 @@
 {"level":"info","message":"GET /.well-known/appspecific/com.chrome.devtools.json 404 - 2ms - ::1","timestamp":"2026-09-08T18:55:23.035Z"}
 {"level":"info","message":"POST /api/soc/preparar-evento-esocial/879 200 - 24201ms - ::1","timestamp":"2026-09-08T18:55:27.276Z"}
 {"level":"info","message":"GET /api/soc/eventos-salvos 304 - 996ms - ::1","timestamp":"2026-09-08T18:55:28.276Z"}
+{"level":"info","message":"Servidor rodando na porta 3099","timestamp":"2026-09-14T13:29:12.986Z"}
+{"level":"info","message":"Ambiente: development","timestamp":"2026-09-14T13:29:12.997Z"}
+{"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-14T13:29:12.997Z"}
+{"level":"info","message":"GET /api/soc/debug-aso-raw/369777468?codigoEmpresa=2126492 200 - 524ms - ::1","timestamp":"2026-09-14T13:29:17.281Z"}
+{"level":"info","message":"Servidor rodando na porta 3099","timestamp":"2026-09-14T13:30:42.506Z"}
+{"level":"info","message":"Ambiente: development","timestamp":"2026-09-14T13:30:42.512Z"}
+{"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-14T13:30:42.512Z"}
+{"level":"info","message":"GET /api/soc/debug-aso-raw/369777468?codigoEmpresa=2126492&dataInicio=01/07/2026&dataFim=14/09/2026 500 - 275ms - ::1","timestamp":"2026-09-14T13:30:46.553Z"}
+{"level":"info","message":"GET /api/soc/debug-aso-raw/369777468?codigoEmpresa=2126492&dataInicio=15/08/2026&dataFim=14/09/2026 200 - 179ms - ::1","timestamp":"2026-09-14T13:30:57.453Z"}
+{"level":"info","message":"Servidor rodando na porta 3099","timestamp":"2026-09-14T13:31:14.827Z"}
+{"level":"info","message":"Ambiente: development","timestamp":"2026-09-14T13:31:14.829Z"}
+{"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-14T13:31:14.829Z"}
+{"level":"info","message":"GET /api/soc/debug-aso-raw/369777468?codigoEmpresa=2126492&dataInicio=15/08/2026&dataFim=14/09/2026&pDataIncAso=3 200 - 290ms - ::1","timestamp":"2026-09-14T13:31:18.907Z"}
+{"level":"info","message":"GET /api/soc/debug-aso-raw/369777468?codigoEmpresa=2126492&dataInicio=15/08/2026&dataFim=14/09/2026&pDataIncAso=0 200 - 111ms - ::1","timestamp":"2026-09-14T13:31:50.873Z"}
+{"level":"info","message":"GET /api/soc/debug-aso-raw/369715927?codigoEmpresa=2126491&dataInicio=15/08/2026&dataFim=14/09/2026&pDataIncAso=0 200 - 106ms - ::1","timestamp":"2026-09-14T13:31:51.053Z"}
+{"level":"info","message":"GET /api/soc/debug-aso-raw/369873453?codigoEmpresa=2126492&dataInicio=15/08/2026&dataFim=14/09/2026&pDataIncAso=0 200 - 98ms - ::1","timestamp":"2026-09-14T13:31:51.218Z"}
+{"level":"info","message":"GET /api/soc/debug-aso-raw/369951959?codigoEmpresa=2126494&dataInicio=15/08/2026&dataFim=14/09/2026&pDataIncAso=0 200 - 143ms - ::1","timestamp":"2026-09-14T13:31:51.481Z"}
+{"level":"info","message":"Servidor rodando na porta 3099","timestamp":"2026-09-14T13:32:20.611Z"}
+{"level":"info","message":"Ambiente: development","timestamp":"2026-09-14T13:32:20.613Z"}
+{"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-14T13:32:20.613Z"}
+{"level":"info","message":"GET /api/soc/debug-aso-raw/369777468?codigoEmpresa=2126492 200 - 402ms - ::1","timestamp":"2026-09-14T13:32:24.879Z"}
+{"level":"info","message":"GET /api/soc/debug-aso-raw/369715927?codigoEmpresa=2126491 200 - 238ms - ::1","timestamp":"2026-09-14T13:32:25.276Z"}
+{"level":"info","message":"GET /api/soc/debug-aso-raw/369873453?codigoEmpresa=2126492 200 - 109ms - ::1","timestamp":"2026-09-14T13:32:25.495Z"}
+{"level":"info","message":"GET /api/soc/debug-aso-raw/369951959?codigoEmpresa=2126494 200 - 386ms - ::1","timestamp":"2026-09-14T13:32:25.991Z"}
+{"level":"info","message":"GET /api/soc/debug-aso-raw/369715926?codigoEmpresa=2126491 200 - 177ms - ::1","timestamp":"2026-09-14T13:33:27.707Z"}
+{"level":"info","message":"GET /api/soc/debug-aso-raw/369715928?codigoEmpresa=2126491 200 - 81ms - ::1","timestamp":"2026-09-14T13:33:27.908Z"}
+{"level":"info","message":"GET /api/soc/debug-aso-raw/370416081?codigoEmpresa=2126491 200 - 200ms - ::1","timestamp":"2026-09-14T13:33:46.596Z"}
+{"level":"info","message":"GET /api/soc/debug-aso-raw/369715927?codigoEmpresa=2126491&modo=s2220&dataInicio=15/08/2026&dataFim=14/09/2026&pDataIncAso=0 200 - 272ms - ::1","timestamp":"2026-09-14T13:34:13.310Z"}
+{"level":"info","message":"Servidor rodando na porta 3099","timestamp":"2026-09-14T13:38:10.353Z"}
+{"level":"info","message":"Ambiente: development","timestamp":"2026-09-14T13:38:10.355Z"}
+{"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-14T13:38:10.355Z"}
+{"level":"info","message":"GET /api/soc/debug-asos-periodo?codigoEmpresa=2126492&dataInicio=15/08/2026&dataFim=14/09/2026&tipoBusca=0 500 - 239ms - ::1","timestamp":"2026-09-14T13:38:14.416Z"}
+{"level":"info","message":"Servidor rodando na porta 3099","timestamp":"2026-09-14T13:38:43.576Z"}
+{"level":"info","message":"Ambiente: development","timestamp":"2026-09-14T13:38:43.578Z"}
+{"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-14T13:38:43.578Z"}
+{"level":"info","message":"GET /api/soc/debug-asos-periodo?codigoEmpresa=2126492&dataInicio=15/08/2026&dataFim=14/09/2026&tipoBusca=0 200 - 180ms - ::1","timestamp":"2026-09-14T13:38:47.547Z"}
+{"level":"info","message":"GET /api/soc/debug-asos-periodo?codigoEmpresa=2126492&dataInicio=15/08/2026&dataFim=14/09/2026&tipoBusca=0 200 - 172ms - ::1","timestamp":"2026-09-14T13:38:56.426Z"}
+{"level":"info","message":"GET /api/soc/debug-asos-periodo?codigoEmpresa=2126492&dataInicio=15/08/2026&dataFim=14/09/2026&tipoBusca=1 200 - 80ms - ::1","timestamp":"2026-09-14T13:38:56.660Z"}
+{"level":"info","message":"GET /api/soc/debug-asos-periodo?codigoEmpresa=2126491&dataInicio=15/08/2026&dataFim=14/09/2026&tipoBusca=0 200 - 108ms - ::1","timestamp":"2026-09-14T13:38:56.910Z"}
+{"level":"info","message":"GET /api/soc/debug-asos-periodo?codigoEmpresa=2126491&dataInicio=15/08/2026&dataFim=14/09/2026&tipoBusca=1 200 - 89ms - ::1","timestamp":"2026-09-14T13:38:57.109Z"}
+{"level":"info","message":"GET /api/soc/debug-asos-periodo?codigoEmpresa=2126494&dataInicio=15/08/2026&dataFim=14/09/2026&tipoBusca=0 200 - 135ms - ::1","timestamp":"2026-09-14T13:39:07.027Z"}
+{"level":"info","message":"Servidor rodando na porta 3099","timestamp":"2026-09-14T13:39:27.763Z"}
+{"level":"info","message":"Ambiente: development","timestamp":"2026-09-14T13:39:27.767Z"}
+{"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-14T13:39:27.768Z"}
+{"level":"info","message":"GET /api/soc/debug-asos-periodo?codigoEmpresa=2126494&dataInicio=15/08/2026&dataFim=14/09/2026&tipoBusca=0&empresaDireta=1 200 - 520ms - ::1","timestamp":"2026-09-14T13:39:32.053Z"}
+{"level":"info","message":"Servidor rodando na porta 3099","timestamp":"2026-09-14T13:39:55.649Z"}
+{"level":"info","message":"Ambiente: development","timestamp":"2026-09-14T13:39:55.651Z"}
+{"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-14T13:39:55.651Z"}
+{"level":"info","message":"GET /api/soc/debug-asos-periodo?codigoEmpresa=2126494&dataInicio=15/08/2026&dataFim=14/09/2026&tipoBusca=0 200 - 225ms - ::1","timestamp":"2026-09-14T13:39:59.712Z"}
+{"level":"info","message":"Servidor rodando na porta 3099","timestamp":"2026-09-14T13:42:54.945Z"}
+{"level":"info","message":"Ambiente: development","timestamp":"2026-09-14T13:42:54.947Z"}
+{"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-14T13:42:54.947Z"}
+{"level":"info","message":"GET /api/soc/debug-emissores-aso 500 - 203ms - ::1","timestamp":"2026-09-14T13:42:58.968Z"}
+{"level":"info","message":"Servidor rodando na porta 3099","timestamp":"2026-09-14T13:50:08.799Z"}
+{"level":"info","message":"Ambiente: development","timestamp":"2026-09-14T13:50:08.801Z"}
+{"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-14T13:50:08.801Z"}
+{"level":"info","message":"GET /api/soc/debug-emissores-aso 200 - 274ms - ::1","timestamp":"2026-09-14T13:50:12.923Z"}
+{"level":"info","message":"Servidor rodando na porta 3099","timestamp":"2026-09-14T14:33:52.148Z"}
+{"level":"info","message":"Ambiente: development","timestamp":"2026-09-14T14:33:52.150Z"}
+{"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-14T14:33:52.150Z"}
+{"level":"info","message":"POST /api/soc/matriculas-esocial/buscar-agora/983 429 - 3840ms - ::1","timestamp":"2026-09-14T14:33:59.778Z"}
+{"level":"info","message":"POST /api/soc/matriculas-esocial/buscar-agora/1027 200 - 4555ms - ::1","timestamp":"2026-09-14T14:34:16.457Z"}

@@ -79,117 +79,158 @@ function normalizarUnidade(nome) {
   let normalizado = String(nome)
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[()\-.,/]/g, ' ');
-
-  // IMPORTANTE:
-  // "APOIO" NÃO pode ser removido. Ele identifica uma unidade diferente da matriz.
-  // Ex.: "AMOR SAUDE SAO JOAO DEL REI" e
-  //      "AMOR SAUDE SAO JOAO DEL REI - APOIO" precisam gerar chaves diferentes.
-  const sufixos = [
-    ' LTDA', ' LTDA.', ' S/A', ' S.A.', ' ME', ' EIRELI', ' SS', ' S/S',
-    ' ADMINISTRADORA', ' ADMINISTRADORA DE CARTOES',
-    ' SERVICOS', ' MEDICOS', ' ODONTOLOGICOS', ' CLINICA',
-    ' DE ', ' DO ', ' DA ', ' DAS ', ' DOS ', ' E '
-  ];
-
-  sufixos.forEach(suf => {
-    const regex = new RegExp(`\\s*${suf.trim()}$`, 'i');
-    normalizado = normalizado.replace(regex, '');
-  });
-
-  normalizado = normalizado.replace(/\s+/g, ' ').trim().toUpperCase();
-  return normalizado;
-}
-
-// Retorna true quando o nome representa explicitamente uma clínica de APOIO.
-function isUnidadeApoio(nome) {
-  if (!nome) return false;
-
-  const limpo = String(nome)
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
     .replace(/[()\-.,/]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
     .toUpperCase();
 
-  return /\bAPOIO\b/.test(limpo);
+  // IMPORTANTE: nunca remover APOIO/MATRIZ/FILIAL daqui.
+  // Essas palavras diferenciam unidades que podem ter o mesmo nome-base.
+  const sufixosJuridicos = [
+    'LTDA', 'S A', 'SA', 'ME', 'EIRELI', 'SS',
+    'ADMINISTRADORA', 'ADMINISTRADORA DE CARTOES',
+    'SERVICOS', 'MEDICOS', 'ODONTOLOGICOS'
+  ];
+
+  // Remove somente sufixos jurídicos/administrativos no FINAL do nome.
+  // Faz em loop porque pode existir mais de um sufixo encadeado.
+  let alterou = true;
+  while (alterou) {
+    alterou = false;
+    for (const suf of sufixosJuridicos) {
+      const regex = new RegExp(`\\s+${suf.replace(/ /g, '\\s+')}\\s*$`, 'i');
+      const novo = normalizado.replace(regex, '').trim();
+      if (novo !== normalizado) {
+        normalizado = novo;
+        alterou = true;
+      }
+    }
+  }
+
+  return normalizado.replace(/\s+/g, ' ').trim();
 }
 
-// Impede que uma unidade APOIO seja comparada com a matriz (e vice-versa).
+// APOIO é uma unidade independente da matriz.
+function isUnidadeApoio(nome) {
+  if (!nome) return false;
+  return /\bAPOIO\b/.test(normalizarUnidade(nome));
+}
+
+// Gera o nome-base APENAS para facilitar a associação do cadastro.
+// A classificação APOIO x NÃO APOIO é verificada separadamente antes do match.
+function nomeBaseUnidade(nome) {
+  return normalizarUnidade(nome)
+    .replace(/\bCLINICA\b/g, ' ')
+    .replace(/\bUNIDADE\b/g, ' ')
+    .replace(/\bMATRIZ\b/g, ' ')
+    .replace(/\bAPOIO\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Regra principal: APOIO nunca casa com MATRIZ/NORMAL e vice-versa.
 function unidadesSaoCompativeis(nomePlanilha, nomeUnidadeBanco) {
   return isUnidadeApoio(nomePlanilha) === isUnidadeApoio(nomeUnidadeBanco);
 }
 
-// Localiza uma unidade com segurança.
-// Prioridade: nome exato da unidade -> razão social exata -> correspondência parcial ÚNICA.
-// Em todos os casos, APOIO só pode casar com APOIO.
+// Localiza a unidade do banco sem misturar MATRIZ x APOIO.
+// A planilha pode trazer "AMOR SAUDE ..." enquanto o cadastro pode estar
+// como "AMOR SAUDE ... - MATRIZ". Nesses casos, o nome-base permite o match.
 function encontrarUnidadeSegura(nomeReferencia, todasUnidades) {
   const chaveNorm = normalizarUnidade(nomeReferencia);
-  if (!chaveNorm) return null;
+  const baseRef = nomeBaseUnidade(nomeReferencia);
+  if (!chaveNorm || !baseRef) return null;
 
   const candidatosCompativeis = (todasUnidades || []).filter(u =>
-    u && unidadesSaoCompativeis(nomeReferencia, u.unidade)
+    u && u.unidade && unidadesSaoCompativeis(nomeReferencia, u.unidade)
   );
 
-  const escolherUnico = (lista, motivo) => {
-    const unicos = [];
-    const ids = new Set();
-
-    for (const item of lista) {
+  const unicosPorId = (lista) => {
+    const vistos = new Set();
+    return lista.filter(item => {
       const id = item.id ?? `${item.unidade}|${item.razao_social || ''}`;
-      if (!ids.has(id)) {
-        ids.add(id);
-        unicos.push(item);
-      }
-    }
+      if (vistos.has(id)) return false;
+      vistos.add(id);
+      return true;
+    });
+  };
 
+  const escolher = (lista, motivo) => {
+    const unicos = unicosPorId(lista);
     if (unicos.length === 1) {
       console.log(`   ✅ Unidade encontrada por ${motivo}: "${unicos[0].unidade}"`);
       return unicos[0];
     }
-
     if (unicos.length > 1) {
-      console.warn(
-        `   ⚠️ Correspondência ambígua por ${motivo} para "${nomeReferencia}":`,
-        unicos.map(u => u.unidade)
-      );
+      console.warn(`   ⚠️ ${unicos.length} candidatos por ${motivo} para "${nomeReferencia}":`, unicos.map(u => u.unidade));
     }
-
     return null;
   };
 
-  // 1) Primeiro tenta o NOME DA UNIDADE. Isso é mais seguro que razão social,
-  // pois matriz e apoio podem compartilhar a mesma razão social.
+  // 1) Nome da unidade exatamente igual.
   let encontrados = candidatosCompativeis.filter(u =>
     normalizarUnidade(u.unidade) === chaveNorm
   );
-  let unidadeEncontrada = escolherUnico(encontrados, 'NOME EXATO');
+  let unidadeEncontrada = escolher(encontrados, 'NOME EXATO');
   if (unidadeEncontrada) return unidadeEncontrada;
 
-  // 2) Razão social exata, mas somente entre unidades do mesmo tipo (apoio/não apoio).
+  // 2) Mesmo nome-base. Resolve, por exemplo, planilha sem "MATRIZ"
+  //    e cadastro com "- MATRIZ", sem jamais misturar com APOIO.
+  encontrados = candidatosCompativeis.filter(u =>
+    nomeBaseUnidade(u.unidade) === baseRef
+  );
+  unidadeEncontrada = escolher(encontrados, 'NOME-BASE EXATO');
+  if (unidadeEncontrada) return unidadeEncontrada;
+
+  // 3) Razão social exata, mas somente dentro do mesmo tipo de unidade.
   encontrados = candidatosCompativeis.filter(u =>
     u.razao_social && normalizarUnidade(u.razao_social) === chaveNorm
   );
-  unidadeEncontrada = escolherUnico(encontrados, 'RAZÃO SOCIAL EXATA');
+  unidadeEncontrada = escolher(encontrados, 'RAZÃO SOCIAL EXATA');
   if (unidadeEncontrada) return unidadeEncontrada;
 
-  // 3) Fallback parcial. Só aceita quando existe UM ÚNICO candidato compatível.
-  // Nunca escolhe o primeiro resultado silenciosamente.
-  encontrados = candidatosCompativeis.filter(u => {
+  // 4) Razão social com mesmo nome-base.
+  encontrados = candidatosCompativeis.filter(u =>
+    u.razao_social && nomeBaseUnidade(u.razao_social) === baseRef
+  );
+  unidadeEncontrada = escolher(encontrados, 'RAZÃO SOCIAL / NOME-BASE');
+  if (unidadeEncontrada) return unidadeEncontrada;
+
+  // 5) Último recurso: escolhe o candidato compatível com maior proximidade.
+  //    APOIO x MATRIZ continua bloqueado nesta etapa.
+  const pontuados = candidatosCompativeis.map(u => {
     const unidadeNorm = normalizarUnidade(u.unidade);
+    const unidadeBase = nomeBaseUnidade(u.unidade);
     const razaoNorm = u.razao_social ? normalizarUnidade(u.razao_social) : '';
+    const razaoBase = u.razao_social ? nomeBaseUnidade(u.razao_social) : '';
 
-    const matchUnidade = unidadeNorm &&
-      (unidadeNorm.includes(chaveNorm) || chaveNorm.includes(unidadeNorm));
+    let score = 0;
+    if (unidadeBase.includes(baseRef) || baseRef.includes(unidadeBase)) score += 100;
+    if (unidadeNorm.includes(chaveNorm) || chaveNorm.includes(unidadeNorm)) score += 80;
+    if (razaoBase && (razaoBase.includes(baseRef) || baseRef.includes(razaoBase))) score += 40;
+    if (razaoNorm && (razaoNorm.includes(chaveNorm) || chaveNorm.includes(razaoNorm))) score += 20;
 
-    const matchRazao = razaoNorm &&
-      (razaoNorm.includes(chaveNorm) || chaveNorm.includes(razaoNorm));
+    // Quanto menor a diferença de tamanho, melhor o candidato.
+    score -= Math.abs(unidadeBase.length - baseRef.length) / 100;
 
-    return matchUnidade || matchRazao;
-  });
+    return { u, score };
+  }).filter(x => x.score > 0)
+    .sort((a, b) => b.score - a.score);
 
-  return escolherUnico(encontrados, 'CORRESPONDÊNCIA PARCIAL ÚNICA');
+  if (pontuados.length > 0) {
+    const melhor = pontuados[0];
+    const segundo = pontuados[1];
+
+    // Aceita se for o único ou se houver vantagem clara sobre o segundo.
+    if (!segundo || melhor.score >= segundo.score + 10) {
+      console.log(`   ✅ Unidade encontrada por MELHOR CORRESPONDÊNCIA: "${melhor.u.unidade}" (score ${melhor.score.toFixed(2)})`);
+      return melhor.u;
+    }
+
+    console.warn(`   ⚠️ Associação ambígua para "${nomeReferencia}". Nenhuma unidade escolhida:`, pontuados.slice(0, 5).map(x => `${x.u.unidade} (${x.score.toFixed(2)})`));
+  }
+
+  return null;
 }
 
 function normalizarCnpj(cnpj) {
@@ -698,6 +739,29 @@ async function processarUpload(file) {
 
   const dataRows = rows.slice(headerRowIndex + 1);
 
+  // A clínica que deve receber o exame é o PRESTADOR VINCULADO NO ATENDIMENTO,
+  // e não a "Unidade do Funcionário". Ex.: um funcionário pode pertencer à
+  // CARTÃO DE TODO SÃO JOÃO DEL REI, mas realizar o exame na AMOR SAUDE SÃO JOÃO DEL REI.
+  const cabecalhoUpload = rows[headerRowIndex].map(c =>
+    String(c || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toUpperCase()
+      .trim()
+  );
+
+  const colPrestadorVinculado = cabecalhoUpload.findIndex(c =>
+    c.includes('PRESTADOR VINCULADO') ||
+    c.includes('PRESTADOR DO ATENDIMENTO') ||
+    c.includes('PRESTADOR') && c.includes('PEDIDO DE EXAMES')
+  );
+
+  if (colPrestadorVinculado === -1) {
+    throw new Error('Coluna "Prestador vinculado no atendimento (Pedido de Exames)" não encontrada na planilha. O sistema não usará a Unidade do Funcionário para evitar lançar exames na clínica errada.');
+  }
+
+  console.log(`📍 Coluna do prestador vinculada encontrada na posição ${colPrestadorVinculado}: "${rows[headerRowIndex][colPrestadorVinculado]}"`);
+
   const mapMesAno = {};
   let maxCount = 0;
   let mesEscolhido = 0, anoEscolhido = 0;
@@ -757,10 +821,17 @@ async function processarUpload(file) {
   for (let row of dataRows) {
     if (!row[0] && !row[1] && !row[2]) continue;
     const exameUpload = row[0]?.toString().trim();
-    const unidadePlanilha = row[4]?.toString().trim();
+    const unidadePlanilha = row[colPrestadorVinculado]?.toString().trim();
     const funcionario = row[1]?.toString().trim();
     const dataExameStr = row[2]?.toString().trim();
-    if (!exameUpload || !unidadePlanilha) continue;
+    if (!exameUpload) continue;
+
+    // Nunca usar a Unidade do Funcionário como substituta do prestador.
+    // Se o prestador estiver vazio, a linha é ignorada para não faturar a unidade errada.
+    if (!unidadePlanilha) {
+      console.warn(`⚠️ Linha ignorada sem prestador vinculado: exame="${exameUpload}", funcionário="${funcionario || 'N/A'}"`);
+      continue;
+    }
 
     if (isUnidadeIgnorada(unidadePlanilha)) continue;
 
@@ -884,67 +955,14 @@ async function processarUpload(file) {
       };
     }
 
-    let examesDaUnidade = examesPorUnidade[chavePlanilha] || [];
-    
-    console.log(`   📋 Exames encontrados pela chave "${chavePlanilha}": ${examesDaUnidade.length}`);
-    
-    // Só tenta pela razão social quando ela representa o MESMO TIPO de unidade.
-    // Isso impede que a razão social compartilhada da matriz alimente a clínica APOIO.
-    if (examesDaUnidade.length === 0 && unidade.razao_social) {
-      const razaoNorm = normalizarUnidade(unidade.razao_social);
-      console.log(`   🔍 Tentando pela razão social: "${razaoNorm}"`);
+    // Os exames devem vir SOMENTE da chave original da planilha que foi
+    // mapeada para esta unidade. Não fazemos fallback por razão social/nome,
+    // pois matriz e apoio podem compartilhar nomes/razões muito parecidos.
+    // Assim, um exame da matriz nunca "vaza" para APOIO e vice-versa.
+    const examesDaUnidade = examesPorUnidade[chavePlanilha] || [];
 
-      if (unidadesSaoCompativeis(razaoNorm, unidade.unidade)) {
-        examesDaUnidade = examesPorUnidade[razaoNorm] || [];
-      } else {
-        console.log(`   ⛔ Razão social ignorada para evitar mistura MATRIZ/APOIO.`);
-      }
-
-      if (examesDaUnidade.length > 0) {
-        console.log(`   ✅ Encontrado pela razão social!`);
-      }
-    }
-    
     if (examesDaUnidade.length === 0) {
-      const unidadeNorm = normalizarUnidade(unidade.unidade);
-      console.log(`   🔍 Tentando pelo nome da unidade: "${unidadeNorm}"`);
-      examesDaUnidade = examesPorUnidade[unidadeNorm] || [];
-      if (examesDaUnidade.length > 0) {
-        console.log(`   ✅ Encontrado pelo nome da unidade!`);
-      }
-    }
-    
-    if (examesDaUnidade.length === 0) {
-      console.log(`   🔍 Busca forçada segura em todas as chaves...`);
-      const razaoNorm = unidade.razao_social ? normalizarUnidade(unidade.razao_social) : '';
-      const unidadeNorm = normalizarUnidade(unidade.unidade);
-      const candidatosExames = [];
-      
-      for (let [chave, exames] of Object.entries(examesPorUnidade)) {
-        // Regra principal: APOIO nunca pode puxar exames da matriz e vice-versa.
-        if (!unidadesSaoCompativeis(chave, unidade.unidade)) {
-          continue;
-        }
-
-        const matchRazao = razaoNorm &&
-          (chave.includes(razaoNorm) || razaoNorm.includes(chave));
-        const matchUnidade = unidadeNorm &&
-          (chave.includes(unidadeNorm) || unidadeNorm.includes(chave));
-
-        if (matchRazao || matchUnidade) {
-          candidatosExames.push({ chave, exames });
-        }
-      }
-
-      if (candidatosExames.length === 1) {
-        examesDaUnidade = candidatosExames[0].exames;
-        console.log(`   ✅ Encontrado na chave segura: "${candidatosExames[0].chave}"`);
-      } else if (candidatosExames.length > 1) {
-        console.warn(
-          `   ⚠️ Mais de uma chave possível para ${nomeUnidade}. Nenhum exame foi associado automaticamente:`,
-          candidatosExames.map(c => c.chave)
-        );
-      }
+      console.log(`   ℹ️ Nenhum exame na planilha para a chave "${chavePlanilha}". Mensalidade/vidas serão mantidas normalmente.`);
     }
 
     console.log(`   📋 Total de exames encontrados: ${examesDaUnidade.length}`);
