@@ -1571,3 +1571,16 @@
 {"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-14T14:33:52.150Z"}
 {"level":"info","message":"POST /api/soc/matriculas-esocial/buscar-agora/983 429 - 3840ms - ::1","timestamp":"2026-09-14T14:33:59.778Z"}
 {"level":"info","message":"POST /api/soc/matriculas-esocial/buscar-agora/1027 200 - 4555ms - ::1","timestamp":"2026-09-14T14:34:16.457Z"}
+{"level":"info","message":"Servidor rodando na porta 3099","timestamp":"2026-09-14T15:04:10.968Z"}
+{"level":"info","message":"Ambiente: development","timestamp":"2026-09-14T15:04:10.970Z"}
+{"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-14T15:04:10.970Z"}
+{"level":"info","message":"POST /api/soc/matriculas-esocial/buscar-agora/983 200 - 5864ms - ::1","timestamp":"2026-09-14T15:04:20.588Z"}
+{"level":"info","message":"Servidor rodando na porta 3099","timestamp":"2026-09-14T15:05:44.364Z"}
+{"level":"info","message":"Ambiente: development","timestamp":"2026-09-14T15:05:44.366Z"}
+{"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-14T15:05:44.366Z"}
+{"level":"info","message":"GET /api/soc/debug-consulta-identificadores-bx?tpInsc=1&nrInsc=36996042&cpf=75358891234&dtIni=2026-08-19T12:00:00Z&dtFim=2026-09-14T15:00:00Z 500 - 23ms - ::1","timestamp":"2026-09-14T15:05:48.205Z"}
+{"level":"info","message":"GET /api/soc/debug-consulta-identificadores-bx?tpInsc=1&nrInsc=36996042&cpf=75358891234&dtIni=2026-08-19T12:00:00Z&dtFim=2026-09-14T10:00:00Z 200 - 769ms - ::1","timestamp":"2026-09-14T15:05:53.758Z"}
+{"level":"info","message":"Servidor rodando na porta 3099","timestamp":"2026-09-14T15:07:19.997Z"}
+{"level":"info","message":"Ambiente: development","timestamp":"2026-09-14T15:07:19.999Z"}
+{"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-14T15:07:19.999Z"}
+{"level":"info","message":"GET /api/soc/debug-consulta-identificadores-bx?tpInsc=1&nrInsc=36996042&cpf=75358891234&dtIni=2026-08-19T12:00:00Z&dtFim=2026-09-14T10:00:00Z&baixar=1 200 - 13870ms - ::1","timestamp":"2026-09-14T15:07:37.650Z"}
