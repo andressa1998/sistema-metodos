@@ -33632,8 +33632,12 @@ async function verificarEventoExistenteNoEsocialAntesDoEnvio(
 
 
     if (
-        tipoEvento !==
-        'S-2220'
+        ![
+            'S-2220',
+            'S-2240'
+        ].includes(
+            tipoEvento
+        )
     ) {
 
         return {
@@ -33651,7 +33655,7 @@ async function verificarEventoExistenteNoEsocialAntesDoEnvio(
                 'validacao-local',
 
             error:
-                'A verificação automática antes do envio está liberada somente para S-2220 nesta etapa.'
+                'A verificação automática antes do envio está liberada somente para S-2220 e S-2240 nesta etapa.'
         };
     }
 
