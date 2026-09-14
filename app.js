@@ -740,9 +740,10 @@ async function processarUpload(file) {
 
   const dataRows = rows.slice(headerRowIndex + 1);
 
-  // A clínica que deve receber o exame é o PRESTADOR VINCULADO NO ATENDIMENTO,
-  // e não a "Unidade do Funcionário". Ex.: um funcionário pode pertencer à
-  // CARTÃO DE TODO SÃO JOÃO DEL REI, mas realizar o exame na AMOR SAUDE SÃO JOÃO DEL REI.
+  // A clínica que deve receber o exame é a UNIDADE DO FUNCIONÁRIO,
+  // não o "Prestador vinculado no atendimento". Ex.: um funcionário que
+  // pertence à CARTÃO DE TODOS SANTA MARIA é cobrado nessa unidade mesmo
+  // que o exame tenha sido realizado na AMOR SAÚDE SANTA MARIA.
   const cabecalhoUpload = rows[headerRowIndex].map(c =>
     String(c || '')
       .normalize('NFD')
@@ -751,17 +752,15 @@ async function processarUpload(file) {
       .trim()
   );
 
-  const colPrestadorVinculado = cabecalhoUpload.findIndex(c =>
-    c.includes('PRESTADOR VINCULADO') ||
-    c.includes('PRESTADOR DO ATENDIMENTO') ||
-    c.includes('PRESTADOR') && c.includes('PEDIDO DE EXAMES')
+  const colUnidadeFuncionario = cabecalhoUpload.findIndex(c =>
+    c.includes('UNIDADE DO FUNCIONARIO')
   );
 
-  if (colPrestadorVinculado === -1) {
-    throw new Error('Coluna "Prestador vinculado no atendimento (Pedido de Exames)" não encontrada na planilha. O sistema não usará a Unidade do Funcionário para evitar lançar exames na clínica errada.');
+  if (colUnidadeFuncionario === -1) {
+    throw new Error('Coluna "Unidade do Funcionário" não encontrada na planilha.');
   }
 
-  console.log(`📍 Coluna do prestador vinculada encontrada na posição ${colPrestadorVinculado}: "${rows[headerRowIndex][colPrestadorVinculado]}"`);
+  console.log(`📍 Coluna da unidade do funcionário encontrada na posição ${colUnidadeFuncionario}: "${rows[headerRowIndex][colUnidadeFuncionario]}"`);
 
   const mapMesAno = {};
   let maxCount = 0;
@@ -822,7 +821,7 @@ async function processarUpload(file) {
   for (let row of dataRows) {
     if (!row[0] && !row[1] && !row[2]) continue;
     const exameUpload = row[0]?.toString().trim();
-    const unidadePlanilha = row[colPrestadorVinculado]?.toString().trim();
+    const unidadePlanilha = row[colUnidadeFuncionario]?.toString().trim();
     const funcionario = row[1]?.toString().trim();
     const dataExameStr = row[2]?.toString().trim();
     if (!exameUpload) continue;
@@ -869,7 +868,7 @@ async function processarUpload(file) {
   // Mapa por ID da unidade (não por texto da planilha) para os exames
   // sobreviverem mesmo quando a mesma unidade acaba entrando em
   // unidadesEncontradas por duas chaves de texto diferentes (uma vinda
-  // do "Prestador vinculado" da planilha, outra do campo "unidade" do
+  // do "Unidade do Funcionário" da planilha, outra do campo "unidade" do
   // cadastro, quando o texto usado em cada lugar não é idêntico).
   const examesPorUnidadeId = {};
   const idsUnidadesEncontradasNaPlanilha = new Set();
