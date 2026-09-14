@@ -1652,3 +1652,7 @@
 {"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-14T20:01:51.887Z"}
 {"level":"info","message":"POST /api/soc/colaboradores-sem-aso 200 - 964ms - ::1","timestamp":"2026-09-14T20:01:57.686Z"}
 {"level":"info","message":"POST /api/soc/colaboradores-sem-aso 200 - 1339ms - ::1","timestamp":"2026-09-14T20:02:04.928Z"}
+{"level":"info","message":"Servidor rodando na porta 3002","timestamp":"2026-09-14T20:16:22.428Z"}
+{"level":"info","message":"Ambiente: development","timestamp":"2026-09-14T20:16:22.430Z"}
+{"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-14T20:16:22.430Z"}
+{"level":"info","message":"GET /index.html 200 - 5ms - ::1","timestamp":"2026-09-14T20:16:26.243Z"}
