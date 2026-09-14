@@ -2735,9 +2735,17 @@ const resumoColaborador =
                         </div>
                     </td>
 
-                    <td>${htmlBadgeResumoESocial(resumoColaborador.s2220)}</td>
+                    <td>${
+                        codigoTipoEvento === 'S-2220'
+                            ? htmlBadgeResumoESocial(resumoColaborador.s2220)
+                            : '<span class="text-muted">—</span>'
+                    }</td>
 
-                    <td>${htmlBadgeResumoESocial(resumoColaborador.s2240)}</td>
+                    <td>${
+                        codigoTipoEvento === 'S-2240'
+                            ? htmlBadgeResumoESocial(resumoColaborador.s2240)
+                            : '<span class="text-muted">—</span>'
+                    }</td>
 
                     <td>
                         <span class="badge bg-${resumoColaborador.proximaAcao.classe} esocial-next-action">
