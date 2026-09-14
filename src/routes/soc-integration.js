@@ -10433,6 +10433,15 @@ async function aplicarRegraEventosEsocial(
                     eventoOriginal.data_admissao ||
                     eventoOriginal.dataAdmissao ||
                     '';
+
+                // Segunda fonte pro cargo: o complemento ASO (casado
+                // por ficha/guia) às vezes falha em achar a linha
+                // correspondente e deixa cargoColaborador vazio,
+                // mesmo o funcionário tendo cargo cadastrado no SOC.
+                eventoOriginal.cargoColaborador =
+                    eventoOriginal.cargoColaborador ||
+                    funcionarioCadastro.nomeCargo ||
+                    '';
             }
 
         } catch (error) {
@@ -12227,9 +12236,16 @@ async function aplicarRegraEventosEsocial(
             );
         }
 
+        // eventoOriginal.cargoColaborador vem do complemento ASO
+        // (casado por número da guia/ficha) e às vezes fica vazio
+        // quando esse casamento falha. funcionarioCadastro (219968,
+        // buscado por CPF, já consultado acima) é uma segunda fonte
+        // independente pro mesmo dado — evita bloquear por engano só
+        // porque uma fonte específica não achou o cargo.
         const cargoComRisco =
             cargoTemRiscoConhecidoEsocial(
-                eventoOriginal.cargoColaborador
+                eventoOriginal.cargoColaborador ||
+                funcionarioCadastro?.nomeCargo
             );
 
         if (
