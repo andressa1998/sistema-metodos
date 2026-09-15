@@ -10,34 +10,8 @@
     // CONFIGURAÇÃO
     // ============================================================
 
-    const API_BASE_URL = (() => {
-        const hostLocal = [
-            'localhost',
-            '127.0.0.1'
-        ].includes(window.location.hostname);
-
-        /*
-         * Se abrir pelo Live Server:
-         * http://localhost:5500
-         *
-         * as APIs continuam sendo chamadas no Node:
-         * http://localhost:3002
-         */
-        if (
-            hostLocal &&
-            window.location.port !== '3002'
-        ) {
-            return 'http://localhost:3002';
-        }
-
-        /*
-         * Se abrir em:
-         * http://localhost:3002
-         *
-         * usa a mesma origem.
-         */
-        return '';
-    })();
+    const API_BASE_URL =
+            'https://sistema-metodos.onrender.com';
 
     const REGISTROS_POR_PAGINA = 25;
 
@@ -119,43 +93,44 @@ let fimAcompanhamentoPreparacaoEsocial = 0;
     }
 
     async function lerRespostaJson(
-        response
-    ) {
-        const text =
-            await response.text();
+    response
+) {
+    const text =
+        await response.text();
 
-        let data = {};
+    let data = {};
 
-        if (text) {
-            try {
-                data = JSON.parse(text);
+    if (text) {
+        try {
+            data =
+                JSON.parse(text);
 
-            } catch (error) {
-                console.error(
-                    '❌ Resposta não JSON:',
-                    text
-                );
+        } catch (error) {
+            console.error(
+                '❌ Resposta não JSON:',
+                text
+            );
 
-                throw new Error(
-                    `Servidor retornou resposta inválida ` +
-                    `(HTTP ${response.status}). ` +
-                    `Confirme se o backend está rodando ` +
-                    `em http://localhost:3002.`
-                );
-            }
-        }
-
-        if (!response.ok) {
             throw new Error(
-                data.error ||
-                data.message ||
-                data.details?.message ||
-                `Erro HTTP ${response.status}`
+                `Servidor retornou resposta inválida ` +
+                `(HTTP ${response.status}). ` +
+                `Confirme se o backend está disponível em ` +
+                `${API_BASE_URL}.`
             );
         }
-
-        return data;
     }
+
+    if (!response.ok) {
+        throw new Error(
+            data.error ||
+            data.message ||
+            data.details?.message ||
+            `Erro HTTP ${response.status}`
+        );
+    }
+
+    return data;
+}
 
     async function requisicaoJson(
         path,
