@@ -2136,7 +2136,8 @@ let fimAcompanhamentoPreparacaoEsocial = 0;
             origem.includes('esocial') ||
             origem.includes('bx') ||
             origem.includes('cache') ||
-            origem.includes('portal')
+            origem.includes('portal') ||
+            origem.includes('relatorio')
         ) {
             return true;
         }
@@ -2275,6 +2276,10 @@ let fimAcompanhamentoPreparacaoEsocial = 0;
             oficial?.data_admissao_esocial || ''
         ).trim();
 
+        const matriculaOrigem = String(
+            oficial?.matricula_origem || ''
+        ).trim().toLowerCase();
+
         const statusVinculoInformado = relacionados
             .map(item => String(item?.vinculo_esocial_status || '').trim().toLowerCase())
             .filter(Boolean);
@@ -2356,9 +2361,9 @@ let fimAcompanhamentoPreparacaoEsocial = 0;
             (!precisaS2240 || tipoFoiVerificado('S-2240'));
 
         let proximaAcao = {
-            texto: 'Verificar vínculo',
+            texto: 'Atualizar base eSocial',
             classe: 'secondary',
-            icone: 'fa-link'
+            icone: 'fa-file-excel'
         };
 
         if (procuracaoPendente) {
@@ -2369,15 +2374,15 @@ let fimAcompanhamentoPreparacaoEsocial = 0;
             };
         } else if (vinculoStatus === 'nao_localizado') {
             proximaAcao = {
-                texto: 'Verificar vínculo novamente',
+                texto: 'Atualizar base eSocial',
                 classe: 'warning',
-                icone: 'fa-search'
+                icone: 'fa-file-excel'
             };
         } else if (vinculoStatus === 'vinculado' && !matriculaOficial) {
             proximaAcao = {
-                texto: 'Buscar matrícula',
+                texto: 'Atualizar base eSocial',
                 classe: 'info',
-                icone: 'fa-id-card'
+                icone: 'fa-file-excel'
             };
         } else if (
             vinculoStatus === 'vinculado' &&
@@ -2435,6 +2440,7 @@ let fimAcompanhamentoPreparacaoEsocial = 0;
 
         return {
             matriculaOficial,
+            matriculaOrigem,
             dataAdmissaoEsocial,
             ultimaVerificacao,
             procuracaoPendente,
@@ -3241,14 +3247,14 @@ const resumoColaborador =
                                         ? `
                                             <span
                                                 class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle"
-                                                title="O BX não retornou o vínculo nesta consulta. Isso não confirma ausência de vínculo."
+                                                title="O vínculo não foi localizado na base local atual. Atualize o Relatório Gerencial antes de usar o BX."
                                             >
-                                                <i class="fas fa-search me-1"></i>Não localizado no BX
+                                                <i class="fas fa-file-excel me-1"></i>Não localizado na base
                                             </span>
                                         `
                                         : `
                                             <span class="badge bg-secondary-subtle text-secondary-emphasis border">
-                                                <i class="fas fa-question-circle me-1"></i>Vínculo não verificado
+                                                <i class="fas fa-database me-1"></i>Aguardando base eSocial
                                             </span>
                                         `
                         }
@@ -3261,6 +3267,11 @@ const resumoColaborador =
                                     ${
                                         resumoColaborador.dataAdmissaoEsocial
                                             ? `<div class="small text-muted">Admissão: ${escaparHtml(formatarDataExibicao(resumoColaborador.dataAdmissaoEsocial))}</div>`
+                                            : ''
+                                    }
+                                    ${
+                                        String(resumoColaborador.matriculaOrigem || '').includes('relatorio')
+                                            ? `<div class="small text-success"><i class="fas fa-file-excel me-1"></i>Relatório Gerencial</div>`
                                             : ''
                                     }
                                 `
@@ -3412,11 +3423,11 @@ const resumoColaborador =
         ? `
             <button
                 type="button"
-                class="btn btn-outline-secondary btn-verificar-vinculo-esocial"
+                class="btn btn-outline-danger btn-verificar-vinculo-esocial"
                 data-id="${escaparHtml(evento.id)}"
-                title="Verificar se o CPF já está vinculado a este empregador no eSocial"
+                title="Consulta excepcional no BX. Consome a cota diária do empregador; prefira atualizar o Relatório Gerencial."
             >
-                <i class="fas fa-link"></i>
+                <i class="fas fa-satellite-dish"></i>
             </button>
         `
         : ''
@@ -7961,7 +7972,10 @@ async function initESocial() {
 
 
         // ========================================================
-        // 5b. BOTÃO RESOLVER MATRÍCULAS DA HOLDING
+        // 5b. BASE eSOCIAL POR RELATÓRIO GERENCIAL
+        //
+        // O antigo botão de resolução em massa consumia BX. Agora
+        // ele importa a base oficial CSV/XLSX, sem consumir BX.
         // ========================================================
 
         const btnResolverMatriculasHolding =
@@ -7971,12 +7985,25 @@ async function initESocial() {
 
         if (btnResolverMatriculasHolding) {
 
+            btnResolverMatriculasHolding.className =
+                'btn btn-outline-success btn-sm';
+
+            btnResolverMatriculasHolding.title =
+                'Importar Relatório Gerencial do eSocial (CSV/XLS/XLSX). Não consome BX.';
+
+            btnResolverMatriculasHolding.innerHTML =
+                '<i class="fas fa-file-excel me-1"></i> Importar base eSocial';
+
             btnResolverMatriculasHolding.onclick =
-                async function (event) {
+                function (event) {
 
                     event.preventDefault();
 
-                    await resolverMatriculasHolding();
+                    document
+                        .getElementById(
+                            'inputRelatorioGerencialEsocial'
+                        )
+                        ?.click();
                 };
         }
 
@@ -8936,7 +8963,18 @@ async function verificarVinculoESocial(
 
 function handleVerificarVinculoESocial() {
     const id = String(this.dataset.id || '').trim();
-    if (id) verificarVinculoESocial(id, this);
+
+    if (!id) return;
+
+    const confirmou = window.confirm(
+        'Esta é uma consulta EXCEPCIONAL ao BX do eSocial e consome a cota diária do empregador.\n\n' +
+        'Use preferencialmente o botão "Importar base eSocial" com o Relatório Gerencial.\n\n' +
+        'Deseja consultar o BX mesmo assim?'
+    );
+
+    if (!confirmou) return;
+
+    verificarVinculoESocial(id, this);
 }
 
 
@@ -9442,6 +9480,537 @@ if (
 
     instalarExtrasEventosESocial();
 }
+
+
+// ============================================================
+// BASE eSOCIAL - RELATÓRIO GERENCIAL DE TRABALHADORES
+// ============================================================
+//
+// Fonte primária de vínculo + matrícula. O relatório pode ser CSV,
+// XLS ou XLSX e pode conter empregadores diferentes em arquivos
+// separados enviados de uma só vez. O backend lê o empregador de
+// cada linha e grava o vínculo na chave empregador + CPF + matrícula.
+// ============================================================
+
+function garantirInputRelatorioGerencialEsocial() {
+
+    let input =
+        document.getElementById(
+            'inputRelatorioGerencialEsocial'
+        );
+
+
+    if (
+        input
+    ) {
+
+        return input;
+    }
+
+
+    input =
+        document.createElement(
+            'input'
+        );
+
+
+    input.type =
+        'file';
+
+
+    input.id =
+        'inputRelatorioGerencialEsocial';
+
+
+    input.accept =
+        '.csv,.xls,.xlsx,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+
+    input.multiple =
+        true;
+
+
+    input.hidden =
+        true;
+
+
+    document.body.appendChild(
+        input
+    );
+
+
+    return input;
+}
+
+
+function garantirStatusBaseEsocial() {
+
+    let badge =
+        document.getElementById(
+            'baseEsocialRelatorioStatus'
+        );
+
+
+    if (
+        badge
+    ) {
+
+        return badge;
+    }
+
+
+    const botao =
+        document.getElementById(
+            'btnResolverMatriculasHolding'
+        );
+
+
+    if (
+        !botao?.parentElement
+    ) {
+
+        return null;
+    }
+
+
+    badge =
+        document.createElement(
+            'span'
+        );
+
+
+    badge.id =
+        'baseEsocialRelatorioStatus';
+
+
+    badge.className =
+        'badge bg-secondary align-self-center';
+
+
+    badge.title =
+        'Situação da base local carregada a partir do Relatório Gerencial do eSocial';
+
+
+    badge.textContent =
+        'Base eSocial: não carregada';
+
+
+    botao.parentElement.appendChild(
+        badge
+    );
+
+
+    return badge;
+}
+
+
+async function atualizarStatusBaseRelatorioEsocial() {
+
+    const badge =
+        garantirStatusBaseEsocial();
+
+
+    if (
+        !badge
+    ) {
+
+        return;
+    }
+
+
+    try {
+
+        const token =
+            await obterTokenESocial();
+
+
+        const response =
+            await fetch(
+                apiUrl(
+                    '/api/soc/relatorio-gerencial-esocial/status'
+                ),
+                {
+                    headers:
+                        criarHeaders(
+                            token
+                        )
+                }
+            );
+
+
+        const resultado =
+            await lerRespostaJson(
+                response
+            );
+
+
+        if (
+            !resultado.totalVinculos
+        ) {
+
+            badge.className =
+                'badge bg-secondary align-self-center';
+
+            badge.textContent =
+                'Base eSocial: não carregada';
+
+            return;
+        }
+
+
+        badge.className =
+            'badge bg-success align-self-center';
+
+
+        const data =
+            resultado.ultimaAtualizacaoGeral
+                ? formatarDataExibicao(
+                    resultado.ultimaAtualizacaoGeral
+                  )
+                : '';
+
+
+        badge.textContent =
+            `Base eSocial: ${resultado.totalEmpregadores || 0} empresa(s) / ` +
+            `${resultado.totalVinculos || 0} vínculo(s)` +
+            (data
+                ? ` • ${data}`
+                : '');
+
+
+        badge.title =
+            'Relatório Gerencial importado. Consultas de vínculo e matrícula usam esta base local e não consomem BX.';
+
+    } catch (
+        error
+    ) {
+
+        console.warn(
+            '⚠️ Não foi possível consultar o status da base eSocial:',
+            error
+        );
+
+
+        badge.className =
+            'badge bg-warning text-dark align-self-center';
+
+        badge.textContent =
+            'Base eSocial: status indisponível';
+    }
+}
+
+
+async function importarRelatorioGerencialEsocial(
+    arquivos
+) {
+
+    const lista =
+        Array.from(
+            arquivos ||
+            []
+        )
+            .filter(
+                arquivo =>
+                    /\.(csv|xls|xlsx)$/i.test(
+                        String(
+                            arquivo?.name ||
+                            ''
+                        )
+                    )
+            );
+
+
+    if (
+        !lista.length
+    ) {
+
+        mostrarAlertaESocial(
+            'Selecione o arquivo CSV, XLS ou XLSX do relatório "Relação de trabalhadores - eSocial".',
+            'warning'
+        );
+
+        return;
+    }
+
+
+    const botao =
+        document.getElementById(
+            'btnResolverMatriculasHolding'
+        );
+
+
+    const htmlOriginal =
+        botao?.innerHTML ||
+        '';
+
+
+    if (
+        botao
+    ) {
+
+        botao.disabled =
+            true;
+
+
+        botao.innerHTML =
+            '<i class="fas fa-spinner fa-spin me-1"></i> Importando base...';
+    }
+
+
+    try {
+
+        const token =
+            await obterTokenESocial();
+
+
+        const formData =
+            new FormData();
+
+
+        lista.forEach(
+            arquivo =>
+                formData.append(
+                    'arquivos',
+                    arquivo,
+                    arquivo.name
+                )
+        );
+
+
+        mostrarAlertaESocial(
+            `Importando ${lista.length} relatório(s) gerencial(is) do eSocial. Esta operação não consome BX...`,
+            'info'
+        );
+
+
+        const response =
+            await fetch(
+                apiUrl(
+                    '/api/soc/relatorio-gerencial-esocial/importar'
+                ),
+                {
+                    method:
+                        'POST',
+                    headers:
+                        criarHeaders(
+                            token
+                        ),
+                    body:
+                        formData
+                }
+            );
+
+
+        const resultado =
+            await lerRespostaJson(
+                response
+            );
+
+
+        const empresas =
+            Array.isArray(
+                resultado.empregadores
+            )
+                ? resultado.empregadores
+                : [];
+
+
+        const resumoEmpresas =
+            empresas
+                .slice(
+                    0,
+                    6
+                )
+                .map(
+                    item =>
+                        `${item.nrInsc}: ${item.trabalhadores} vínculo(s)`
+                )
+                .join(' | ');
+
+
+        let mensagem =
+            `Base eSocial atualizada: ${resultado.linhasValidas || 0} vínculo(s), ` +
+            `${empresas.length} empregador(es), ` +
+            `${resultado.eventosLocaisAtualizados || 0} evento(s) local(is) reconciliado(s).`;
+
+
+        if (
+            resumoEmpresas
+        ) {
+
+            mensagem +=
+                ` ${resumoEmpresas}`;
+        }
+
+
+        if (
+            Number(
+                resultado.linhasIgnoradas ||
+                0
+            ) > 0
+        ) {
+
+            mensagem +=
+                ` ${resultado.linhasIgnoradas} linha(s) incompleta(s) foram ignoradas.`;
+        }
+
+
+        if (
+            Array.isArray(
+                resultado.erros
+            ) &&
+            resultado.erros.length
+        ) {
+
+            console.warn(
+                '⚠️ Arquivos/linhas com erro no Relatório Gerencial:',
+                resultado.erros
+            );
+        }
+
+
+        mostrarAlertaESocial(
+            mensagem,
+            'success'
+        );
+
+
+        await atualizarStatusBaseRelatorioEsocial();
+
+
+        await recarregarEventosESocial();
+
+    } catch (
+        error
+    ) {
+
+        console.error(
+            '❌ Erro importando Relatório Gerencial eSocial:',
+            error
+        );
+
+
+        mostrarAlertaESocial(
+            'Não foi possível importar a base eSocial: ' +
+            error.message,
+            'danger'
+        );
+
+    } finally {
+
+        if (
+            botao
+        ) {
+
+            botao.disabled =
+                false;
+
+
+            botao.innerHTML =
+                htmlOriginal ||
+                '<i class="fas fa-file-excel me-1"></i> Importar base eSocial';
+        }
+
+
+        const input =
+            document.getElementById(
+                'inputRelatorioGerencialEsocial'
+            );
+
+
+        if (
+            input
+        ) {
+
+            input.value =
+                '';
+        }
+    }
+}
+
+
+function instalarRelatorioGerencialEsocial() {
+
+    const input =
+        garantirInputRelatorioGerencialEsocial();
+
+
+    garantirStatusBaseEsocial();
+
+
+    if (
+        input.dataset.relatorioGerencialInstalado !==
+            '1'
+    ) {
+
+        input.dataset.relatorioGerencialInstalado =
+            '1';
+
+
+        input.onchange =
+            async function () {
+
+                await importarRelatorioGerencialEsocial(
+                    this.files
+                );
+            };
+    }
+
+
+    // O botão já é ligado também na inicialização principal.
+    // Reaplicar aqui garante funcionamento mesmo se o HTML carregar
+    // depois do script.
+    const botao =
+        document.getElementById(
+            'btnResolverMatriculasHolding'
+        );
+
+
+    if (
+        botao
+    ) {
+
+        botao.className =
+            'btn btn-outline-success btn-sm';
+
+
+        botao.title =
+            'Importar Relatório Gerencial do eSocial (CSV/XLS/XLSX). Não consome BX.';
+
+
+        botao.innerHTML =
+            '<i class="fas fa-file-excel me-1"></i> Importar base eSocial';
+
+
+        botao.onclick =
+            function (event) {
+
+                event.preventDefault();
+
+                input.click();
+            };
+    }
+
+
+    atualizarStatusBaseRelatorioEsocial();
+}
+
+
+if (
+    document.readyState ===
+    'loading'
+) {
+
+    document.addEventListener(
+        'DOMContentLoaded',
+        instalarRelatorioGerencialEsocial
+    );
+
+} else {
+
+    instalarRelatorioGerencialEsocial();
+}
+
 
 // ============================================================
 // IMPORTAR XMLs BAIXADOS DO PORTAL E-SOCIAL

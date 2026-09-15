@@ -10,6 +10,7 @@ const express = require('express');
 const soap = require('soap');
 const { createClient } = require('@supabase/supabase-js');
 const router = express.Router();
+const XLSXRelatorioGerencialEsocial = require('xlsx');
 const fs = require('fs');
 const path = require('path');
 const forge = require('node-forge');
@@ -57,6 +58,35 @@ const uploadZipEsocial =
 
             files:
                 1
+        }
+    });
+
+
+// ============================================================
+// IMPORTAÇÃO DO RELATÓRIO GERENCIAL DO eSOCIAL
+// "Relação de trabalhadores - eSocial" (CSV/XLS/XLSX)
+// ============================================================
+//
+// Esta é a fonte principal de vínculo e matrícula.
+// O BX fica apenas como consulta excepcional/fallback.
+// O relatório oficial já traz o empregador em cada linha, então
+// arquivos de vários clientes podem ser enviados juntos.
+// ============================================================
+
+const uploadRelatorioGerencialEsocial =
+    multerZipEsocial({
+
+        storage:
+            multerZipEsocial.memoryStorage(),
+
+        limits: {
+            fileSize:
+                80 *
+                1024 *
+                1024,
+
+            files:
+                30
         }
     });
 
@@ -22376,7 +22406,8 @@ function interpretarEventoBaixadoBx({
 const ESOCIAL_MATRICULA_ORIGENS_OFICIAIS =
     new Set([
         'bx',
-        'cache_esocial'
+        'cache_esocial',
+        'relatorio_gerencial'
     ]);
 
 
@@ -23525,7 +23556,9 @@ async function aplicarVinculoOficialNoEvento(
         matricula_origem:
             origem === 'bx'
                 ? 'bx'
-                : 'cache_esocial',
+                : origem === 'relatorio_gerencial'
+                    ? 'relatorio_gerencial'
+                    : 'cache_esocial',
 
         matricula_oficial_atualizada_em:
             agora,
@@ -23646,7 +23679,8 @@ async function aplicarVinculoOficialNoEvento(
 
 
 async function resolverEventosLocaisComVinculoEsocial(
-    vinculo
+    vinculo,
+    origem = 'cache_esocial'
 ) {
 
     const tpInsc =
@@ -23827,7 +23861,7 @@ async function resolverEventosLocaisComVinculoEsocial(
             await aplicarVinculoOficialNoEvento(
                 evento,
                 vinculo,
-                'cache_esocial'
+                origem
             );
 
 
@@ -25769,17 +25803,16 @@ function bxBloqueadoPorCalendario() {
 
 function limiteDiarioWorkerBx() {
 
-    // Autolimite conservador, não um limite documentado do eSocial.
-    // Se a consulta real estourar algum limite do governo, o SOAP
-    // fault correspondente já é tratado (status 'erro' + retentativa
-    // em 1h) — este número só evita rodar sem controle nenhum.
+    // Limite interno de segurança. O serviço BX pode bloquear o
+    // empregador após 10 solicitações no dia; usamos 8 por padrão
+    // para manter margem e evitar atingir o teto do governo.
     return Math.min(
-        100,
+        8,
         Math.max(
             1,
             envNumber(
                 'ESOCIAL_BX_LIMITE_WORKER_DIA',
-                30
+                8
             )
         )
     );
@@ -29493,7 +29526,7 @@ async function statusMatriculasEsocial() {
         workerAtivo:
             String(
                 process.env.ESOCIAL_MATRICULA_WORKER_ATIVO ||
-                'true'
+                'false'
             )
                 .trim()
                 .toLowerCase() !==
@@ -30416,7 +30449,7 @@ function iniciarWorkerMatriculasEsocial() {
     const ativo =
         String(
             process.env.ESOCIAL_MATRICULA_WORKER_ATIVO ||
-            'true'
+            'false'
         )
             .trim()
             .toLowerCase() !==
@@ -37063,7 +37096,7 @@ router.post(
                 workerMatriculasAtivo:
                     String(
                         process.env.ESOCIAL_MATRICULA_WORKER_ATIVO ||
-                        'true'
+                        'false'
                     )
                         .trim()
                         .toLowerCase() !==
@@ -37071,7 +37104,7 @@ router.post(
 
                 message:
                     'Período preparado com cache local. ' +
-                    'Vínculos ainda ausentes permanecem na fila automática.',
+                    'Vínculos ausentes aguardam atualização do Relatório Gerencial ou consulta BX excepcional.',
 
                 resumo,
 
@@ -48636,6 +48669,1571 @@ router.post(
                 .json({
                     success: false,
                     error: error?.message || String(error)
+                });
+        }
+    }
+);
+
+
+
+// ============================================================
+// RELATÓRIO GERENCIAL eSOCIAL - BASE LOCAL DE VÍNCULOS
+// ============================================================
+// Fonte principal para:
+// - CPF x empregador;
+// - matrícula oficial;
+// - data de admissão;
+// - categoria.
+//
+// O relatório oficial "Relação de trabalhadores - eSocial" traz
+// Tipo/Número de Inscrição do Empregador em cada linha. Por isso o
+// importador aceita arquivos de vários clientes ao mesmo tempo sem
+// misturar os vínculos.
+// ============================================================
+
+function normalizarCabecalhoRelatorioGerencialEsocial(
+    valor
+) {
+
+    return String(
+        valor || ''
+    )
+        .normalize('NFD')
+        .replace(
+            /[\u0300-\u036f]/g,
+            ''
+        )
+        .toLowerCase()
+        .replace(
+            /[^a-z0-9]+/g,
+            ' '
+        )
+        .trim();
+}
+
+
+function localizarIndiceCabecalhoRelatorioGerencialEsocial(
+    matriz
+) {
+
+    const linhas =
+        Array.isArray(matriz)
+            ? matriz
+            : [];
+
+
+    for (
+        let indice = 0;
+        indice < Math.min(
+            linhas.length,
+            40
+        );
+        indice++
+    ) {
+
+        const linha =
+            Array.isArray(
+                linhas[indice]
+            )
+                ? linhas[indice]
+                : [];
+
+
+        const cabecalhos =
+            linha.map(
+                normalizarCabecalhoRelatorioGerencialEsocial
+            );
+
+
+        const temCpf =
+            cabecalhos.some(
+                item =>
+                    item === 'cpf do trabalhador' ||
+                    item === 'cpf trabalhador' ||
+                    item === 'cpf'
+            );
+
+
+        const temMatricula =
+            cabecalhos.some(
+                item =>
+                    item === 'matricula' ||
+                    item.includes('matricula do trabalhador')
+            );
+
+
+        const temEmpregador =
+            cabecalhos.some(
+                item =>
+                    item === 'numero de inscricao do empregador' ||
+                    item === 'n de inscricao do empregador' ||
+                    item === 'inscricao do empregador'
+            );
+
+
+        if (
+            temCpf &&
+            temMatricula &&
+            temEmpregador
+        ) {
+
+            return indice;
+        }
+    }
+
+
+    return -1;
+}
+
+
+function transformarMatrizRelatorioGerencialEsocial(
+    matriz
+) {
+
+    const indiceCabecalho =
+        localizarIndiceCabecalhoRelatorioGerencialEsocial(
+            matriz
+        );
+
+
+    if (
+        indiceCabecalho < 0
+    ) {
+
+        throw new Error(
+            'Não foi localizado o cabeçalho do relatório "Relação de trabalhadores - eSocial". ' +
+            'Use o arquivo CSV/XLSX original gerado em Relatórios Gerenciais.'
+        );
+    }
+
+
+    const cabecalhosOriginais =
+        matriz[indiceCabecalho]
+            .map(
+                item =>
+                    String(
+                        item || ''
+                    ).trim()
+            );
+
+
+    const cabecalhosNormalizados =
+        cabecalhosOriginais.map(
+            normalizarCabecalhoRelatorioGerencialEsocial
+        );
+
+
+    const registros =
+        [];
+
+
+    for (
+        let indice = indiceCabecalho + 1;
+        indice < matriz.length;
+        indice++
+    ) {
+
+        const linha =
+            Array.isArray(
+                matriz[indice]
+            )
+                ? matriz[indice]
+                : [];
+
+
+        if (
+            !linha.some(
+                valor =>
+                    String(
+                        valor ?? ''
+                    ).trim()
+            )
+        ) {
+
+            continue;
+        }
+
+
+        const registro =
+            {};
+
+
+        for (
+            let coluna = 0;
+            coluna < cabecalhosNormalizados.length;
+            coluna++
+        ) {
+
+            const chave =
+                cabecalhosNormalizados[coluna];
+
+
+            if (
+                !chave
+            ) {
+
+                continue;
+            }
+
+
+            registro[chave] =
+                linha[coluna] ?? '';
+        }
+
+
+        registros.push(
+            registro
+        );
+    }
+
+
+    return {
+        registros,
+        cabecalhosOriginais,
+        cabecalhosNormalizados
+    };
+}
+
+
+function valorRelatorioGerencialEsocial(
+    registro,
+    nomes
+) {
+
+    for (
+        const nome
+        of nomes
+    ) {
+
+        const chave =
+            normalizarCabecalhoRelatorioGerencialEsocial(
+                nome
+            );
+
+
+        const valor =
+            registro?.[chave];
+
+
+        if (
+            valor !== undefined &&
+            valor !== null &&
+            String(
+                valor
+            ).trim() !== ''
+        ) {
+
+            return valor;
+        }
+    }
+
+
+    return '';
+}
+
+
+function normalizarTipoInscricaoRelatorioGerencialEsocial(
+    valor,
+    nrInsc
+) {
+
+    const texto =
+        String(
+            valor || ''
+        ).trim();
+
+
+    const encontrado =
+        texto.match(
+            /(^|\D)(1|2)(\D|$)/
+        );
+
+
+    if (
+        encontrado
+    ) {
+
+        return encontrado[2];
+    }
+
+
+    const documento =
+        normalizarDocumentoEsocial(
+            nrInsc
+        );
+
+
+    if (
+        documento.length === 11
+    ) {
+
+        return '2';
+    }
+
+
+    if (
+        documento.length === 8 ||
+        documento.length === 14
+    ) {
+
+        return '1';
+    }
+
+
+    return '';
+}
+
+
+function normalizarCategoriaRelatorioGerencialEsocial(
+    valor
+) {
+
+    const texto =
+        String(
+            valor || ''
+        ).trim();
+
+
+    const match =
+        texto.match(
+            /\b(\d{3})\b/
+        );
+
+
+    return match
+        ? match[1]
+        : texto;
+}
+
+
+function mapearLinhaRelatorioGerencialEsocial(
+    registro,
+    agora
+) {
+
+    const nrInscBruto =
+        valorRelatorioGerencialEsocial(
+            registro,
+            [
+                'Número de Inscrição do Empregador',
+                'Nº de Inscrição do Empregador',
+                'N de Inscrição do Empregador',
+                'Inscrição do Empregador'
+            ]
+        );
+
+
+    const tpInsc =
+        normalizarTipoInscricaoRelatorioGerencialEsocial(
+            valorRelatorioGerencialEsocial(
+                registro,
+                [
+                    'Tipo de Inscrição do Empregador',
+                    'Tipo Inscrição do Empregador'
+                ]
+            ),
+            nrInscBruto
+        );
+
+
+    const nrInsc =
+        normalizarNrInscEmpregadorEsocial(
+            tpInsc,
+            nrInscBruto
+        );
+
+
+    const cpf =
+        normalizarCpfEsocial(
+            valorRelatorioGerencialEsocial(
+                registro,
+                [
+                    'CPF do Trabalhador',
+                    'CPF Trabalhador',
+                    'CPF'
+                ]
+            )
+        );
+
+
+    const matricula =
+        String(
+            valorRelatorioGerencialEsocial(
+                registro,
+                [
+                    'Matrícula',
+                    'Matricula'
+                ]
+            ) || ''
+        ).trim();
+
+
+    const dataAdmissao =
+        normalizarDataAdmissaoEsocial(
+            valorRelatorioGerencialEsocial(
+                registro,
+                [
+                    'Data de Admissão',
+                    'Data Admissão',
+                    'Data de Início'
+                ]
+            )
+        );
+
+
+    const dataDesligamento =
+        normalizarDataAdmissaoEsocial(
+            valorRelatorioGerencialEsocial(
+                registro,
+                [
+                    'Data de Desligamento',
+                    'Data Desligamento',
+                    'Data de Término'
+                ]
+            )
+        );
+
+
+    const codCateg =
+        normalizarCategoriaRelatorioGerencialEsocial(
+            valorRelatorioGerencialEsocial(
+                registro,
+                [
+                    'Código da Categoria',
+                    'Codigo da Categoria',
+                    'Categoria'
+                ]
+            )
+        );
+
+
+    const numeroReciboAdmissao =
+        String(
+            valorRelatorioGerencialEsocial(
+                registro,
+                [
+                    'Número do Recibo da Admissão Original',
+                    'Numero do Recibo da Admissao Original',
+                    'Número do Recibo da Admissão Preliminar Original',
+                    'Numero do Recibo da Admissao Preliminar Original'
+                ]
+            ) || ''
+        ).trim();
+
+
+    const nomeTrabalhador =
+        String(
+            valorRelatorioGerencialEsocial(
+                registro,
+                [
+                    'Nome do Trabalhador',
+                    'Nome'
+                ]
+            ) || ''
+        ).trim();
+
+
+    const valido =
+        Boolean(
+            tpInsc &&
+            nrInsc &&
+            cpf.length === 11 &&
+            matricula
+        );
+
+
+    return {
+        valido,
+        motivoInvalido:
+            valido
+                ? null
+                : 'Linha sem empregador, CPF ou matrícula obrigatórios.',
+        nomeTrabalhador,
+        dataDesligamento:
+            dataDesligamento ||
+            null,
+        registroBanco: {
+            tp_insc_empregador:
+                tpInsc ||
+                null,
+            nr_insc_empregador:
+                nrInsc ||
+                null,
+            cpf:
+                cpf ||
+                null,
+            matricula_esocial:
+                matricula ||
+                null,
+            cod_categ:
+                codCateg ||
+                null,
+            tipo_evento_origem:
+                'RELATORIO_GERENCIAL',
+            id_evento_origem:
+                null,
+            numero_recibo_origem:
+                numeroReciboAdmissao ||
+                null,
+            data_admissao:
+                dataAdmissao ||
+                null,
+            fonte:
+                'relatorio_gerencial',
+            atualizado_em:
+                agora,
+            updated_at:
+                agora
+        }
+    };
+}
+
+
+function lerArquivoRelatorioGerencialEsocial(
+    arquivo
+) {
+
+    if (
+        !arquivo?.buffer?.length
+    ) {
+
+        throw new Error(
+            'Arquivo vazio.'
+        );
+    }
+
+
+    const workbook =
+        XLSXRelatorioGerencialEsocial.read(
+            arquivo.buffer,
+            {
+                type:
+                    'buffer',
+                cellDates:
+                    false,
+                raw:
+                    false,
+                codepage:
+                    65001
+            }
+        );
+
+
+    const todas =
+        [];
+
+
+    let cabecalhos =
+        [];
+
+
+    for (
+        const nomeAba
+        of workbook.SheetNames || []
+    ) {
+
+        const sheet =
+            workbook.Sheets[
+                nomeAba
+            ];
+
+
+        if (
+            !sheet
+        ) {
+
+            continue;
+        }
+
+
+        const matriz =
+            XLSXRelatorioGerencialEsocial.utils.sheet_to_json(
+                sheet,
+                {
+                    header:
+                        1,
+                    defval:
+                        '',
+                    raw:
+                        false,
+                    blankrows:
+                        false
+                }
+            );
+
+
+        if (
+            !Array.isArray(matriz) ||
+            !matriz.length
+        ) {
+
+            continue;
+        }
+
+
+        try {
+
+            const convertido =
+                transformarMatrizRelatorioGerencialEsocial(
+                    matriz
+                );
+
+
+            if (
+                convertido.registros.length
+            ) {
+
+                todas.push(
+                    ...convertido.registros
+                );
+
+
+                if (
+                    !cabecalhos.length
+                ) {
+
+                    cabecalhos =
+                        convertido.cabecalhosOriginais;
+                }
+            }
+
+        } catch (
+            errorAba
+        ) {
+
+            // Alguns XLSX podem conter abas auxiliares.
+            // Ignorar a aba sem cabeçalho válido e tentar a próxima.
+            continue;
+        }
+    }
+
+
+    if (
+        !todas.length
+    ) {
+
+        throw new Error(
+            `O arquivo ${arquivo.originalname || 'informado'} não contém linhas reconhecíveis do relatório gerencial.`
+        );
+    }
+
+
+    return {
+        registros:
+            todas,
+        cabecalhos
+    };
+}
+
+
+function dividirEmLotesEsocial(
+    lista,
+    tamanho = 400
+) {
+
+    const resultado =
+        [];
+
+
+    for (
+        let i = 0;
+        i < lista.length;
+        i += tamanho
+    ) {
+
+        resultado.push(
+            lista.slice(
+                i,
+                i + tamanho
+            )
+        );
+    }
+
+
+    return resultado;
+}
+
+
+async function reconciliarEventosComRelatorioGerencialEsocial(
+    vinculos
+) {
+
+    const lista =
+        Array.isArray(vinculos)
+            ? vinculos
+            : [];
+
+
+    if (
+        !lista.length
+    ) {
+
+        return 0;
+    }
+
+
+    const grupos =
+        new Map();
+
+
+    for (
+        const vinculo
+        of lista
+    ) {
+
+        const tpInsc =
+            String(
+                vinculo.tp_insc_empregador ||
+                ''
+            ).trim();
+
+
+        const nrInsc =
+            normalizarNrInscEmpregadorEsocial(
+                tpInsc,
+                vinculo.nr_insc_empregador ||
+                ''
+            );
+
+
+        const cpf =
+            normalizarCpfEsocial(
+                vinculo.cpf ||
+                ''
+            );
+
+
+        if (
+            !tpInsc ||
+            !nrInsc ||
+            cpf.length !== 11
+        ) {
+
+            continue;
+        }
+
+
+        const chave =
+            `${tpInsc}|${nrInsc}`;
+
+
+        if (
+            !grupos.has(
+                chave
+            )
+        ) {
+
+            grupos.set(
+                chave,
+                []
+            );
+        }
+
+
+        grupos.get(
+            chave
+        ).push(
+            vinculo
+        );
+    }
+
+
+    let atualizados =
+        0;
+
+
+    for (
+        const [
+            chave,
+            vinculosEmpregador
+        ]
+        of grupos.entries()
+    ) {
+
+        const [
+            tpInsc,
+            nrInsc
+        ] =
+            chave.split('|');
+
+
+        const porCpf =
+            new Map();
+
+
+        for (
+            const vinculo
+            of vinculosEmpregador
+        ) {
+
+            const cpf =
+                normalizarCpfEsocial(
+                    vinculo.cpf ||
+                    ''
+                );
+
+
+            if (
+                !porCpf.has(
+                    cpf
+                )
+            ) {
+
+                porCpf.set(
+                    cpf,
+                    []
+                );
+            }
+
+
+            porCpf.get(
+                cpf
+            ).push(
+                vinculo
+            );
+        }
+
+
+        const cpfs =
+            Array.from(
+                porCpf.keys()
+            );
+
+
+        for (
+            const loteCpfs
+            of dividirEmLotesEsocial(
+                cpfs,
+                150
+            )
+        ) {
+
+            const {
+                data:
+                    eventos,
+                error
+            } =
+                await getSupabase()
+                    .from(
+                        'esocial_eventos'
+                    )
+                    .select(
+                        '*'
+                    )
+                    .eq(
+                        'tp_insc_empregador',
+                        tpInsc
+                    )
+                    .in(
+                        'cpf',
+                        loteCpfs
+                    )
+                    .in(
+                        'tipo_evento',
+                        [
+                            'S-2220',
+                            'S-2240'
+                        ]
+                    );
+
+
+            if (
+                error
+            ) {
+
+                throw error;
+            }
+
+
+            for (
+                const evento
+                of (
+                    Array.isArray(eventos)
+                        ? eventos
+                        : []
+                )
+            ) {
+
+                if (
+                    !nrInscEmpregadorEquivalenteEsocial(
+                        tpInsc,
+                        evento.nr_insc_empregador ||
+                        '',
+                        nrInsc
+                    )
+                ) {
+
+                    continue;
+                }
+
+
+                const cpf =
+                    normalizarCpfEsocial(
+                        evento.cpf ||
+                        ''
+                    );
+
+
+                const candidatos =
+                    porCpf.get(
+                        cpf
+                    ) ||
+                    [];
+
+
+                if (
+                    !candidatos.length
+                ) {
+
+                    continue;
+                }
+
+
+                const dataEvento =
+                    normalizarDataAdmissaoEsocial(
+                        evento.data_admissao ||
+                        ''
+                    );
+
+
+                let escolhido =
+                    dataEvento
+                        ? candidatos.find(
+                            item =>
+                                normalizarDataAdmissaoEsocial(
+                                    item.data_admissao ||
+                                    ''
+                                ) ===
+                                dataEvento
+                          )
+                        : null;
+
+
+                if (
+                    !escolhido
+                ) {
+
+                    const matriculas =
+                        new Set(
+                            candidatos
+                                .map(
+                                    item =>
+                                        String(
+                                            item.matricula_esocial ||
+                                            ''
+                                        ).trim()
+                                )
+                                .filter(
+                                    Boolean
+                                )
+                        );
+
+
+                    if (
+                        matriculas.size === 1
+                    ) {
+
+                        escolhido =
+                            candidatos[0];
+                    }
+                }
+
+
+                if (
+                    !escolhido
+                ) {
+
+                    continue;
+                }
+
+
+                const resultado =
+                    await aplicarVinculoOficialNoEvento(
+                        evento,
+                        escolhido,
+                        'relatorio_gerencial'
+                    );
+
+
+                if (
+                    resultado?.encontrada
+                ) {
+
+                    atualizados++;
+                }
+            }
+        }
+    }
+
+
+    return atualizados;
+}
+
+
+router.post(
+    '/relatorio-gerencial-esocial/importar',
+    uploadRelatorioGerencialEsocial.array(
+        'arquivos',
+        30
+    ),
+    async (
+        req,
+        res
+    ) => {
+
+        try {
+
+            const arquivos =
+                Array.isArray(
+                    req.files
+                )
+                    ? req.files
+                    : [];
+
+
+            if (
+                !arquivos.length
+            ) {
+
+                return res
+                    .status(400)
+                    .json({
+                        success:
+                            false,
+                        error:
+                            'Selecione pelo menos um relatório CSV, XLS ou XLSX.'
+                    });
+            }
+
+
+            const agora =
+                new Date()
+                    .toISOString();
+
+
+            const registrosValidos =
+                [];
+
+
+            const erros =
+                [];
+
+
+            const arquivosProcessados =
+                [];
+
+
+            let totalLinhas =
+                0;
+
+
+            let linhasIgnoradas =
+                0;
+
+
+            for (
+                const arquivo
+                of arquivos
+            ) {
+
+                const nomeArquivo =
+                    String(
+                        arquivo.originalname ||
+                        'arquivo'
+                    );
+
+
+                const extensao =
+                    nomeArquivo
+                        .toLowerCase()
+                        .split('.')
+                        .pop();
+
+
+                if (
+                    ![
+                        'csv',
+                        'xls',
+                        'xlsx'
+                    ].includes(
+                        extensao
+                    )
+                ) {
+
+                    erros.push(
+                        `${nomeArquivo}: formato não suportado.`
+                    );
+
+                    continue;
+                }
+
+
+                try {
+
+                    const leitura =
+                        lerArquivoRelatorioGerencialEsocial(
+                            arquivo
+                        );
+
+
+                    let validasArquivo =
+                        0;
+
+
+                    let ignoradasArquivo =
+                        0;
+
+
+                    for (
+                        const linha
+                        of leitura.registros
+                    ) {
+
+                        totalLinhas++;
+
+
+                        const mapeado =
+                            mapearLinhaRelatorioGerencialEsocial(
+                                linha,
+                                agora
+                            );
+
+
+                        if (
+                            !mapeado.valido
+                        ) {
+
+                            linhasIgnoradas++;
+                            ignoradasArquivo++;
+                            continue;
+                        }
+
+
+                        registrosValidos.push(
+                            {
+                                ...mapeado.registroBanco,
+                                __nomeTrabalhador:
+                                    mapeado.nomeTrabalhador,
+                                __dataDesligamento:
+                                    mapeado.dataDesligamento,
+                                __arquivo:
+                                    nomeArquivo
+                            }
+                        );
+
+
+                        validasArquivo++;
+                    }
+
+
+                    arquivosProcessados.push({
+                        arquivo:
+                            nomeArquivo,
+                        linhas:
+                            leitura.registros.length,
+                        validas:
+                            validasArquivo,
+                        ignoradas:
+                            ignoradasArquivo
+                    });
+
+                } catch (
+                    errorArquivo
+                ) {
+
+                    erros.push(
+                        `${nomeArquivo}: ${errorArquivo?.message || errorArquivo}`
+                    );
+                }
+            }
+
+
+            if (
+                !registrosValidos.length
+            ) {
+
+                return res
+                    .status(422)
+                    .json({
+                        success:
+                            false,
+                        error:
+                            'Nenhum vínculo válido foi localizado nos relatórios enviados.',
+                        erros,
+                        arquivos:
+                            arquivosProcessados
+                    });
+            }
+
+
+            // Remover duplicidades dentro do próprio upload.
+            // A chave oficial é empregador + CPF + matrícula.
+            const unicos =
+                new Map();
+
+
+            for (
+                const item
+                of registrosValidos
+            ) {
+
+                const chave =
+                    [
+                        item.tp_insc_empregador,
+                        item.nr_insc_empregador,
+                        item.cpf,
+                        item.matricula_esocial
+                    ].join('|');
+
+
+                unicos.set(
+                    chave,
+                    item
+                );
+            }
+
+
+            const listaUnica =
+                Array.from(
+                    unicos.values()
+                );
+
+
+            const paraBanco =
+                listaUnica.map(
+                    item => {
+
+                        const copia =
+                            {
+                                ...item
+                            };
+
+
+                        delete copia.__nomeTrabalhador;
+                        delete copia.__dataDesligamento;
+                        delete copia.__arquivo;
+
+
+                        return copia;
+                    }
+                );
+
+
+            for (
+                const lote
+                of dividirEmLotesEsocial(
+                    paraBanco,
+                    400
+                )
+            ) {
+
+                const {
+                    error
+                } =
+                    await getSupabase()
+                        .from(
+                            'esocial_vinculos'
+                        )
+                        .upsert(
+                            lote,
+                            {
+                                onConflict:
+                                    'tp_insc_empregador,nr_insc_empregador,cpf,matricula_esocial'
+                            }
+                        );
+
+
+                if (
+                    error
+                ) {
+
+                    throw error;
+                }
+            }
+
+
+            const eventosAtualizados =
+                await reconciliarEventosComRelatorioGerencialEsocial(
+                    paraBanco
+                );
+
+
+            const resumoEmpregadores =
+                new Map();
+
+
+            for (
+                const item
+                of listaUnica
+            ) {
+
+                const chave =
+                    `${item.tp_insc_empregador}|${item.nr_insc_empregador}`;
+
+
+                if (
+                    !resumoEmpregadores.has(
+                        chave
+                    )
+                ) {
+
+                    resumoEmpregadores.set(
+                        chave,
+                        {
+                            tpInsc:
+                                item.tp_insc_empregador,
+                            nrInsc:
+                                item.nr_insc_empregador,
+                            trabalhadores:
+                                0,
+                            ativos:
+                                0,
+                            desligados:
+                                0,
+                            atualizadoEm:
+                                agora
+                        }
+                    );
+                }
+
+
+                const resumo =
+                    resumoEmpregadores.get(
+                        chave
+                    );
+
+
+                resumo.trabalhadores++;
+
+
+                if (
+                    item.__dataDesligamento
+                ) {
+
+                    resumo.desligados++;
+
+                } else {
+
+                    resumo.ativos++;
+                }
+            }
+
+
+            return res.json({
+                success:
+                    true,
+                fonte:
+                    'relatorio_gerencial_esocial',
+                semConsumoBx:
+                    true,
+                totalArquivos:
+                    arquivos.length,
+                totalLinhas,
+                linhasValidas:
+                    listaUnica.length,
+                linhasIgnoradas,
+                eventosLocaisAtualizados:
+                    eventosAtualizados,
+                empregadores:
+                    Array.from(
+                        resumoEmpregadores.values()
+                    ),
+                arquivos:
+                    arquivosProcessados,
+                erros
+            });
+
+        } catch (
+            error
+        ) {
+
+            console.error(
+                '❌ Erro importando Relatório Gerencial eSocial:',
+                error?.message ||
+                error
+            );
+
+
+            return res
+                .status(500)
+                .json({
+                    success:
+                        false,
+                    error:
+                        error?.message ||
+                        String(error)
+                });
+        }
+    }
+);
+
+
+router.get(
+    '/relatorio-gerencial-esocial/status',
+    async (
+        req,
+        res
+    ) => {
+
+        try {
+
+            const {
+                data,
+                error
+            } =
+                await getSupabase()
+                    .from(
+                        'esocial_vinculos'
+                    )
+                    .select(
+                        'tp_insc_empregador,nr_insc_empregador,cpf,matricula_esocial,atualizado_em'
+                    )
+                    .eq(
+                        'fonte',
+                        'relatorio_gerencial'
+                    )
+                    .order(
+                        'atualizado_em',
+                        {
+                            ascending:
+                                false
+                        }
+                    )
+                    .limit(
+                        20000
+                    );
+
+
+            if (
+                error
+            ) {
+
+                throw error;
+            }
+
+
+            const grupos =
+                new Map();
+
+
+            for (
+                const item
+                of (
+                    Array.isArray(data)
+                        ? data
+                        : []
+                )
+            ) {
+
+                const chave =
+                    `${item.tp_insc_empregador}|${item.nr_insc_empregador}`;
+
+
+                if (
+                    !grupos.has(
+                        chave
+                    )
+                ) {
+
+                    grupos.set(
+                        chave,
+                        {
+                            tpInsc:
+                                item.tp_insc_empregador,
+                            nrInsc:
+                                item.nr_insc_empregador,
+                            trabalhadores:
+                                0,
+                            ultimaAtualizacao:
+                                item.atualizado_em ||
+                                null
+                        }
+                    );
+                }
+
+
+                const grupo =
+                    grupos.get(
+                        chave
+                    );
+
+
+                grupo.trabalhadores++;
+
+
+                if (
+                    item.atualizado_em &&
+                    (
+                        !grupo.ultimaAtualizacao ||
+                        new Date(
+                            item.atualizado_em
+                        ) >
+                        new Date(
+                            grupo.ultimaAtualizacao
+                        )
+                    )
+                ) {
+
+                    grupo.ultimaAtualizacao =
+                        item.atualizado_em;
+                }
+            }
+
+
+            const empregadores =
+                Array.from(
+                    grupos.values()
+                )
+                    .sort(
+                        (a, b) =>
+                            String(
+                                b.ultimaAtualizacao ||
+                                ''
+                            ).localeCompare(
+                                String(
+                                    a.ultimaAtualizacao ||
+                                    ''
+                                )
+                            )
+                    );
+
+
+            return res.json({
+                success:
+                    true,
+                semConsumoBx:
+                    true,
+                totalEmpregadores:
+                    empregadores.length,
+                totalVinculos:
+                    empregadores.reduce(
+                        (total, item) =>
+                            total +
+                            Number(
+                                item.trabalhadores ||
+                                0
+                            ),
+                        0
+                    ),
+                ultimaAtualizacaoGeral:
+                    empregadores[0]
+                        ?.ultimaAtualizacao ||
+                    null,
+                empregadores
+            });
+
+        } catch (
+            error
+        ) {
+
+            return res
+                .status(500)
+                .json({
+                    success:
+                        false,
+                    error:
+                        error?.message ||
+                        String(error)
                 });
         }
     }
