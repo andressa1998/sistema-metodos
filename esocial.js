@@ -1,6 +1,6 @@
 // ============================================================
 // esocial.js - Módulo e-Social com integração SOC
-// Atualizado para trabalhar com backend Node na porta 3002
+// Atualizado para trabalhar com backend hospedado no Render
 // ============================================================
 
 (() => {
@@ -10,8 +10,13 @@
     // CONFIGURAÇÃO
     // ============================================================
 
-    const API_BASE_URL =
-            'https://sistema-metodos.onrender.com';
+    // Backend principal hospedado no Render.
+    // Pode ser sobrescrito antes de carregar este arquivo definindo:
+    // window.ESOCIAL_API_BASE_URL = 'https://outro-endereco.onrender.com';
+    const API_BASE_URL = String(
+        window.ESOCIAL_API_BASE_URL ||
+        'https://sistema-metodos.onrender.com'
+    ).replace(/\/+$/, '');
 
     const REGISTROS_POR_PAGINA = 25;
 
@@ -93,56 +98,77 @@ let fimAcompanhamentoPreparacaoEsocial = 0;
     }
 
     async function lerRespostaJson(
-    response
-) {
-    const text =
-        await response.text();
+        response
+    ) {
+        const text =
+            await response.text();
 
-    let data = {};
+        let data = {};
 
-    if (text) {
-        try {
-            data =
-                JSON.parse(text);
+        if (text) {
+            try {
+                data = JSON.parse(text);
 
-        } catch (error) {
-            console.error(
-                '❌ Resposta não JSON:',
-                text
-            );
+            } catch (error) {
+                console.error(
+                    '❌ Resposta não JSON:',
+                    text
+                );
 
+                throw new Error(
+                    `Servidor retornou resposta inválida ` +
+                    `(HTTP ${response.status}). ` +
+                    `Confirme se o backend está disponível em ` +
+                    `${API_BASE_URL}.`
+                );
+            }
+        }
+
+        if (!response.ok) {
             throw new Error(
-                `Servidor retornou resposta inválida ` +
-                `(HTTP ${response.status}). ` +
-                `Confirme se o backend está disponível em ` +
-                `${API_BASE_URL}.`
+                data.error ||
+                data.message ||
+                data.details?.message ||
+                `Erro HTTP ${response.status}`
             );
         }
-    }
 
-    if (!response.ok) {
-        throw new Error(
-            data.error ||
-            data.message ||
-            data.details?.message ||
-            `Erro HTTP ${response.status}`
-        );
+        return data;
     }
-
-    return data;
-}
 
     async function requisicaoJson(
         path,
         options = {}
     ) {
-        const response =
-            await fetch(
-                apiUrl(path),
-                options
-            );
+        const url =
+            apiUrl(path);
 
-        return lerRespostaJson(response);
+        try {
+            const response =
+                await fetch(
+                    url,
+                    options
+                );
+
+            return lerRespostaJson(response);
+
+        } catch (error) {
+            // Erros de rede/CORS chegam ao fetch como TypeError/Failed to fetch.
+            if (
+                error instanceof TypeError ||
+                /failed to fetch|networkerror|load failed/i.test(
+                    String(error?.message || '')
+                )
+            ) {
+                throw new Error(
+                    `Não foi possível conectar ao backend em ${API_BASE_URL}. ` +
+                    `Verifique se o serviço do Render está online e se o CORS ` +
+                    `do server.js permite a origem deste sistema.`
+                );
+            }
+
+            throw error;
+        }
     }
 
     // ============================================================
