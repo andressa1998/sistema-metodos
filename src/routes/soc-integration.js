@@ -26124,7 +26124,7 @@ function montarJanelaBxParaAdmissao(
         new Date(
             Date.now() -
             (
-                2 *
+                1 *
                 60 *
                 60 *
                 1000
@@ -26340,7 +26340,7 @@ function montarJanelaBxHistoricaProgressivaEvento(
     const limiteFim =
         new Date(
             Date.now() -
-            2 *
+            1 *
             60 *
             60 *
             1000
@@ -34744,7 +34744,7 @@ async function verificarEventoExistenteNoEsocialAntesDoEnvio(
 
 
     const margemSegurancaBxMs =
-        2 *
+        1 *
         60 *
         60 *
         1000;
@@ -35261,7 +35261,7 @@ function montarJanelaHistoricaRapidaVinculoEsocial(
     const limiteDtFimBx =
         new Date(
             Date.now() -
-            2 *
+            1 *
             60 *
             60 *
             1000
@@ -35880,11 +35880,19 @@ async function verificarVinculoCpfEmpregadorEsocial(
             : [];
 
     if (!identificadores.length) {
+        // IMPORTANTE:
+        // "nenhum identificador retornado" NÃO prova que o CPF não
+        // esteja vinculado ao empregador. O BX é uma consulta de
+        // eventos recebidos dentro de uma janela de recepção e o
+        // próprio eSocial só permite consultar até 1 hora antes do
+        // momento atual. Portanto, principalmente em admissões
+        // recentes, o resultado correto é "não localizado no BX",
+        // e não "não vinculado".
         await atualizarPendenciaMatricula(
             pendencia.id,
             {
                 status: 'pendente',
-                motivo: 'VINCULO_NAO_LOCALIZADO_ESOCIAL',
+                motivo: 'VINCULO_NAO_LOCALIZADO_BX',
                 ultimo_erro: null,
                 proxima_tentativa_em: null
             }
@@ -35892,15 +35900,19 @@ async function verificarVinculoCpfEmpregadorEsocial(
 
         return {
             success: true,
-            verificado: true,
-            vinculado: false,
+            verificado: false,
+            vinculado: null,
             origem: 'bx',
-            motivo: 'VINCULO_NAO_LOCALIZADO_ESOCIAL',
+            motivo: 'VINCULO_NAO_LOCALIZADO_BX',
             periodoConsultado: {
                 dtIni: consulta.dtIni,
                 dtFim: consulta.dtFim
             },
-            mensagem: 'CPF ainda não está vinculado a este empregador no eSocial.'
+            mensagem:
+                'O vínculo não foi localizado no eSocial BX nesta consulta. ' +
+                'Isso não significa que o CPF não esteja vinculado. ' +
+                'Eventos recebidos na última hora ainda não ficam disponíveis no BX. ' +
+                'Tente verificar novamente mais tarde.'
         };
     }
 
@@ -37278,7 +37290,7 @@ router.post(
             // ====================================================
 
             const margemSegurancaBxMs =
-                2 *
+                1 *
                 60 *
                 60 *
                 1000;
@@ -45355,11 +45367,20 @@ function enriquecerEventoParaFrontendEsocial(
         vinculoEsocialStatus =
             'vinculado';
     } else if (
-        motivoPendenciaMatricula ===
+        [
+            // Motivo novo: ausência no BX é apenas inconclusiva.
+            'VINCULO_NAO_LOCALIZADO_BX',
+
+            // Compatibilidade com registros gravados pela versão
+            // anterior. Eles NÃO devem continuar aparecendo como
+            // "CPF não vinculado", porque a conclusão era indevida.
             'VINCULO_NAO_LOCALIZADO_ESOCIAL'
+        ].includes(
+            motivoPendenciaMatricula
+        )
     ) {
         vinculoEsocialStatus =
-            'nao_vinculado';
+            'nao_localizado';
     }
 
     const vinculoEsocialVerificadoEm =
@@ -45377,8 +45398,11 @@ function enriquecerEventoParaFrontendEsocial(
     const vinculoEsocialMensagem =
         vinculoEsocialStatus === 'vinculado'
             ? 'CPF vinculado ao empregador no eSocial.'
-            : vinculoEsocialStatus === 'nao_vinculado'
-                ? 'CPF ainda não vinculado ao empregador no eSocial.'
+            : vinculoEsocialStatus === 'nao_localizado'
+                ? (
+                    'Vínculo ainda não localizado no eSocial BX. ' +
+                    'Este resultado não confirma ausência de vínculo.'
+                  )
                 : null;
 
 

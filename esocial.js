@@ -2286,8 +2286,15 @@ let fimAcompanhamentoPreparacaoEsocial = 0;
             statusVinculoInformado.includes('vinculado')
         ) {
             vinculoStatus = 'vinculado';
-        } else if (statusVinculoInformado.includes('nao_vinculado')) {
-            vinculoStatus = 'nao_vinculado';
+        } else if (
+            statusVinculoInformado.includes('nao_localizado') ||
+            statusVinculoInformado.includes('nao_vinculado')
+        ) {
+            // "não localizado no BX" não significa "não vinculado".
+            // O valor antigo "nao_vinculado" é tratado aqui apenas
+            // para corrigir visualmente registros gravados pela versão
+            // anterior.
+            vinculoStatus = 'nao_localizado';
         }
 
         const ultimaVerificacao = dataMaisRecenteESocial(
@@ -2360,11 +2367,11 @@ let fimAcompanhamentoPreparacaoEsocial = 0;
                 classe: 'danger',
                 icone: 'fa-file-signature'
             };
-        } else if (vinculoStatus === 'nao_vinculado') {
+        } else if (vinculoStatus === 'nao_localizado') {
             proximaAcao = {
-                texto: 'Aguardar admissão no eSocial',
+                texto: 'Verificar vínculo novamente',
                 classe: 'warning',
-                icone: 'fa-user-clock'
+                icone: 'fa-search'
             };
         } else if (vinculoStatus === 'vinculado' && !matriculaOficial) {
             proximaAcao = {
@@ -3230,10 +3237,13 @@ const resumoColaborador =
                                             <i class="fas fa-user-check me-1"></i>CPF vinculado
                                         </span>
                                     `
-                                    : resumoColaborador.vinculoStatus === 'nao_vinculado'
+                                    : resumoColaborador.vinculoStatus === 'nao_localizado'
                                         ? `
-                                            <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle">
-                                                <i class="fas fa-user-clock me-1"></i>CPF ainda não vinculado
+                                            <span
+                                                class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle"
+                                                title="O BX não retornou o vínculo nesta consulta. Isso não confirma ausência de vínculo."
+                                            >
+                                                <i class="fas fa-search me-1"></i>Não localizado no BX
                                             </span>
                                         `
                                         : `
@@ -8892,15 +8902,18 @@ async function verificarVinculoESocial(
                 'success'
             );
         } else if (resultado.vinculado === false) {
+            // Compatibilidade defensiva: a API nova não deve mais
+            // concluir "não vinculado" apenas porque o BX não retornou
+            // identificadores.
             mostrarAlertaESocial(
                 resultado.mensagem ||
-                'CPF ainda não está vinculado a este empregador no eSocial. A emissão permanecerá bloqueada.',
+                'O vínculo não foi confirmado nesta consulta. Isso não significa que o CPF não esteja vinculado.',
                 'warning'
             );
         } else {
             mostrarAlertaESocial(
                 resultado.mensagem ||
-                'Não foi possível concluir a verificação do vínculo com segurança.',
+                'O vínculo não foi localizado no BX nesta consulta. Isso não confirma ausência de vínculo; tente novamente mais tarde.',
                 'warning'
             );
         }
