@@ -10,6 +10,9 @@ const express = require('express');
 const soap = require('soap');
 const { createClient } = require('@supabase/supabase-js');
 const router = express.Router();
+const {
+    EsocialRelatoriosRobo
+} = require('../services/esocial-relatorios-robo');
 const XLSXRelatorioGerencialEsocial = require('xlsx');
 const fs = require('fs');
 const path = require('path');
@@ -50236,6 +50239,1563 @@ router.get(
                         String(error)
                 });
         }
+    }
+);
+
+
+
+// ============================================================
+// ROBÔ DE RELATÓRIOS GERENCIAIS DO eSOCIAL
+// ============================================================
+// Estratégia:
+// - usa o A1 já salvo em ESOCIAL_CERT_BASE64 / ESOCIAL_CERT_PASSWORD;
+// - percorre os empregadores autorizados cadastrados em public.precos;
+// - deduplica por raiz de CNPJ (um relatório por empregador eSocial);
+// - prefere CNPJ de matriz /0001 para acessar o perfil;
+// - baixa a Relação de trabalhadores;
+// - importa na mesma tabela esocial_vinculos usada pela Fase 1;
+// - NÃO usa BX para vínculo/matrícula.
+// ============================================================
+
+let promessaRoboRelatoriosEsocial = null;
+let cancelarRoboRelatoriosEsocial = false;
+
+
+function roboEnvBoolean(
+    name,
+    fallback = false
+) {
+
+    const value =
+        String(
+            process.env[name] ??
+            ''
+        )
+            .trim()
+            .toLowerCase();
+
+
+    if (!value) {
+        return fallback;
+    }
+
+
+    return [
+        '1',
+        'true',
+        'yes',
+        'sim',
+        'on'
+    ].includes(
+        value
+    );
+}
+
+
+function roboAtivoEsocial() {
+
+    return roboEnvBoolean(
+        'ESOCIAL_RELATORIOS_ROBO_ATIVO',
+        false
+    );
+}
+
+
+function cnpjAcessoPreferencial(
+    atual,
+    candidato
+) {
+
+    const a =
+        normalizarCnpj(
+            atual ||
+            ''
+        );
+
+
+    const b =
+        normalizarCnpj(
+            candidato ||
+            ''
+        );
+
+
+    if (b.length !== 14) {
+        return a;
+    }
+
+
+    if (a.length !== 14) {
+        return b;
+    }
+
+
+    // Preferir a matriz /0001 quando disponível.
+    const filialA =
+        a.slice(
+            8,
+            12
+        );
+
+
+    const filialB =
+        b.slice(
+            8,
+            12
+        );
+
+
+    if (
+        filialB === '0001' &&
+        filialA !== '0001'
+    ) {
+        return b;
+    }
+
+
+    return a;
+}
+
+
+async function listarEmpregadoresRoboRelatoriosEsocial() {
+
+    const empresas =
+        await buscarEmpresasSupabase();
+
+
+    const grupos =
+        new Map();
+
+
+    for (
+        const empresa
+        of empresas
+    ) {
+
+        // O robô só percorre clientes explicitamente autorizados
+        // para o módulo eSocial no cadastro da unidade.
+        if (
+            empresa?.esocial_autorizado !==
+            true
+        ) {
+            continue;
+        }
+
+
+        let tpInsc =
+            String(
+                empresa?.tp_insc_empregador_esocial ||
+                '1'
+            )
+                .trim();
+
+
+        if (
+            tpInsc !== '1'
+        ) {
+            // Nesta primeira versão automática processamos CNPJ.
+            continue;
+        }
+
+
+        const cnpj =
+            normalizarCnpj(
+                empresa?.cnpj ||
+                ''
+            );
+
+
+        if (
+            cnpj.length !== 14
+        ) {
+            continue;
+        }
+
+
+        const nrInsc =
+            normalizarNrInscEmpregadorEsocial(
+                tpInsc,
+                empresa?.nr_insc_empregador_esocial ||
+                cnpj
+            );
+
+
+        if (
+            !nrInsc
+        ) {
+            continue;
+        }
+
+
+        const chave =
+            `${tpInsc}|${nrInsc}`;
+
+
+        if (
+            !grupos.has(
+                chave
+            )
+        ) {
+
+            grupos.set(
+                chave,
+                {
+                    tpInsc,
+                    nrInsc,
+                    cnpjAcesso:
+                        cnpj,
+                    empresaId:
+                        empresa?.id ??
+                        null,
+                    holding:
+                        empresa?.holding ||
+                        null,
+                    unidade:
+                        empresa?.unidade ||
+                        null,
+                    razaoSocial:
+                        empresa?.razao_social ||
+                        null,
+                    unidades:
+                        []
+                }
+            );
+        }
+
+
+        const grupo =
+            grupos.get(
+                chave
+            );
+
+
+        grupo.cnpjAcesso =
+            cnpjAcessoPreferencial(
+                grupo.cnpjAcesso,
+                cnpj
+            );
+
+
+        grupo.unidades.push({
+            id:
+                empresa?.id ??
+                null,
+            holding:
+                empresa?.holding ||
+                null,
+            unidade:
+                empresa?.unidade ||
+                null,
+            cnpj,
+            razaoSocial:
+                empresa?.razao_social ||
+                null
+        });
+    }
+
+
+    return Array.from(
+        grupos.values()
+    )
+        .sort(
+            (a, b) =>
+                String(
+                    a.razaoSocial ||
+                    a.unidade ||
+                    a.cnpjAcesso
+                )
+                    .localeCompare(
+                        String(
+                            b.razaoSocial ||
+                            b.unidade ||
+                            b.cnpjAcesso
+                        ),
+                        'pt-BR'
+                    )
+        );
+}
+
+
+async function importarBufferRelatorioGerencialRoboEsocial({
+    buffer,
+    nomeArquivo
+}) {
+
+    const agora =
+        new Date()
+            .toISOString();
+
+
+    const leitura =
+        lerArquivoRelatorioGerencialEsocial({
+            buffer,
+            originalname:
+                nomeArquivo ||
+                'relacao-trabalhadores.xlsx'
+        });
+
+
+    const registrosValidos =
+        [];
+
+
+    let linhasIgnoradas =
+        0;
+
+
+    for (
+        const linha
+        of leitura.registros
+    ) {
+
+        const mapeado =
+            mapearLinhaRelatorioGerencialEsocial(
+                linha,
+                agora
+            );
+
+
+        if (
+            !mapeado.valido
+        ) {
+            linhasIgnoradas++;
+            continue;
+        }
+
+
+        registrosValidos.push(
+            mapeado.registroBanco
+        );
+    }
+
+
+    if (
+        !registrosValidos.length
+    ) {
+
+        throw new Error(
+            'O relatório baixado não contém vínculos válidos reconhecidos pelo importador.'
+        );
+    }
+
+
+    const unicos =
+        new Map();
+
+
+    for (
+        const item
+        of registrosValidos
+    ) {
+
+        const chave =
+            [
+                item.tp_insc_empregador,
+                item.nr_insc_empregador,
+                item.cpf,
+                item.matricula_esocial
+            ].join(
+                '|'
+            );
+
+
+        unicos.set(
+            chave,
+            item
+        );
+    }
+
+
+    const paraBanco =
+        Array.from(
+            unicos.values()
+        );
+
+
+    for (
+        const lote
+        of dividirEmLotesEsocial(
+            paraBanco,
+            400
+        )
+    ) {
+
+        const {
+            error
+        } =
+            await getSupabase()
+                .from(
+                    'esocial_vinculos'
+                )
+                .upsert(
+                    lote,
+                    {
+                        onConflict:
+                            'tp_insc_empregador,nr_insc_empregador,cpf,matricula_esocial'
+                    }
+                );
+
+
+        if (
+            error
+        ) {
+            throw error;
+        }
+    }
+
+
+    const eventosAtualizados =
+        await reconciliarEventosComRelatorioGerencialEsocial(
+            paraBanco
+        );
+
+
+    const empregadores =
+        new Set(
+            paraBanco.map(
+                item =>
+                    `${item.tp_insc_empregador}|${item.nr_insc_empregador}`
+            )
+        );
+
+
+    return {
+        linhas:
+            leitura.registros.length,
+        linhasValidas:
+            paraBanco.length,
+        linhasIgnoradas,
+        empregadores:
+            empregadores.size,
+        eventosLocaisAtualizados:
+            eventosAtualizados
+    };
+}
+
+
+async function atualizarExecucaoRoboRelatoriosEsocial(
+    execucaoId,
+    patch
+) {
+
+    const payload = {
+        ...patch,
+        updated_at:
+            new Date()
+                .toISOString()
+    };
+
+
+    const {
+        error
+    } =
+        await getSupabase()
+            .from(
+                'esocial_relatorios_execucoes'
+            )
+            .update(
+                payload
+            )
+            .eq(
+                'id',
+                execucaoId
+            );
+
+
+    if (
+        error
+    ) {
+        throw error;
+    }
+}
+
+
+async function atualizarItemRoboRelatoriosEsocial(
+    itemId,
+    patch
+) {
+
+    const payload = {
+        ...patch,
+        updated_at:
+            new Date()
+                .toISOString()
+    };
+
+
+    const {
+        error
+    } =
+        await getSupabase()
+            .from(
+                'esocial_relatorios_execucao_itens'
+            )
+            .update(
+                payload
+            )
+            .eq(
+                'id',
+                itemId
+            );
+
+
+    if (
+        error
+    ) {
+        throw error;
+    }
+}
+
+
+async function criarExecucaoRoboRelatoriosEsocial(
+    empregadores
+) {
+
+    const agora =
+        new Date()
+            .toISOString();
+
+
+    const {
+        data:
+            execucao,
+        error:
+            erroExecucao
+    } =
+        await getSupabase()
+            .from(
+                'esocial_relatorios_execucoes'
+            )
+            .insert({
+                status:
+                    'pendente',
+                total_empresas:
+                    empregadores.length,
+                processadas:
+                    0,
+                sucessos:
+                    0,
+                erros:
+                    0,
+                etapa:
+                    'AGUARDANDO_INICIO',
+                created_at:
+                    agora,
+                updated_at:
+                    agora
+            })
+            .select(
+                '*'
+            )
+            .single();
+
+
+    if (
+        erroExecucao
+    ) {
+        throw erroExecucao;
+    }
+
+
+    const itens =
+        empregadores.map(
+            item => ({
+                execucao_id:
+                    execucao.id,
+                empresa_id:
+                    item.empresaId === null ||
+                    item.empresaId === undefined
+                        ? null
+                        : String(
+                            item.empresaId
+                          ),
+                holding:
+                    item.holding,
+                unidade:
+                    item.unidade,
+                razao_social:
+                    item.razaoSocial,
+                cnpj:
+                    item.cnpjAcesso,
+                tp_insc_empregador:
+                    item.tpInsc,
+                nr_insc_empregador:
+                    item.nrInsc,
+                status:
+                    'pendente',
+                etapa:
+                    'NA_FILA',
+                created_at:
+                    agora,
+                updated_at:
+                    agora
+            })
+        );
+
+
+    for (
+        const lote
+        of dividirEmLotesEsocial(
+            itens,
+            300
+        )
+    ) {
+
+        const {
+            error
+        } =
+            await getSupabase()
+                .from(
+                    'esocial_relatorios_execucao_itens'
+                )
+                .insert(
+                    lote
+                );
+
+
+        if (
+            error
+        ) {
+            throw error;
+        }
+    }
+
+
+    return execucao;
+}
+
+
+function erroRoboDevePausarExecucao(
+    error
+) {
+
+    const codigo =
+        String(
+            error?.code ||
+            ''
+        );
+
+
+    return [
+        'PLAYWRIGHT_NAO_INSTALADO',
+        'CHROMIUM_NAO_INSTALADO',
+        'INTERVENCAO_LOGIN_NECESSARIA',
+        'LOGIN_NAO_CONFIRMADO',
+        'LAYOUT_TROCA_PERFIL_NAO_RECONHECIDO',
+        'PERFIL_PROCURADOR_NAO_ENCONTRADO',
+        'CAMPO_CNPJ_NAO_ENCONTRADO',
+        'BOTAO_CONTINUAR_NAO_ENCONTRADO',
+        'MENU_RELATORIOS_NAO_ENCONTRADO',
+        'RELATORIO_TRABALHADORES_NAO_ENCONTRADO',
+        'BOTAO_SOLICITAR_RELATORIO_NAO_ENCONTRADO'
+    ].includes(
+        codigo
+    );
+}
+
+
+async function executarRoboRelatoriosEsocial(
+    execucaoId
+) {
+
+    cancelarRoboRelatoriosEsocial =
+        false;
+
+
+    let robo =
+        null;
+
+
+    let itemAtual =
+        null;
+
+
+    let processadas =
+        0;
+
+
+    let sucessos =
+        0;
+
+
+    let erros =
+        0;
+
+
+    try {
+
+        await atualizarExecucaoRoboRelatoriosEsocial(
+            execucaoId,
+            {
+                status:
+                    'processando',
+                etapa:
+                    'INICIANDO_NAVEGADOR',
+                iniciado_em:
+                    new Date()
+                        .toISOString(),
+                mensagem:
+                    'Iniciando navegador seguro para o portal eSocial.'
+            }
+        );
+
+
+        robo =
+            new EsocialRelatoriosRobo({
+                onEtapa:
+                    async (
+                        etapa,
+                        detalhes
+                    ) => {
+
+                        const patch = {
+                            etapa,
+                            mensagem:
+                                detalhes?.arquivo
+                                    ? `Arquivo: ${detalhes.arquivo}`
+                                    : null
+                        };
+
+
+                        if (
+                            detalhes?.cnpj
+                        ) {
+                            patch.cnpj_atual =
+                                detalhes.cnpj;
+                        }
+
+
+                        await atualizarExecucaoRoboRelatoriosEsocial(
+                            execucaoId,
+                            patch
+                        );
+
+
+                        if (
+                            itemAtual?.id
+                        ) {
+
+                            await atualizarItemRoboRelatoriosEsocial(
+                                itemAtual.id,
+                                {
+                                    etapa
+                                }
+                            );
+                        }
+                    }
+            });
+
+
+        await robo.iniciar();
+        await robo.autenticar();
+
+
+        const {
+            data:
+                itens,
+            error:
+                erroItens
+        } =
+            await getSupabase()
+                .from(
+                    'esocial_relatorios_execucao_itens'
+                )
+                .select(
+                    '*'
+                )
+                .eq(
+                    'execucao_id',
+                    execucaoId
+                )
+                .order(
+                    'id',
+                    {
+                        ascending:
+                            true
+                    }
+                );
+
+
+        if (
+            erroItens
+        ) {
+            throw erroItens;
+        }
+
+
+        for (
+            const item
+            of (
+                Array.isArray(
+                    itens
+                )
+                    ? itens
+                    : []
+            )
+        ) {
+
+            if (
+                cancelarRoboRelatoriosEsocial
+            ) {
+                break;
+            }
+
+
+            itemAtual =
+                item;
+
+
+            await atualizarItemRoboRelatoriosEsocial(
+                item.id,
+                {
+                    status:
+                        'processando',
+                    etapa:
+                        'TROCANDO_PERFIL',
+                    iniciado_em:
+                        new Date()
+                            .toISOString(),
+                    mensagem:
+                        null,
+                    erro_codigo:
+                        null,
+                    diagnostico:
+                        null
+                }
+            );
+
+
+            await atualizarExecucaoRoboRelatoriosEsocial(
+                execucaoId,
+                {
+                    cnpj_atual:
+                        item.cnpj,
+                    etapa:
+                        'TROCANDO_PERFIL',
+                    mensagem:
+                        item.razao_social ||
+                        item.unidade ||
+                        item.cnpj
+                }
+            );
+
+
+            try {
+
+                const arquivo =
+                    await robo.baixarRelacaoTrabalhadores(
+                        item.cnpj
+                    );
+
+
+                const importado =
+                    await importarBufferRelatorioGerencialRoboEsocial({
+                        buffer:
+                            arquivo.buffer,
+                        nomeArquivo:
+                            arquivo.nomeArquivo
+                    });
+
+
+                sucessos++;
+                processadas++;
+
+
+                await atualizarItemRoboRelatoriosEsocial(
+                    item.id,
+                    {
+                        status:
+                            'concluido',
+                        etapa:
+                            'IMPORTADO',
+                        arquivo_nome:
+                            arquivo.nomeArquivo,
+                        trabalhadores_importados:
+                            importado.linhasValidas,
+                        linhas_ignoradas:
+                            importado.linhasIgnoradas,
+                        eventos_locais_atualizados:
+                            importado.eventosLocaisAtualizados,
+                        finalizado_em:
+                            new Date()
+                                .toISOString(),
+                        mensagem:
+                            `${importado.linhasValidas} vínculo(s) importado(s).`
+                    }
+                );
+
+
+                await atualizarExecucaoRoboRelatoriosEsocial(
+                    execucaoId,
+                    {
+                        processadas,
+                        sucessos,
+                        erros,
+                        etapa:
+                            'PROXIMA_EMPRESA',
+                        mensagem:
+                            `${processadas} de ${itens.length} empresa(s) processada(s).`
+                    }
+                );
+
+            } catch (
+                errorEmpresa
+            ) {
+
+                erros++;
+                processadas++;
+
+
+                const semProcuracao =
+                    String(
+                        errorEmpresa?.code ||
+                        ''
+                    ) ===
+                    'PROCURACAO_NAO_ENCONTRADA';
+
+
+                await atualizarItemRoboRelatoriosEsocial(
+                    item.id,
+                    {
+                        status:
+                            semProcuracao
+                                ? 'sem_permissao'
+                                : 'erro',
+                        etapa:
+                            'ERRO',
+                        erro_codigo:
+                            errorEmpresa?.code ||
+                            null,
+                        mensagem:
+                            errorEmpresa?.message ||
+                            String(
+                                errorEmpresa
+                            ),
+                        diagnostico:
+                            errorEmpresa?.diagnostico ||
+                            null,
+                        finalizado_em:
+                            new Date()
+                                .toISOString()
+                    }
+                );
+
+
+                await atualizarExecucaoRoboRelatoriosEsocial(
+                    execucaoId,
+                    {
+                        processadas,
+                        sucessos,
+                        erros,
+                        etapa:
+                            'ERRO_EMPRESA',
+                        mensagem:
+                            errorEmpresa?.message ||
+                            String(
+                                errorEmpresa
+                            )
+                    }
+                );
+
+
+                if (
+                    erroRoboDevePausarExecucao(
+                        errorEmpresa
+                    )
+                ) {
+
+                    await atualizarExecucaoRoboRelatoriosEsocial(
+                        execucaoId,
+                        {
+                            status:
+                                'pausado',
+                            etapa:
+                                errorEmpresa?.code ||
+                                'ERRO_ESTRUTURAL',
+                            mensagem:
+                                errorEmpresa?.message ||
+                                String(
+                                    errorEmpresa
+                                ),
+                            diagnostico:
+                                errorEmpresa?.diagnostico ||
+                                null
+                        }
+                    );
+
+
+                    return;
+                }
+            }
+        }
+
+
+        const cancelado =
+            cancelarRoboRelatoriosEsocial;
+
+
+        await atualizarExecucaoRoboRelatoriosEsocial(
+            execucaoId,
+            {
+                status:
+                    cancelado
+                        ? 'cancelado'
+                        : erros > 0
+                            ? 'concluido_com_erros'
+                            : 'concluido',
+                etapa:
+                    cancelado
+                        ? 'CANCELADO'
+                        : 'CONCLUIDO',
+                processadas,
+                sucessos,
+                erros,
+                cnpj_atual:
+                    null,
+                finalizado_em:
+                    new Date()
+                        .toISOString(),
+                mensagem:
+                    cancelado
+                        ? 'Atualização cancelada pelo usuário.'
+                        : `Finalizado: ${sucessos} sucesso(s) e ${erros} erro(s).`
+            }
+        );
+
+    } catch (
+        error
+    ) {
+
+        console.error(
+            '❌ Robô Relatórios eSocial:',
+            error?.message ||
+            error
+        );
+
+
+        try {
+
+            await atualizarExecucaoRoboRelatoriosEsocial(
+                execucaoId,
+                {
+                    status:
+                        'pausado',
+                    etapa:
+                        error?.code ||
+                        'ERRO_GERAL',
+                    mensagem:
+                        error?.message ||
+                        String(
+                            error
+                        ),
+                    diagnostico:
+                        error?.diagnostico ||
+                        null,
+                    processadas,
+                    sucessos,
+                    erros
+                }
+            );
+
+        } catch (
+            erroAtualizacao
+        ) {
+
+            console.error(
+                '❌ Falha atualizando status do robô:',
+                erroAtualizacao?.message ||
+                erroAtualizacao
+            );
+        }
+
+    } finally {
+
+        itemAtual =
+            null;
+
+
+        if (
+            robo
+        ) {
+
+            await robo.fechar();
+        }
+    }
+}
+
+
+async function obterStatusRoboRelatoriosEsocial() {
+
+    const {
+        data:
+            execucoes,
+        error:
+            erroExecucao
+    } =
+        await getSupabase()
+            .from(
+                'esocial_relatorios_execucoes'
+            )
+            .select(
+                '*'
+            )
+            .order(
+                'id',
+                {
+                    ascending:
+                        false
+                }
+            )
+            .limit(
+                1
+            );
+
+
+    if (
+        erroExecucao
+    ) {
+        throw erroExecucao;
+    }
+
+
+    const execucao =
+        Array.isArray(
+            execucoes
+        )
+            ? execucoes[0] ||
+              null
+            : null;
+
+
+    if (
+        !execucao
+    ) {
+
+        return {
+            success:
+                true,
+            ativo:
+                roboAtivoEsocial(),
+            execucao:
+                null,
+            itens:
+                []
+        };
+    }
+
+
+    const {
+        data:
+            itens,
+        error:
+            erroItens
+    } =
+        await getSupabase()
+            .from(
+                'esocial_relatorios_execucao_itens'
+            )
+            .select(
+                '*'
+            )
+            .eq(
+                'execucao_id',
+                execucao.id
+            )
+            .order(
+                'id',
+                {
+                    ascending:
+                        true
+                }
+            );
+
+
+    if (
+        erroItens
+    ) {
+        throw erroItens;
+    }
+
+
+    return {
+        success:
+            true,
+        ativo:
+            roboAtivoEsocial(),
+        emMemoria:
+            Boolean(
+                promessaRoboRelatoriosEsocial
+            ),
+        execucao,
+        itens:
+            Array.isArray(
+                itens
+            )
+                ? itens
+                : []
+    };
+}
+
+
+router.get(
+    '/relatorios-robo/empresas',
+    async (
+        req,
+        res
+    ) => {
+
+        try {
+
+            const empregadores =
+                await listarEmpregadoresRoboRelatoriosEsocial();
+
+
+            return res.json({
+                success:
+                    true,
+                ativo:
+                    roboAtivoEsocial(),
+                total:
+                    empregadores.length,
+                empregadores:
+                    empregadores.map(
+                        item => ({
+                            tpInsc:
+                                item.tpInsc,
+                            nrInsc:
+                                item.nrInsc,
+                            cnpj:
+                                item.cnpjAcesso,
+                            holding:
+                                item.holding,
+                            unidade:
+                                item.unidade,
+                            razaoSocial:
+                                item.razaoSocial,
+                            unidades:
+                                item.unidades.length
+                        })
+                    )
+            });
+
+        } catch (
+            error
+        ) {
+
+            return res
+                .status(500)
+                .json({
+                    success:
+                        false,
+                    error:
+                        error?.message ||
+                        String(
+                            error
+                        )
+                });
+        }
+    }
+);
+
+
+router.get(
+    '/relatorios-robo/status',
+    async (
+        req,
+        res
+    ) => {
+
+        try {
+
+            return res.json(
+                await obterStatusRoboRelatoriosEsocial()
+            );
+
+        } catch (
+            error
+        ) {
+
+            const mensagem =
+                error?.message ||
+                String(
+                    error
+                );
+
+
+            return res
+                .status(
+                    /esocial_relatorios_execucoes|does not exist|relation/i.test(
+                        mensagem
+                    )
+                        ? 503
+                        : 500
+                )
+                .json({
+                    success:
+                        false,
+                    migrationRequired:
+                        /esocial_relatorios_execucoes|does not exist|relation/i.test(
+                            mensagem
+                        ),
+                    error:
+                        mensagem
+                });
+        }
+    }
+);
+
+
+router.post(
+    '/relatorios-robo/diagnosticar',
+    async (
+        req,
+        res
+    ) => {
+
+        if (
+            !roboAtivoEsocial()
+        ) {
+
+            return res
+                .status(503)
+                .json({
+                    success:
+                        false,
+                    error:
+                        'Defina ESOCIAL_RELATORIOS_ROBO_ATIVO=true no Render.'
+                });
+        }
+
+
+        let robo =
+            null;
+
+
+        try {
+
+            let cnpj =
+                normalizarCnpj(
+                    req.body?.cnpj ||
+                    ''
+                );
+
+
+            if (
+                !cnpj
+            ) {
+
+                const empresas =
+                    await listarEmpregadoresRoboRelatoriosEsocial();
+
+
+                cnpj =
+                    empresas[0]
+                        ?.cnpjAcesso ||
+                    '';
+            }
+
+
+            robo =
+                new EsocialRelatoriosRobo();
+
+
+            await robo.iniciar();
+
+
+            const resultado =
+                await robo.diagnosticarAcesso(
+                    cnpj
+                );
+
+
+            return res.json(
+                resultado
+            );
+
+        } catch (
+            error
+        ) {
+
+            return res
+                .status(500)
+                .json({
+                    success:
+                        false,
+                    code:
+                        error?.code ||
+                        null,
+                    error:
+                        error?.message ||
+                        String(
+                            error
+                        ),
+                    diagnostico:
+                        error?.diagnostico ||
+                        null
+                });
+
+        } finally {
+
+            if (
+                robo
+            ) {
+
+                await robo.fechar();
+            }
+        }
+    }
+);
+
+
+router.post(
+    '/relatorios-robo/iniciar',
+    async (
+        req,
+        res
+    ) => {
+
+        if (
+            !roboAtivoEsocial()
+        ) {
+
+            return res
+                .status(503)
+                .json({
+                    success:
+                        false,
+                    error:
+                        'Defina ESOCIAL_RELATORIOS_ROBO_ATIVO=true no Render.'
+                });
+        }
+
+
+        if (
+            promessaRoboRelatoriosEsocial
+        ) {
+
+            return res
+                .status(409)
+                .json({
+                    success:
+                        false,
+                    error:
+                        'Já existe uma atualização automática em andamento.'
+                });
+        }
+
+
+        try {
+
+            const empregadores =
+                await listarEmpregadoresRoboRelatoriosEsocial();
+
+
+            if (
+                !empregadores.length
+            ) {
+
+                return res
+                    .status(422)
+                    .json({
+                        success:
+                            false,
+                        error:
+                            'Nenhuma empresa com eSocial autorizado e CNPJ válido foi localizada no cadastro.'
+                    });
+            }
+
+
+            const execucao =
+                await criarExecucaoRoboRelatoriosEsocial(
+                    empregadores
+                );
+
+
+            promessaRoboRelatoriosEsocial =
+                executarRoboRelatoriosEsocial(
+                    execucao.id
+                )
+                    .catch(
+                        error => {
+                            console.error(
+                                '❌ Execução automática eSocial:',
+                                error?.message ||
+                                error
+                            );
+                        }
+                    )
+                    .finally(
+                        () => {
+                            promessaRoboRelatoriosEsocial =
+                                null;
+                        }
+                    );
+
+
+            return res
+                .status(202)
+                .json({
+                    success:
+                        true,
+                    execucaoId:
+                        execucao.id,
+                    totalEmpresas:
+                        empregadores.length,
+                    message:
+                        'Atualização automática iniciada no backend.'
+                });
+
+        } catch (
+            error
+        ) {
+
+            const mensagem =
+                error?.message ||
+                String(
+                    error
+                );
+
+
+            return res
+                .status(
+                    /esocial_relatorios_execucoes|does not exist|relation/i.test(
+                        mensagem
+                    )
+                        ? 503
+                        : 500
+                )
+                .json({
+                    success:
+                        false,
+                    migrationRequired:
+                        /esocial_relatorios_execucoes|does not exist|relation/i.test(
+                            mensagem
+                        ),
+                    error:
+                        mensagem
+                });
+        }
+    }
+);
+
+
+router.post(
+    '/relatorios-robo/cancelar',
+    async (
+        req,
+        res
+    ) => {
+
+        cancelarRoboRelatoriosEsocial =
+            true;
+
+
+        return res.json({
+            success:
+                true,
+            message:
+                'Cancelamento solicitado. O robô parará ao concluir a etapa atual.'
+        });
     }
 );
 
