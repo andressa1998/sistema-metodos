@@ -35654,6 +35654,424 @@ async function tentarResolverMatriculaHistoricaRapidaEsocial(
 
 
 // ============================================================
+// VERIFICAR VÍNCULO CPF x EMPREGADOR NO eSOCIAL
+//
+// Esta etapa NÃO grava a matrícula no evento local. Ela apenas:
+// 1) verifica se já existe um vínculo oficial no cache eSocial; ou
+// 2) consulta o BX, quando necessário;
+// 3) salva o vínculo oficial encontrado no cache esocial_vinculos;
+// 4) deixa a importação/aplicação da matrícula para a etapa seguinte.
+//
+// Assim a interface consegue obedecer a ordem operacional:
+// VÍNCULO -> MATRÍCULA -> EVENTOS -> EMISSÃO.
+// ============================================================
+
+async function verificarVinculoCpfEmpregadorEsocial(
+    evento
+) {
+    if (
+        !evento ||
+        typeof evento !== 'object'
+    ) {
+        return {
+            success: false,
+            verificado: false,
+            vinculado: null,
+            motivo: 'EVENTO_INVALIDO',
+            mensagem: 'Evento local inválido.'
+        };
+    }
+
+    const tpInsc =
+        String(
+            evento.tp_insc_empregador ||
+            evento.tpInscEmpregador ||
+            ''
+        ).trim();
+
+    const nrInsc =
+        normalizarNrInscEmpregadorEsocial(
+            tpInsc,
+            evento.nr_insc_empregador ||
+            evento.nrInscEmpregador ||
+            ''
+        );
+
+    const cpf =
+        normalizarCpfEsocial(
+            evento.cpf || ''
+        );
+
+    if (
+        !tpInsc ||
+        !nrInsc ||
+        cpf.length !== 11
+    ) {
+        return {
+            success: false,
+            verificado: false,
+            vinculado: null,
+            motivo: 'CHAVE_VINCULO_INCOMPLETA',
+            mensagem: 'Empregador ou CPF não identificado no evento local.'
+        };
+    }
+
+    // --------------------------------------------------------
+    // 1) CACHE OFICIAL PRIMEIRO - não consome BX.
+    // --------------------------------------------------------
+    const cache =
+        await buscarVinculoOficialCacheEsocial(
+            evento
+        );
+
+    if (cache) {
+        const pendencia =
+            await criarOuAtualizarPendenciaMatriculaEsocial(
+                evento,
+                'VINCULO_CONFIRMADO_AGUARDANDO_MATRICULA'
+            );
+
+        if (pendencia?.id) {
+            await atualizarPendenciaMatricula(
+                pendencia.id,
+                {
+                    status: 'pendente',
+                    motivo: 'VINCULO_CONFIRMADO_AGUARDANDO_MATRICULA',
+                    ultimo_erro: null,
+                    proxima_tentativa_em: null
+                }
+            );
+        }
+
+        return {
+            success: true,
+            verificado: true,
+            vinculado: true,
+            origem: 'cache_esocial',
+            matriculaDisponivel: Boolean(
+                String(
+                    cache.matricula_esocial ||
+                    cache.matricula ||
+                    ''
+                ).trim()
+            ),
+            mensagem: 'CPF vinculado ao empregador no eSocial.'
+        };
+    }
+
+    // --------------------------------------------------------
+    // 2) DATA DE ADMISSÃO DO SOC PARA DELIMITAR A BUSCA.
+    // --------------------------------------------------------
+    const dataAdmissao =
+        await completarDataAdmissaoEventoEsocial(
+            evento
+        );
+
+    if (!dataAdmissao) {
+        return {
+            success: true,
+            verificado: false,
+            vinculado: null,
+            motivo: 'DATA_ADMISSAO_NAO_LOCALIZADA',
+            mensagem: 'Não foi possível localizar a data de admissão para consultar o vínculo com segurança.'
+        };
+    }
+
+    const pendencia =
+        await criarOuAtualizarPendenciaMatriculaEsocial(
+            evento,
+            'VERIFICACAO_VINCULO_SOLICITADA'
+        );
+
+    if (!pendencia) {
+        return {
+            success: false,
+            verificado: false,
+            vinculado: null,
+            motivo: 'PENDENCIA_NAO_CRIADA',
+            mensagem: 'Não foi possível preparar a verificação do vínculo.'
+        };
+    }
+
+    if (bxBloqueadoPorCalendario()) {
+        const erro = new Error(
+            'A consulta BX fica bloqueada nos dias 1 a 7 do mês. Tente novamente depois.'
+        );
+        erro.statusCode = 429;
+        erro.codigo = 'BX_BLOQUEADO_DIAS_1_A_7';
+        throw erro;
+    }
+
+    // A confirmação completa pode usar 2 acessos: identificadores + download.
+    if (
+        !await workerPodeConsumirBx(
+            tpInsc,
+            nrInsc,
+            2
+        )
+    ) {
+        const erro = new Error(
+            'Limite diário de consultas ao eSocial atingido para este empregador.'
+        );
+        erro.statusCode = 429;
+        erro.codigo = 'LIMITE_DIARIO_WORKER_BX';
+        throw erro;
+    }
+
+    const janela =
+        montarJanelaBxParaAdmissao(
+            dataAdmissao,
+            0
+        );
+
+    if (!janela) {
+        return {
+            success: true,
+            verificado: false,
+            vinculado: null,
+            motivo: 'JANELA_BX_NAO_DISPONIVEL',
+            mensagem: 'A janela de consulta do vínculo ainda não está disponível.'
+        };
+    }
+
+    await registrarAcessoWorkerBx(
+        tpInsc,
+        nrInsc,
+        'verificar-vinculo-identificadores'
+    );
+
+    const consulta =
+        await consultarIdentificadoresEventosTrabalhadorBx({
+            tpInsc,
+            nrInsc,
+            cpf,
+            dtIni: janela.dtIni,
+            dtFim: janela.dtFim
+        });
+
+    if (consulta?.soapFault) {
+        throw new Error(
+            consulta.faultString ||
+            'SOAP Fault ao verificar vínculo no BX.'
+        );
+    }
+
+    const codigo =
+        String(
+            consulta?.cdResposta || ''
+        );
+
+    if (
+        !['201', '203', '406'].includes(
+            codigo
+        )
+    ) {
+        throw new Error(
+            consulta?.descResposta ||
+            `Consulta BX retornou código ${codigo || '-'}.`
+        );
+    }
+
+    const identificadores =
+        Array.isArray(
+            consulta?.identificadores
+        )
+            ? consulta.identificadores
+            : [];
+
+    if (!identificadores.length) {
+        await atualizarPendenciaMatricula(
+            pendencia.id,
+            {
+                status: 'pendente',
+                motivo: 'VINCULO_NAO_LOCALIZADO_ESOCIAL',
+                ultimo_erro: null,
+                proxima_tentativa_em: null
+            }
+        );
+
+        return {
+            success: true,
+            verificado: true,
+            vinculado: false,
+            origem: 'bx',
+            motivo: 'VINCULO_NAO_LOCALIZADO_ESOCIAL',
+            periodoConsultado: {
+                dtIni: consulta.dtIni,
+                dtFim: consulta.dtFim
+            },
+            mensagem: 'CPF ainda não está vinculado a este empregador no eSocial.'
+        };
+    }
+
+    await registrarAcessoWorkerBx(
+        tpInsc,
+        nrInsc,
+        'verificar-vinculo-download'
+    );
+
+    const download =
+        await baixarEventosBxEmLoteParaMatricula({
+            tpInsc,
+            nrInsc,
+            identificadores
+        });
+
+    const candidatos =
+        (
+            Array.isArray(
+                download?.eventosInterpretados
+            )
+                ? download.eventosInterpretados
+                : []
+        )
+            .filter(
+                item =>
+                    ['S-2200', 'S-2190', 'S-2220', 'S-2240'].includes(
+                        String(
+                            item?.tipoEvento || ''
+                        ).trim().toUpperCase()
+                    ) &&
+                    normalizarCpfEsocial(
+                        item?.cpf
+                    ) === cpf &&
+                    String(
+                        item?.matricula || ''
+                    ).trim()
+            );
+
+    const selecao =
+        escolherVinculoOficialBxParaPendencia(
+            candidatos,
+            dataAdmissao
+        );
+
+    if (!selecao?.vinculo) {
+        await atualizarPendenciaMatricula(
+            pendencia.id,
+            {
+                status: 'pendente',
+                motivo: 'VINCULO_VERIFICACAO_INCONCLUSIVA',
+                ultimo_erro: null,
+                proxima_tentativa_em: null
+            }
+        );
+
+        return {
+            success: true,
+            verificado: false,
+            vinculado: null,
+            origem: 'bx',
+            motivo: selecao?.criterio || 'VINCULO_VERIFICACAO_INCONCLUSIVA',
+            mensagem: 'O eSocial retornou eventos para o CPF, mas não foi possível identificar um único vínculo com segurança.'
+        };
+    }
+
+    // Salva somente no cache oficial. A matrícula ainda NÃO é aplicada
+    // ao evento local; isso acontece apenas no clique da etapa 2.
+    const salvo =
+        await salvarVinculoOficialEsocial(
+            selecao.vinculo
+        );
+
+    await atualizarPendenciaMatricula(
+        pendencia.id,
+        {
+            status: 'pendente',
+            motivo: 'VINCULO_CONFIRMADO_AGUARDANDO_MATRICULA',
+            ultimo_erro: null,
+            proxima_tentativa_em: null
+        }
+    );
+
+    return {
+        success: true,
+        verificado: true,
+        vinculado: true,
+        origem: 'bx',
+        criterio: selecao.criterio,
+        matriculaDisponivel: Boolean(
+            String(
+                salvo?.matricula_esocial ||
+                selecao.vinculo?.matricula ||
+                ''
+            ).trim()
+        ),
+        periodoConsultado: {
+            dtIni: consulta.dtIni,
+            dtFim: consulta.dtFim
+        },
+        mensagem: 'CPF vinculado ao empregador no eSocial.'
+    };
+}
+
+
+router.post(
+    '/verificar-vinculo-esocial/:id',
+    async (
+        req,
+        res
+    ) => {
+        try {
+            const id =
+                String(
+                    req.params.id || ''
+                ).trim();
+
+            if (!id) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'ID do evento não informado.'
+                });
+            }
+
+            const {
+                data: evento,
+                error
+            } =
+                await getSupabase()
+                    .from('esocial_eventos')
+                    .select('*')
+                    .eq('id', id)
+                    .single();
+
+            if (error) throw error;
+
+            if (!evento) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Evento não encontrado.'
+                });
+            }
+
+            const resultado =
+                await verificarVinculoCpfEmpregadorEsocial(
+                    evento
+                );
+
+            return res.json(
+                resultado
+            );
+
+        } catch (error) {
+            const status =
+                Number(
+                    error?.statusCode || 500
+                );
+
+            return res.status(status).json({
+                success: false,
+                codigo: error?.codigo || null,
+                error:
+                    error?.message ||
+                    String(error)
+            });
+        }
+    }
+);
+
+
+// ============================================================
 // PREPARAÇÃO E-SOCIAL SEM NOVA CONSULTA BX
 // ============================================================
 //
@@ -37423,8 +37841,16 @@ router.post(
                 );
 
 
+            const dadosEventoProntos =
+                tipoEvento === 'S-2220' ||
+                (
+                    tipoEvento === 'S-2240' &&
+                    evento.s2240_pronto_para_emissao === true
+                );
+
+
             const podeEnviar =
-                tipoEvento === 'S-2220' &&
+                dadosEventoProntos &&
                 !correspondente &&
                 verificacaoCompleta &&
                 matriculaOficialPronta;
@@ -44905,6 +45331,58 @@ function enriquecerEventoParaFrontendEsocial(
 
 
     // ========================================================
+    // ESTADO EXPLÍCITO DO VÍNCULO CPF x EMPREGADOR
+    // ========================================================
+
+    const motivoPendenciaMatricula =
+        String(
+            pendenciaMatricula?.motivo ||
+            ''
+        )
+            .trim()
+            .toUpperCase();
+
+    let vinculoEsocialStatus =
+        'nao_verificado';
+
+    if (
+        matriculaEventoEhOficial(
+            evento
+        ) ||
+        motivoPendenciaMatricula ===
+            'VINCULO_CONFIRMADO_AGUARDANDO_MATRICULA'
+    ) {
+        vinculoEsocialStatus =
+            'vinculado';
+    } else if (
+        motivoPendenciaMatricula ===
+            'VINCULO_NAO_LOCALIZADO_ESOCIAL'
+    ) {
+        vinculoEsocialStatus =
+            'nao_vinculado';
+    }
+
+    const vinculoEsocialVerificadoEm =
+        (
+            vinculoEsocialStatus !==
+                'nao_verificado'
+        )
+            ? (
+                pendenciaMatricula?.updated_at ||
+                evento.matricula_oficial_atualizada_em ||
+                null
+              )
+            : null;
+
+    const vinculoEsocialMensagem =
+        vinculoEsocialStatus === 'vinculado'
+            ? 'CPF vinculado ao empregador no eSocial.'
+            : vinculoEsocialStatus === 'nao_vinculado'
+                ? 'CPF ainda não vinculado ao empregador no eSocial.'
+                : null;
+
+
+    // ========================================================
     // DADOS BÁSICOS
     // ========================================================
 
@@ -45093,9 +45571,11 @@ function enriquecerEventoParaFrontendEsocial(
         !socPodeEstarProcessando;
 
 
+    // Para LIBERAR EMISSÃO, não usamos mais a presunção de
+    // "controle exclusivo". O evento precisa ter sido consultado
+    // explicitamente no eSocial/BX e confirmado como ausente.
     const confirmadoNaoEmitido =
-        confirmadoNaoEmitidoPorBx ||
-        confirmadoNaoEmitidoPorControle;
+        confirmadoNaoEmitidoPorBx;
 
 
     // ========================================================
@@ -45406,7 +45886,16 @@ function enriquecerEventoParaFrontendEsocial(
             procuracaoEletronicaPendente,
 
         matricula_pendencia_erro:
-            matriculaPendenciaErro
+            matriculaPendenciaErro,
+
+        vinculo_esocial_status:
+            vinculoEsocialStatus,
+
+        vinculo_esocial_verificado_em:
+            vinculoEsocialVerificadoEm,
+
+        vinculo_esocial_mensagem:
+            vinculoEsocialMensagem
     };
 }
 
@@ -45630,11 +46119,7 @@ router.get(
                             'esocial_matriculas_pendentes'
                         )
                         .select(
-                            'evento_exemplo_id, status, ultimo_erro, updated_at'
-                        )
-                        .eq(
-                            'status',
-                            'erro'
+                            'evento_exemplo_id, status, motivo, ultimo_erro, updated_at'
                         )
                         .in(
                             'evento_exemplo_id',

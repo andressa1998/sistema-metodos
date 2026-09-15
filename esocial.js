@@ -2254,6 +2254,13 @@ let fimAcompanhamentoPreparacaoEsocial = 0;
             item => normalizarChaveVinculoESocial(item) === chave
         );
 
+        if (
+            evento &&
+            !relacionados.some(item => String(item?.id || '') === String(evento?.id || ''))
+        ) {
+            relacionados.push(evento);
+        }
+
         const oficial = relacionados.find(item =>
             matriculaPareceOficialESocial(item) &&
             item.data_admissao_esocial
@@ -2264,11 +2271,27 @@ let fimAcompanhamentoPreparacaoEsocial = 0;
             : '';
 
         const dataAdmissaoEsocial = String(
-            oficial.data_admissao_esocial || ''
+            oficial?.data_admissao_esocial || ''
         ).trim();
+
+        const statusVinculoInformado = relacionados
+            .map(item => String(item?.vinculo_esocial_status || '').trim().toLowerCase())
+            .filter(Boolean);
+
+        let vinculoStatus = 'nao_verificado';
+
+        if (
+            matriculaOficial ||
+            statusVinculoInformado.includes('vinculado')
+        ) {
+            vinculoStatus = 'vinculado';
+        } else if (statusVinculoInformado.includes('nao_vinculado')) {
+            vinculoStatus = 'nao_vinculado';
+        }
 
         const ultimaVerificacao = dataMaisRecenteESocial(
             relacionados.flatMap(item => [
+                item.vinculo_esocial_verificado_em,
                 item.verificado_esocial_em,
                 item.matricula_oficial_atualizada_em
             ])
@@ -2284,38 +2307,115 @@ let fimAcompanhamentoPreparacaoEsocial = 0;
             ? String(eventoComProcuracaoPendente.matricula_pendencia_erro || '').trim()
             : '';
 
+        const precisaS2220 = relacionados.some(
+            item => String(item?.tipo_evento || '').trim().toUpperCase() === 'S-2220'
+        );
+
+        const precisaS2240 = relacionados.some(
+            item => String(item?.tipo_evento || '').trim().toUpperCase() === 'S-2240'
+        );
+
         const s2220 = resumoTipoEventoColaboradorESocial(relacionados, 'S-2220');
-        const s2240 = resumoTipoEventoColaboradorESocial(relacionados, 'S-2240');
+        const s2240 = precisaS2240
+            ? resumoTipoEventoColaboradorESocial(relacionados, 'S-2240')
+            : {
+                estado: 'nao_aplica',
+                texto: 'Não se aplica',
+                classe: 'light text-dark',
+                icone: 'fa-minus-circle',
+                recibo: ''
+            };
+
+        const tipoFoiVerificado = codigo => {
+            const candidatos = relacionados.filter(
+                item => String(item?.tipo_evento || '').trim().toUpperCase() === codigo
+            );
+
+            if (!candidatos.length) return true;
+
+            return candidatos.some(item =>
+                item.existe_no_esocial === true ||
+                item.verificacao_esocial_completa === true ||
+                item.emitido_esocial === true ||
+                item.ja_emitido === true ||
+                Boolean(String(item.numero_recibo || '').trim()) ||
+                Boolean(String(item.numero_recibo_existente || '').trim())
+            );
+        };
+
+        const eventosObrigatoriosVerificados =
+            (!precisaS2220 || tipoFoiVerificado('S-2220')) &&
+            (!precisaS2240 || tipoFoiVerificado('S-2240'));
 
         let proximaAcao = {
-            texto: 'Aguardar vínculo eSocial',
+            texto: 'Verificar vínculo',
             classe: 'secondary',
             icone: 'fa-link'
         };
 
-        if (!matriculaOficial && procuracaoPendente) {
+        if (procuracaoPendente) {
             proximaAcao = {
                 texto: 'Regularizar procuração eletrônica',
                 classe: 'danger',
                 icone: 'fa-file-signature'
             };
-        }
-
-        if (matriculaOficial) {
-            if (s2220.estado !== 'confirmado') {
-                proximaAcao = s2220.estado === 'erro'
-                    ? { texto: 'Corrigir S-2220', classe: 'danger', icone: 'fa-tools' }
-                    : { texto: 'Concluir S-2220', classe: 'primary', icone: 'fa-heartbeat' };
-            } else if (s2240.estado !== 'confirmado') {
+        } else if (vinculoStatus === 'nao_vinculado') {
+            proximaAcao = {
+                texto: 'Aguardar admissão no eSocial',
+                classe: 'warning',
+                icone: 'fa-user-clock'
+            };
+        } else if (vinculoStatus === 'vinculado' && !matriculaOficial) {
+            proximaAcao = {
+                texto: 'Buscar matrícula',
+                classe: 'info',
+                icone: 'fa-id-card'
+            };
+        } else if (
+            vinculoStatus === 'vinculado' &&
+            matriculaOficial &&
+            !eventosObrigatoriosVerificados
+        ) {
+            proximaAcao = {
+                texto: 'Verificar eventos',
+                classe: 'info',
+                icone: 'fa-satellite-dish'
+            };
+        } else if (vinculoStatus === 'vinculado' && matriculaOficial) {
+            if (precisaS2220 && s2220.estado === 'erro') {
+                proximaAcao = {
+                    texto: 'Corrigir S-2220',
+                    classe: 'danger',
+                    icone: 'fa-tools'
+                };
+            } else if (precisaS2220 && s2220.estado !== 'confirmado') {
+                proximaAcao = {
+                    texto: 'Emitir S-2220',
+                    classe: 'primary',
+                    icone: 'fa-heartbeat'
+                };
+            } else if (precisaS2240 && s2240.estado === 'erro') {
+                proximaAcao = {
+                    texto: 'Corrigir S-2240',
+                    classe: 'danger',
+                    icone: 'fa-tools'
+                };
+            } else if (precisaS2240 && s2240.estado !== 'confirmado') {
                 const s2240Atual = relacionados.find(
                     item => String(item?.tipo_evento || '').trim().toUpperCase() === 'S-2240'
                 );
 
-                proximaAcao = s2240.estado === 'erro'
-                    ? { texto: 'Corrigir S-2240', classe: 'danger', icone: 'fa-tools' }
-                    : s2240Atual?.s2240_pronto_para_emissao === false
-                        ? { texto: 'Completar S-2240', classe: 'warning', icone: 'fa-clipboard-check' }
-                        : { texto: 'Concluir S-2240', classe: 'primary', icone: 'fa-shield-alt' };
+                proximaAcao = s2240Atual?.s2240_pronto_para_emissao === false
+                    ? {
+                        texto: 'Completar S-2240',
+                        classe: 'warning',
+                        icone: 'fa-clipboard-check'
+                    }
+                    : {
+                        texto: 'Emitir S-2240',
+                        classe: 'primary',
+                        icone: 'fa-shield-alt'
+                    };
             } else {
                 proximaAcao = {
                     texto: 'Tudo OK',
@@ -2331,6 +2431,10 @@ let fimAcompanhamentoPreparacaoEsocial = 0;
             ultimaVerificacao,
             procuracaoPendente,
             procuracaoMensagem,
+            vinculoStatus,
+            precisaS2220,
+            precisaS2240,
+            eventosObrigatoriosVerificados,
             s2220,
             s2240,
             proximaAcao
@@ -3113,33 +3217,45 @@ const resumoColaborador =
 
                     <td class="esocial-vinculo-cell">
                         ${
+                            resumoColaborador.procuracaoPendente
+                                ? `
+                                    <span class="badge bg-danger-subtle text-danger-emphasis border border-danger-subtle" title="${escaparHtml(resumoColaborador.procuracaoMensagem || '')}">
+                                        <i class="fas fa-file-signature me-1"></i>Procuração eletrônica pendente
+                                    </span>
+                                `
+                                : resumoColaborador.vinculoStatus === 'vinculado'
+                                    ? `
+                                        <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle">
+                                            <i class="fas fa-user-check me-1"></i>CPF vinculado
+                                        </span>
+                                    `
+                                    : resumoColaborador.vinculoStatus === 'nao_vinculado'
+                                        ? `
+                                            <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle">
+                                                <i class="fas fa-user-clock me-1"></i>CPF ainda não vinculado
+                                            </span>
+                                        `
+                                        : `
+                                            <span class="badge bg-secondary-subtle text-secondary-emphasis border">
+                                                <i class="fas fa-question-circle me-1"></i>Vínculo não verificado
+                                            </span>
+                                        `
+                        }
+                        ${
                             resumoColaborador.matriculaOficial
                                 ? `
-                                    <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle">
-                                        <i class="fas fa-user-check me-1"></i>Admissão confirmada
-                                    </span>
                                     <div class="small fw-semibold mt-2">
-                                        ${escaparHtml(
-                                            resumoColaborador.dataAdmissaoEsocial
-                                                ? formatarDataExibicao(resumoColaborador.dataAdmissaoEsocial)
-                                                : 'Data não informada'
-                                        )}
+                                        Matrícula: ${escaparHtml(resumoColaborador.matriculaOficial)}
                                     </div>
-                                    <div class="small text-muted text-break" title="Matrícula oficial eSocial">
-                                        ${escaparHtml(resumoColaborador.matriculaOficial)}
-                                    </div>
+                                    ${
+                                        resumoColaborador.dataAdmissaoEsocial
+                                            ? `<div class="small text-muted">Admissão: ${escaparHtml(formatarDataExibicao(resumoColaborador.dataAdmissaoEsocial))}</div>`
+                                            : ''
+                                    }
                                 `
-                                : resumoColaborador.procuracaoPendente
-                                    ? `
-                                        <span class="badge bg-danger-subtle text-danger-emphasis border border-danger-subtle" title="${escaparHtml(resumoColaborador.procuracaoMensagem || '')}">
-                                            <i class="fas fa-file-signature me-1"></i>Procuração eletrônica pendente
-                                        </span>
-                                    `
-                                    : `
-                                        <span class="badge bg-secondary-subtle text-secondary-emphasis border">
-                                            <i class="fas fa-hourglass-half me-1"></i>Aguardando vínculo
-                                        </span>
-                                    `
+                                : resumoColaborador.vinculoStatus === 'vinculado'
+                                    ? `<div class="small text-muted mt-2">Matrícula ainda não importada</div>`
+                                    : ''
                         }
                         <div class="esocial-last-check mt-2">
                             <i class="fas fa-history me-1"></i>
@@ -3275,58 +3391,64 @@ const resumoColaborador =
                             </button>
 
 
-                            <!-- VERIFICAR MATRÍCULA / EVENTO NO E-SOCIAL -->
+                            <!-- 1) VERIFICAR VÍNCULO CPF x EMPREGADOR -->
 
                             ${
     (codigoTipoEvento === 'S-2220' || codigoTipoEvento === 'S-2240') &&
     evento.emitido_esocial !== true &&
     evento.ja_emitido !== true &&
-    !temRecibo
+    resumoColaborador.vinculoStatus !== 'vinculado'
         ? `
             <button
                 type="button"
-                class="
-                    btn
-                    btn-outline-info
-                    btn-verificar-esocial
-                "
-                data-id="${escaparHtml(
-                    evento.id
-                )}"
-                title="Verificar vínculo e evento no eSocial"
+                class="btn btn-outline-secondary btn-verificar-vinculo-esocial"
+                data-id="${escaparHtml(evento.id)}"
+                title="Verificar se o CPF já está vinculado a este empregador no eSocial"
             >
-
-                <i class="fas fa-search"></i>
-
+                <i class="fas fa-link"></i>
             </button>
         `
         : ''
 }
 
-
-                            <!-- VERIFICAR DE VERDADE (AO VIVO, CONSOME COTA BX) -->
+                            <!-- 2) BUSCAR MATRÍCULA OFICIAL -->
 
                             ${
     (codigoTipoEvento === 'S-2220' || codigoTipoEvento === 'S-2240') &&
+    resumoColaborador.vinculoStatus === 'vinculado' &&
+    !resumoColaborador.matriculaOficial &&
     evento.emitido_esocial !== true &&
-    evento.ja_emitido !== true &&
-    !temRecibo
+    evento.ja_emitido !== true
         ? `
             <button
                 type="button"
-                class="
-                    btn
-                    btn-outline-warning
-                    btn-verificar-real-esocial
-                "
-                data-id="${escaparHtml(
-                    evento.id
-                )}"
-                title="Verificar de verdade no eSocial agora (consulta ao vivo, consome cota diária)"
+                class="btn btn-outline-info btn-buscar-matricula-esocial"
+                data-id="${escaparHtml(evento.id)}"
+                title="Buscar e gravar a matrícula oficial do vínculo"
             >
+                <i class="fas fa-id-card"></i>
+            </button>
+        `
+        : ''
+}
 
+                            <!-- 3) VERIFICAR S-2220 / S-2240 EXISTENTES -->
+
+                            ${
+    (codigoTipoEvento === 'S-2220' || codigoTipoEvento === 'S-2240') &&
+    resumoColaborador.vinculoStatus === 'vinculado' &&
+    Boolean(resumoColaborador.matriculaOficial) &&
+    !resumoColaborador.eventosObrigatoriosVerificados &&
+    evento.emitido_esocial !== true &&
+    evento.ja_emitido !== true
+        ? `
+            <button
+                type="button"
+                class="btn btn-outline-warning btn-verificar-eventos-esocial"
+                data-id="${escaparHtml(evento.id)}"
+                title="Verificar no eSocial se os eventos obrigatórios desta pessoa já existem"
+            >
                 <i class="fas fa-satellite-dish"></i>
-
             </button>
         `
         : ''
@@ -3490,37 +3612,36 @@ const resumoColaborador =
 
 
     // ========================================================
-    // BOTÃO VERIFICAR MATRÍCULA / EVENTO NO E-SOCIAL
+    // ETAPA 1 - VERIFICAR VÍNCULO CPF x EMPREGADOR
     // ========================================================
 
     document
-        .querySelectorAll(
-            '.btn-verificar-esocial'
-        )
-        .forEach(
-            btn => {
-
-                btn.onclick =
-                    handleVerificarEventoESocial;
-            }
-        );
+        .querySelectorAll('.btn-verificar-vinculo-esocial')
+        .forEach(btn => {
+            btn.onclick = handleVerificarVinculoESocial;
+        });
 
 
     // ========================================================
-    // BOTÃO VERIFICAR DE VERDADE (AO VIVO, CONSOME COTA BX)
+    // ETAPA 2 - BUSCAR MATRÍCULA OFICIAL
     // ========================================================
 
     document
-        .querySelectorAll(
-            '.btn-verificar-real-esocial'
-        )
-        .forEach(
-            btn => {
+        .querySelectorAll('.btn-buscar-matricula-esocial')
+        .forEach(btn => {
+            btn.onclick = handleBuscarMatriculaESocial;
+        });
 
-                btn.onclick =
-                    handleVerificarStatusRealESocial;
-            }
-        );
+
+    // ========================================================
+    // ETAPA 3 - VERIFICAR EVENTOS EXISTENTES
+    // ========================================================
+
+    document
+        .querySelectorAll('.btn-verificar-eventos-esocial')
+        .forEach(btn => {
+            btn.onclick = handleVerificarStatusRealESocial;
+        });
 
 
     // ========================================================
@@ -4027,11 +4148,22 @@ const resumoColaborador =
     function encontrarEvento(
         id
     ) {
-        return eventosESocial.find(
-            evento =>
-                String(evento.id) ===
-                String(id)
-        );
+        const alvo = String(id);
+        const fontes = [
+            eventosESocial,
+            eventosESocialBase,
+            eventosESocialHistorico
+        ];
+
+        for (const fonte of fontes) {
+            const encontrado = (fonte || []).find(
+                evento => String(evento?.id) === alvo
+            );
+
+            if (encontrado) return encontrado;
+        }
+
+        return null;
     }
 
     function handleVerAso() {
@@ -8705,6 +8837,189 @@ async function verificarEventoNoESocial(
 
 
 // ============================================================
+// ETAPA 1 - VERIFICAR SE O CPF ESTÁ VINCULADO AO EMPREGADOR
+// ============================================================
+
+async function verificarVinculoESocial(
+    id,
+    botao = null
+) {
+    const evento = encontrarEvento(id);
+
+    if (!evento) {
+        mostrarAlertaESocial('Evento não encontrado na tela.', 'warning');
+        return;
+    }
+
+    const htmlOriginal = botao?.innerHTML || '';
+
+    if (botao) {
+        botao.disabled = true;
+        botao.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    }
+
+    try {
+        const token = await obterTokenESocial();
+        const response = await fetch(
+            apiUrl(`/api/soc/verificar-vinculo-esocial/${encodeURIComponent(id)}`),
+            {
+                method: 'POST',
+                headers: criarHeaders(token, true),
+                body: JSON.stringify({})
+            }
+        );
+
+        const texto = await response.text();
+        let resultado = {};
+
+        try {
+            resultado = texto ? JSON.parse(texto) : {};
+        } catch (_) {
+            resultado = {
+                success: false,
+                error: texto || 'Resposta inválida do servidor.'
+            };
+        }
+
+        if (!response.ok || resultado.success === false) {
+            throw new Error(resultado.error || `Erro HTTP ${response.status}`);
+        }
+
+        if (resultado.vinculado === true) {
+            mostrarAlertaESocial(
+                'CPF vinculado a este empregador no eSocial. Agora use o botão de matrícula para importar a matrícula oficial.',
+                'success'
+            );
+        } else if (resultado.vinculado === false) {
+            mostrarAlertaESocial(
+                resultado.mensagem ||
+                'CPF ainda não está vinculado a este empregador no eSocial. A emissão permanecerá bloqueada.',
+                'warning'
+            );
+        } else {
+            mostrarAlertaESocial(
+                resultado.mensagem ||
+                'Não foi possível concluir a verificação do vínculo com segurança.',
+                'warning'
+            );
+        }
+
+        await recarregarEventosESocial();
+
+    } catch (error) {
+        console.error('❌ Erro ao verificar vínculo eSocial:', error);
+        mostrarAlertaESocial(
+            'Não foi possível verificar o vínculo no eSocial: ' + error.message,
+            'warning'
+        );
+    } finally {
+        if (botao) {
+            botao.disabled = false;
+            botao.innerHTML = htmlOriginal;
+        }
+    }
+}
+
+function handleVerificarVinculoESocial() {
+    const id = String(this.dataset.id || '').trim();
+    if (id) verificarVinculoESocial(id, this);
+}
+
+
+// ============================================================
+// ETAPA 2 - IMPORTAR MATRÍCULA OFICIAL DO VÍNCULO JÁ CONFIRMADO
+// ============================================================
+
+async function buscarMatriculaESocial(
+    id,
+    botao = null
+) {
+    const evento = encontrarEvento(id);
+
+    if (!evento) {
+        mostrarAlertaESocial('Evento não encontrado na tela.', 'warning');
+        return;
+    }
+
+    const resumo = obterResumoColaboradorESocial(evento);
+
+    if (resumo.vinculoStatus !== 'vinculado') {
+        mostrarAlertaESocial(
+            'Primeiro confirme que o CPF está vinculado a este empregador.',
+            'warning'
+        );
+        return;
+    }
+
+    const htmlOriginal = botao?.innerHTML || '';
+
+    if (botao) {
+        botao.disabled = true;
+        botao.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    }
+
+    try {
+        const token = await obterTokenESocial();
+        const response = await fetch(
+            apiUrl(`/api/soc/matriculas-esocial/buscar-agora/${encodeURIComponent(id)}`),
+            {
+                method: 'POST',
+                headers: criarHeaders(token, true),
+                body: JSON.stringify({})
+            }
+        );
+
+        const texto = await response.text();
+        let resultado = {};
+
+        try {
+            resultado = texto ? JSON.parse(texto) : {};
+        } catch (_) {
+            resultado = {
+                success: false,
+                error: texto || 'Resposta inválida do servidor.'
+            };
+        }
+
+        if (!response.ok || resultado.success === false) {
+            throw new Error(resultado.error || `Erro HTTP ${response.status}`);
+        }
+
+        if (resultado.resolvida === true && resultado.matricula) {
+            mostrarAlertaESocial(
+                `Matrícula oficial importada: ${resultado.matricula}. Agora verifique os eventos existentes.`,
+                'success'
+            );
+        } else {
+            mostrarAlertaESocial(
+                'O vínculo está confirmado, mas a matrícula ainda não pôde ser importada com segurança.',
+                'warning'
+            );
+        }
+
+        await recarregarEventosESocial();
+
+    } catch (error) {
+        console.error('❌ Erro ao buscar matrícula eSocial:', error);
+        mostrarAlertaESocial(
+            'Não foi possível buscar a matrícula oficial: ' + error.message,
+            'warning'
+        );
+    } finally {
+        if (botao) {
+            botao.disabled = false;
+            botao.innerHTML = htmlOriginal;
+        }
+    }
+}
+
+function handleBuscarMatriculaESocial() {
+    const id = String(this.dataset.id || '').trim();
+    if (id) buscarMatriculaESocial(id, this);
+}
+
+
+// ============================================================
 // VERIFICAÇÃO REAL (AO VIVO, CONSOME COTA BX)
 //
 // Diferente de verificarEventoNoESocial (que só olha cache
@@ -8736,10 +9051,16 @@ async function verificarStatusRealESocial(
         return;
     }
 
+    const fonteRelacionados =
+        eventosESocialHistorico.length
+            ? eventosESocialHistorico
+            : eventosESocialBase;
+
     const irmao =
-        eventosESocial.find(
+        fonteRelacionados.find(
             e =>
-                String(e.cpf) === String(evento.cpf) &&
+                normalizarChaveVinculoESocial(e) ===
+                    normalizarChaveVinculoESocial(evento) &&
                 String(e.id) !== String(evento.id) &&
                 ['S-2220', 'S-2240'].includes(
                     String(e.tipo_evento || '').trim().toUpperCase()
@@ -9061,100 +9382,13 @@ function adicionarControlesVerificacaoESocial() {
 
 
             // ====================================================
-            // BOTÃO DE VERIFICAÇÃO
+            // VERIFICAÇÃO EM ETAPAS
+            //
+            // Os botões Vínculo -> Matrícula -> Eventos são criados
+            // exclusivamente em renderizarTabelaEventosESocial().
+            // Não recriar aqui o antigo botão combinado, pois ele
+            // furaria a ordem operacional definida para o eSocial.
             // ====================================================
-
-            const tipo =
-                String(
-                    evento.tipo_evento ||
-                    ''
-                )
-                    .trim()
-                    .toUpperCase();
-
-
-            const erroMatricula =
-                String(
-                    evento.erro_esocial ||
-                    evento.codigo_erro_esocial ||
-                    ''
-                ).includes(
-                    '1557'
-                );
-
-
-            const aguardando =
-                evento.aguardando_verificacao ===
-                    true ||
-                evento.status ===
-                    'aguardando_verificacao' ||
-                erroMatricula ||
-                (
-                    tipo === 'S-2220' &&
-                    evento.emitido_esocial !== true &&
-                    evento.ja_emitido !== true &&
-                    !evento.numero_recibo
-                );
-
-
-            if (
-                aguardando &&
-                [
-                    'S-2220',
-                    'S-2240'
-                ].includes(
-                    tipo
-                )
-            ) {
-
-                let btnVerificar =
-                    linha.querySelector(
-                        '.btn-verificar-esocial'
-                    );
-
-
-                if (
-                    !btnVerificar
-                ) {
-
-                    btnVerificar =
-                        document.createElement(
-                            'button'
-                        );
-
-
-                    btnVerificar.type =
-                        'button';
-
-
-                    btnVerificar.className =
-                        'btn btn-outline-info btn-verificar-esocial';
-
-
-                    btnVerificar.dataset.id =
-                        id;
-
-
-                    btnVerificar.title =
-                        erroMatricula
-                            ? 'Verificar vínculo e evento no eSocial'
-                            : 'Verificar vínculo e evento no eSocial';
-
-
-                    btnVerificar.innerHTML =
-                        '<i class="fas fa-search"></i>';
-
-
-                    btnAso.insertAdjacentElement(
-                        'afterend',
-                        btnVerificar
-                    );
-                }
-
-
-                btnVerificar.onclick =
-                    handleVerificarEventoESocial;
-            }
         }
     );
 
