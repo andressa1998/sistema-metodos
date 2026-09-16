@@ -3818,8 +3818,17 @@ html body #esocialPage.esocial-wrapper .dashboard-content .btn-danger {
           <button class="btn btn-primary btn-sm" id="btnBuscarDadosSoc">
             <i class="fas fa-sync me-1"></i> Buscar Dados do SOC
           </button>
-          <button class="btn btn-outline-primary btn-sm" id="btnResolverMatriculasHolding" title="Tenta resolver a matrícula oficial de todos os pendentes da holding selecionada no filtro">
-            <i class="fas fa-id-card me-1"></i> Resolver Matrículas desta Holding
+          <button class="btn btn-success btn-sm" id="btnResolverMatriculasHolding" title="Atualizar automaticamente a base eSocial de todos os empregadores autorizados">
+            <i class="fas fa-robot me-1"></i> Atualizar todas as empresas
+          </button>
+          <button type="button" class="btn btn-outline-success btn-sm" id="btnImportarBaseEsocialManual" title="Contingência: importar manualmente CSV/XLS/XLSX já baixado do eSocial">
+            <i class="fas fa-file-excel me-1"></i> Importar arquivo
+          </button>
+          <button type="button" class="btn btn-outline-secondary btn-sm" id="btnDiagnosticarRoboEsocial" title="Testar login com certificado A1 e troca de perfil para uma empresa, sem solicitar relatório">
+            <i class="fas fa-stethoscope me-1"></i> Testar acesso
+          </button>
+          <button type="button" class="btn btn-outline-danger btn-sm d-none" id="btnCancelarRoboEsocial">
+            <i class="fas fa-stop me-1"></i> Parar
           </button>
           <button class="btn btn-success btn-sm" id="btnEnviarSelecionados">
             <i class="fas fa-cloud-upload-alt me-1"></i> Enviar Selecionados
@@ -4508,7 +4517,7 @@ html body #esocialPage.esocial-wrapper .dashboard-content .btn-danger {
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="app.js"></script>
-  <script src="esocial.js"></script>
+  <script src="esocial-robo-v1.js?v=20260915-1411"></script>
   <script>
     (function iniciarLoginGiratorio() {
       const card = document.getElementById('authCard');
