@@ -51547,100 +51547,137 @@ router.get(
 
 router.post(
     '/relatorios-robo/diagnosticar',
-    async (
-        req,
-        res
-    ) => {
+    async (req, res) => {
 
-        if (
-            !roboAtivoEsocial()
-        ) {
-
-            return res
-                .status(503)
-                .json({
-                    success:
-                        false,
-                    error:
-                        'Defina ESOCIAL_RELATORIOS_ROBO_ATIVO=true no Render.'
-                });
+        if (!roboAtivoEsocial()) {
+            return res.status(503).json({
+                success: false,
+                error: 'Defina ESOCIAL_RELATORIOS_ROBO_ATIVO=true no Render.'
+            });
         }
 
-
-        let robo =
-            null;
-
+        let robo = null;
+        const inicio = Date.now();
 
         try {
 
-            let cnpj =
-                normalizarCnpj(
-                    req.body?.cnpj ||
-                    ''
-                );
+            console.log('🧪 [eSocial] Iniciando diagnóstico automático...');
 
+            let cnpj = normalizarCnpj(
+                req.body?.cnpj || ''
+            );
 
-            if (
-                !cnpj
-            ) {
+            if (!cnpj) {
 
                 const empresas =
                     await listarEmpregadoresRoboRelatoriosEsocial();
 
-
                 cnpj =
-                    empresas[0]
-                        ?.cnpjAcesso ||
-                    '';
+                    empresas[0]?.cnpjAcesso || '';
             }
 
+            console.log(
+                '🧪 [eSocial] Empresa de teste:',
+                cnpj || '(nenhuma)'
+            );
 
             robo =
-                new EsocialRelatoriosRobo();
+                new EsocialRelatoriosRobo({
+                    onEtapa: async (etapa, detalhes = {}) => {
 
+                        console.log(
+                            `🤖 [eSocial] Etapa: ${etapa}`,
+                            detalhes
+                        );
+                    }
+                });
+
+            console.log('🤖 [eSocial] Abrindo Chromium...');
 
             await robo.iniciar();
 
-
-            const resultado =
-                await robo.diagnosticarAcesso(
-                    cnpj
-                );
-
-
-            return res.json(
-                resultado
+            console.log(
+                '🤖 [eSocial] Chromium iniciado em',
+                `${Date.now() - inicio}ms`
             );
 
-        } catch (
-            error
-        ) {
+            const resultado =
+                await robo.diagnosticarAcesso(cnpj);
 
-            return res
-                .status(500)
-                .json({
-                    success:
-                        false,
-                    code:
-                        error?.code ||
+            console.log(
+                '✅ [eSocial] Diagnóstico concluído em',
+                `${Date.now() - inicio}ms`
+            );
+
+            return res.json(resultado);
+
+        } catch (error) {
+
+            const tempo =
+                Date.now() - inicio;
+
+            console.error(
+                '❌ [eSocial] DIAGNÓSTICO FALHOU'
+            );
+
+            console.error(
+                '❌ Tempo:',
+                `${tempo}ms`
+            );
+
+            console.error(
+                '❌ Código:',
+                error?.code || '(sem código)'
+            );
+
+            console.error(
+                '❌ Mensagem:',
+                error?.message || String(error)
+            );
+
+            if (error?.diagnostico) {
+                console.error(
+                    '❌ Diagnóstico Playwright:',
+                    JSON.stringify(
+                        error.diagnostico,
                         null,
-                    error:
-                        error?.message ||
-                        String(
-                            error
-                        ),
-                    diagnostico:
-                        error?.diagnostico ||
-                        null
-                });
+                        2
+                    )
+                );
+            }
+
+            if (error?.stack) {
+                console.error(
+                    '❌ Stack:',
+                    error.stack
+                );
+            }
+
+            return res.status(500).json({
+                success: false,
+                code: error?.code || null,
+                error:
+                    error?.message ||
+                    String(error),
+                diagnostico:
+                    error?.diagnostico ||
+                    null,
+                tempoMs:
+                    tempo
+            });
 
         } finally {
 
-            if (
-                robo
-            ) {
-
-                await robo.fechar();
+            if (robo) {
+                try {
+                    await robo.fechar();
+                } catch (erroFechar) {
+                    console.warn(
+                        '⚠️ [eSocial] Erro fechando navegador:',
+                        erroFechar?.message ||
+                        erroFechar
+                    );
+                }
             }
         }
     }
