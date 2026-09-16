@@ -6,7 +6,7 @@
 (() => {
     'use strict';
 
-    window.ESOCIAL_FRONTEND_VERSION = 'ROBO_V2_20260916_0805';
+    window.ESOCIAL_FRONTEND_VERSION = 'ROBO_V3_20260916_0815';
     console.log('eSocial frontend:', window.ESOCIAL_FRONTEND_VERSION);
 
     // ============================================================
@@ -9551,6 +9551,18 @@ function garantirControlesRoboRelatoriosEsocial() {
         );
     }
 
+    // Sempre reinstalar o handler, inclusive quando o botão já existe no HTML.
+    // A V2 criava o onclick apenas quando o botão era criado dinamicamente,
+    // por isso os botões fixos do index.html apareciam mas não faziam nada.
+    botaoManual.onclick =
+        function (event) {
+
+            event.preventDefault();
+
+            garantirInputRelatorioGerencialEsocial()
+                .click();
+        };
+
 
     let botaoDiagnostico =
         document.getElementById(
@@ -9597,6 +9609,15 @@ function garantirControlesRoboRelatoriosEsocial() {
         );
     }
 
+    // Idem: se o botão já veio pronto no HTML, ainda precisamos ligar o clique.
+    botaoDiagnostico.onclick =
+        function (event) {
+
+            event.preventDefault();
+
+            diagnosticarRoboRelatoriosEsocial();
+        };
+
 
     let botaoCancelar =
         document.getElementById(
@@ -9639,6 +9660,14 @@ function garantirControlesRoboRelatoriosEsocial() {
             botaoCancelar
         );
     }
+
+    botaoCancelar.onclick =
+        function (event) {
+
+            event.preventDefault();
+
+            cancelarAtualizacaoAutomaticaRelatoriosEsocial();
+        };
 
 
     let painel =
