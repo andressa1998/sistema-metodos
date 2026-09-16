@@ -459,6 +459,109 @@ class EsocialRelatoriosRobo {
 
         const paginasNovas = [];
 
+        let monitorarRedeAposClique = false;
+        const requisicoesAposClique = [];
+
+        const aoRequestDiagnostico =
+            request => {
+                if (!monitorarRedeAposClique) {
+                    return;
+                }
+
+                try {
+                    const url = new URL(
+                        request.url()
+                    );
+
+                    const hostsInteressantes = new Set([
+                        'sso.acesso.gov.br',
+                        'certificado.sso.acesso.gov.br',
+                        'login.esocial.gov.br'
+                    ]);
+
+                    if (
+                        !hostsInteressantes.has(
+                            url.hostname
+                        )
+                    ) {
+                        return;
+                    }
+
+                    const item = {
+                        method:
+                            request.method(),
+                        host:
+                            url.hostname,
+                        path:
+                            url.pathname,
+                        resourceType:
+                            request.resourceType(),
+                        navigation:
+                            request.isNavigationRequest()
+                    };
+
+                    requisicoesAposClique.push(
+                        item
+                    );
+
+                    console.log(
+                        '📡 [eSocial] Requisição após clique:',
+                        item
+                    );
+                } catch (_) {}
+            };
+
+        const aoRequestFailedDiagnostico =
+            request => {
+                if (!monitorarRedeAposClique) {
+                    return;
+                }
+
+                try {
+                    const url = new URL(
+                        request.url()
+                    );
+
+                    if (
+                        ![
+                            'sso.acesso.gov.br',
+                            'certificado.sso.acesso.gov.br',
+                            'login.esocial.gov.br'
+                        ].includes(
+                            url.hostname
+                        )
+                    ) {
+                        return;
+                    }
+
+                    console.warn(
+                        '⚠️ [eSocial] Requisição falhou após clique:',
+                        {
+                            method:
+                                request.method(),
+                            host:
+                                url.hostname,
+                            path:
+                                url.pathname,
+                            failure:
+                                request.failure()
+                                    ?.errorText ||
+                                null
+                        }
+                    );
+                } catch (_) {}
+            };
+
+        context.on(
+            'request',
+            aoRequestDiagnostico
+        );
+
+        context.on(
+            'requestfailed',
+            aoRequestFailedDiagnostico
+        );
+
         const aoCriarPagina =
             novaPagina => {
                 paginasNovas.push(
@@ -891,11 +994,106 @@ class EsocialRelatoriosRobo {
                                 );
                             }
 
+                            const form =
+                                elemento.form ||
+                                elemento.closest(
+                                    'form'
+                                );
+
+                            const invalidos =
+                                form
+                                    ? Array.from(
+                                        form.elements ||
+                                        []
+                                    )
+                                        .filter(
+                                            campo => {
+                                                try {
+                                                    return (
+                                                        typeof campo.checkValidity ===
+                                                            'function' &&
+                                                        !campo.checkValidity()
+                                                    );
+                                                } catch (_) {
+                                                    return false;
+                                                }
+                                            }
+                                        )
+                                        .map(
+                                            campo => ({
+                                                tag:
+                                                    campo.tagName,
+                                                id:
+                                                    campo.id ||
+                                                    null,
+                                                name:
+                                                    campo.name ||
+                                                    null,
+                                                type:
+                                                    campo.type ||
+                                                    null,
+                                                required:
+                                                    Boolean(
+                                                        campo.required
+                                                    )
+                                            })
+                                        )
+                                    : [];
+
                             return {
                                 tag:
-                                    elemento
-                                        .tagName,
+                                    elemento.tagName,
                                 attrs,
+                                button: {
+                                    type:
+                                        elemento.type ||
+                                        null,
+                                    name:
+                                        elemento.name ||
+                                        null,
+                                    value:
+                                        elemento.value ||
+                                        null,
+                                    formAction:
+                                        elemento.formAction ||
+                                        null,
+                                    formMethod:
+                                        elemento.formMethod ||
+                                        null,
+                                    formTarget:
+                                        elemento.formTarget ||
+                                        null,
+                                    formNoValidate:
+                                        Boolean(
+                                            elemento.formNoValidate
+                                        )
+                                },
+                                form: form
+                                    ? {
+                                        id:
+                                            form.id ||
+                                            null,
+                                        action:
+                                            form.action ||
+                                            null,
+                                        method:
+                                            form.method ||
+                                            null,
+                                        noValidate:
+                                            Boolean(
+                                                form.noValidate
+                                            ),
+                                        checkValidity:
+                                            (() => {
+                                                try {
+                                                    return form.checkValidity();
+                                                } catch (_) {
+                                                    return null;
+                                                }
+                                            })(),
+                                        invalidos
+                                    }
+                                    : null,
                                 ancestrais
                             };
                         }
@@ -913,6 +1111,42 @@ class EsocialRelatoriosRobo {
                 '🔎 [eSocial] Estrutura do elemento de certificado:',
                 estrutura
             );
+
+            if (
+                estrutura?.form &&
+                estrutura.form.checkValidity === false
+            ) {
+                console.log(
+                    '🧩 [eSocial] O formulário está inválido por campos do login por CPF; desativando validação HTML somente para a opção de certificado.',
+                    {
+                        invalidos:
+                            estrutura.form.invalidos
+                    }
+                );
+
+                await linkCertificado.evaluate(
+                    elemento => {
+                        const form =
+                            elemento.form ||
+                            elemento.closest(
+                                'form'
+                            );
+
+                        if (form) {
+                            form.noValidate =
+                                true;
+                        }
+
+                        try {
+                            elemento.formNoValidate =
+                                true;
+                        } catch (_) {}
+                    }
+                );
+            }
+
+            monitorarRedeAposClique =
+                true;
 
             console.log(
                 '🔐 [eSocial] Clicando na opção real de certificado...'
@@ -940,7 +1174,8 @@ class EsocialRelatoriosRobo {
                                             paginasDepois:
                                                 paginasDepois.length,
                                             popupsDetectados:
-                                                paginasNovas.length
+                                                paginasNovas.length,
+                                            requisicoesAposClique
                                         }
                                     );
 
@@ -1115,6 +1350,19 @@ class EsocialRelatoriosRobo {
             };
 
         } finally {
+            monitorarRedeAposClique =
+                false;
+
+            context.off(
+                'request',
+                aoRequestDiagnostico
+            );
+
+            context.off(
+                'requestfailed',
+                aoRequestFailedDiagnostico
+            );
+
             context.off(
                 'page',
                 aoCriarPagina
