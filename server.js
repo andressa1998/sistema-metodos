@@ -118,46 +118,93 @@ app.use(
 // ============================================================
 // CORS
 // ============================================================
+
+const allowedOrigins = [
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+
+    'http://localhost:3001',
+    'http://127.0.0.1:3001',
+
+    'http://localhost:3002',
+    'http://127.0.0.1:3002',
+
+    'http://localhost:5500',
+    'http://127.0.0.1:5500',
+
+    'http://localhost:5501',
+    'http://127.0.0.1:5501',
+
+    'http://localhost:5502',
+    'http://127.0.0.1:5502',
+];
+
+// Permite adicionar outras origens pelo .env:
 //
-// O frontend pode estar hospedado em outro domínio enquanto este
-// backend roda no Render. Por isso, refletimos a origem recebida.
-// Isso também atende corretamente o preflight OPTIONS gerado pelo
-// header Authorization usado nas chamadas do módulo eSocial.
-//
-// IMPORTANTE: CORS não substitui autenticação. As rotas continuam
-// protegidas pelos mecanismos de autenticação/autorização do sistema.
-// ============================================================
+// CORS_ORIGINS=https://site1.com.br,https://site2.com.br
 
-const corsOptions = {
-    // `true` faz o pacote cors refletir a origem da requisição,
-    // evitando o bloqueio do navegador sem usar `*` junto com
-    // credentials.
-    origin: true,
+const extraOrigins = String(
+    process.env.CORS_ORIGINS || ''
+)
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
 
-    credentials: true,
+allowedOrigins.push(...extraOrigins);
 
-    methods: [
-        'GET',
-        'POST',
-        'PUT',
-        'PATCH',
-        'DELETE',
-        'OPTIONS',
-    ],
-
-    allowedHeaders: [
-        'Content-Type',
-        'Authorization',
-        'X-Requested-With',
-        'Accept',
-    ],
-
-    optionsSuccessStatus: 204,
-};
-
-// Deve ficar antes do rate limit, body parser e das rotas.
 app.use(
-    cors(corsOptions)
+    cors({
+        origin(origin, callback) {
+            // Requisições do próprio servidor, Postman e curl
+            // podem não possuir cabeçalho Origin.
+            if (!origin) {
+                return callback(null, true);
+            }
+
+            if (allowedOrigins.includes(origin)) {
+                return callback(null, true);
+            }
+
+            if (NODE_ENV !== 'production') {
+                logger.warn(
+                    `Origem não cadastrada, mas liberada ` +
+                    `em desenvolvimento: ${origin}`
+                );
+
+                return callback(null, true);
+            }
+
+            logger.warn(
+                `Origem bloqueada pelo CORS: ${origin}`
+            );
+
+            const error = new Error(
+                'Origem não permitida pelo CORS.'
+            );
+
+            error.status = 403;
+
+            return callback(error);
+        },
+
+        credentials: true,
+
+        methods: [
+            'GET',
+            'POST',
+            'PUT',
+            'DELETE',
+            'OPTIONS',
+            'PATCH',
+        ],
+
+        allowedHeaders: [
+            'Content-Type',
+            'Authorization',
+            'X-Requested-With',
+            'Accept',
+        ],
+    })
 );
 
 // ============================================================
@@ -330,6 +377,19 @@ const socIntegrationRoutes = require(
 app.use(
     '/api/soc',
     socIntegrationRoutes
+);
+
+// ------------------------------------------------------------
+// LOGIN INTERATIVO eSOCIAL
+// ------------------------------------------------------------
+
+const esocialLoginInterativoRoutes = require(
+    './src/routes/esocial-login-interativo'
+);
+
+app.use(
+    '/api/soc',
+    esocialLoginInterativoRoutes
 );
 
 // ============================================================

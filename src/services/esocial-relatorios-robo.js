@@ -22,6 +22,10 @@ const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 
+const {
+    obterStorageStateEsocial
+} = require('./esocial-session-store');
+
 function env(name, fallback = '') {
     const value = process.env[name];
     return value === undefined || value === null || value === ''
@@ -342,6 +346,7 @@ class EsocialRelatoriosRobo {
         this.loginUrl = env('ESOCIAL_RELATORIOS_LOGIN_URL', 'https://login.esocial.gov.br/login.aspx');
         this.timeoutNavegacao = envNumber('ESOCIAL_RELATORIOS_NAV_TIMEOUT_MS', 90000);
         this.timeoutRelatorio = envNumber('ESOCIAL_RELATORIOS_TIMEOUT_RELATORIO_MS', 15 * 60 * 1000);
+        this.usandoSessaoInterativa = false;
     }
 
     async etapa(nome, detalhes = {}) {
@@ -383,11 +388,30 @@ class EsocialRelatoriosRobo {
             throw error;
         }
 
-        this.context = await this.browser.newContext({
+        const storageStateInterativo =
+            obterStorageStateEsocial();
+
+        const opcoesContexto = {
             acceptDownloads: true,
             ignoreHTTPSErrors: false,
             locale: 'pt-BR'
-        });
+        };
+
+        if (storageStateInterativo) {
+            opcoesContexto.storageState =
+                storageStateInterativo;
+
+            this.usandoSessaoInterativa =
+                true;
+
+            console.log(
+                '🔐 [eSocial] Reutilizando sessão autenticada pelo login interativo.'
+            );
+        }
+
+        this.context = await this.browser.newContext(
+            opcoesContexto
+        );
 
         this.page = await this.context.newPage();
         this.page.setDefaultTimeout(15000);
@@ -913,6 +937,17 @@ class EsocialRelatoriosRobo {
         if (await this.estaAutenticado()) {
             await this.etapa('AUTENTICADO');
             return true;
+        }
+
+        if (this.usandoSessaoInterativa) {
+            throw criarErroRobo(
+                'SESSAO_INTERATIVA_EXPIRADA',
+                'A sessão autenticada do eSocial expirou. Clique em "Conectar eSocial" e autentique novamente.',
+                await obterDiagnosticoSeguro(
+                    page,
+                    'SESSAO_INTERATIVA_EXPIRADA'
+                )
+            );
         }
 
         // =====================================================
