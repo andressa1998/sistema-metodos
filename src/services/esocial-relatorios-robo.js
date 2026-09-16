@@ -293,77 +293,435 @@ class EsocialRelatoriosRobo {
     }
 
     async autenticar() {
-        if (!this.page) throw new Error('Navegador não iniciado.');
+    if (!this.page) {
+        throw new Error('Navegador não iniciado.');
+    }
 
-        const page = this.page;
-        await this.etapa('ABRINDO_LOGIN', { url: this.loginUrl });
+    const page = this.page;
 
-        await page.goto(this.loginUrl, { waitUntil: 'domcontentloaded' });
-        await page.waitForTimeout(1200);
+    await this.etapa('ABRINDO_LOGIN', {
+        url: this.loginUrl
+    });
 
-        if (await this.estaAutenticado()) {
-            await this.etapa('AUTENTICADO');
+    console.log(
+        '🔐 [eSocial] Abrindo:',
+        this.loginUrl
+    );
+
+    await page.goto(
+        this.loginUrl,
+        {
+            waitUntil: 'domcontentloaded',
+            timeout: this.timeoutNavegacao
+        }
+    );
+
+    await page.waitForTimeout(1500);
+
+    console.log(
+        '🔐 [eSocial] URL após abrir eSocial:',
+        page.url()
+    );
+
+    if (await this.estaAutenticado()) {
+        await this.etapa('AUTENTICADO');
+        return true;
+    }
+
+    // =========================================================
+    // 1. ENTRAR COM GOV.BR
+    // =========================================================
+
+    if (
+        !/sso\.acesso\.gov\.br/i.test(page.url())
+    ) {
+
+        await this.etapa(
+            'ABRINDO_GOVBR'
+        );
+
+        const clicouGovBr =
+            await clicarPorTexto(
+                page,
+                [
+                    /Entrar com gov\.br/i,
+                    /gov\.br/i
+                ],
+                3000
+            );
+
+        console.log(
+            '🔐 [eSocial] Clique "Entrar com gov.br":',
+            clicouGovBr
+        );
+
+        await page.waitForTimeout(2000);
+    }
+
+    console.log(
+        '🔐 [eSocial] URL antes do certificado:',
+        page.url()
+    );
+
+    if (await this.estaAutenticado()) {
+        await this.etapa('AUTENTICADO');
+        return true;
+    }
+
+    // =========================================================
+    // 2. LOCALIZAR EXATAMENTE O LINK DO CERTIFICADO
+    // =========================================================
+
+    await this.etapa(
+        'LOCALIZANDO_CERTIFICADO_DIGITAL'
+    );
+
+    let linkCertificado = null;
+
+    const candidatosCertificado = [
+        page.getByRole(
+            'link',
+            {
+                name: /^Seu certificado digital$/i
+            }
+        ),
+
+        page.locator(
+            'a',
+            {
+                hasText: 'Seu certificado digital'
+            }
+        ),
+
+        page.getByText(
+            /^Seu certificado digital$/i,
+            {
+                exact: true
+            }
+        )
+    ];
+
+    for (
+        const candidato
+        of candidatosCertificado
+    ) {
+
+        try {
+
+            const primeiro =
+                candidato.first();
+
+            if (
+                await primeiro.isVisible({
+                    timeout: 2000
+                })
+            ) {
+
+                linkCertificado =
+                    primeiro;
+
+                break;
+            }
+
+        } catch (_) {}
+    }
+
+    if (!linkCertificado) {
+
+        const diag =
+            await obterDiagnosticoSeguro(
+                page,
+                'LOCALIZAR_CERTIFICADO'
+            );
+
+        throw criarErroRobo(
+            'LINK_CERTIFICADO_NAO_ENCONTRADO',
+            'A opção "Seu certificado digital" não foi localizada na tela do gov.br.',
+            diag
+        );
+    }
+
+    // =========================================================
+    // 3. DESCOBRIR O ENDEREÇO REAL DO LINK
+    // =========================================================
+
+    let hrefCertificado = null;
+
+    try {
+
+        hrefCertificado =
+            await linkCertificado
+                .getAttribute(
+                    'href'
+                );
+
+    } catch (_) {}
+
+    console.log(
+        '🔐 [eSocial] HREF certificado:',
+        hrefCertificado ||
+        '(não informado)'
+    );
+
+    // =========================================================
+    // 4. INICIAR AUTENTICAÇÃO POR CERTIFICADO
+    // =========================================================
+
+    await this.etapa(
+        'ABRINDO_CERTIFICADO_DIGITAL',
+        {
+            href:
+                hrefCertificado ||
+                null
+        }
+    );
+
+    const urlAntesCertificado =
+        page.url();
+
+    try {
+
+        if (
+            hrefCertificado &&
+            hrefCertificado !== '#' &&
+            !hrefCertificado
+                .toLowerCase()
+                .startsWith(
+                    'javascript:'
+                )
+        ) {
+
+            const urlDestino =
+                new URL(
+                    hrefCertificado,
+                    page.url()
+                ).href;
+
+            console.log(
+                '🔐 [eSocial] Navegando diretamente para certificado:',
+                urlDestino
+            );
+
+            await page.goto(
+                urlDestino,
+                {
+                    waitUntil:
+                        'domcontentloaded',
+                    timeout:
+                        30000
+                }
+            );
+
+        } else {
+
+            console.log(
+                '🔐 [eSocial] Link sem HREF utilizável; executando clique direto.'
+            );
+
+            await linkCertificado.click({
+                timeout: 10000
+            });
+        }
+
+    } catch (error) {
+
+        const mensagem =
+            String(
+                error?.message ||
+                error
+            );
+
+        console.error(
+            '❌ [eSocial] Falha ao abrir certificado:',
+            mensagem
+        );
+
+        const diag =
+            await obterDiagnosticoSeguro(
+                page,
+                'ABRIR_CERTIFICADO',
+                error
+            );
+
+        if (
+            /ERR_BAD_SSL_CLIENT_AUTH_CERT/i
+                .test(mensagem)
+        ) {
+
+            throw criarErroRobo(
+                'CERTIFICADO_REJEITADO',
+                'O gov.br rejeitou o certificado A1 apresentado pelo navegador.',
+                diag
+            );
+        }
+
+        if (
+            /ERR_SSL_CLIENT_AUTH/i
+                .test(mensagem)
+        ) {
+
+            throw criarErroRobo(
+                'ERRO_SSL_CERTIFICADO',
+                'Falha SSL durante a autenticação com o certificado digital.',
+                diag
+            );
+        }
+
+        throw criarErroRobo(
+            'FALHA_ABRIR_CERTIFICADO',
+            'Não foi possível iniciar a autenticação pelo certificado digital: ' +
+                mensagem,
+            diag
+        );
+    }
+
+    await page.waitForTimeout(
+        1500
+    );
+
+    console.log(
+        '🔐 [eSocial] URL após certificado:',
+        page.url()
+    );
+
+    // =========================================================
+    // 5. AGUARDAR RETORNO DA AUTENTICAÇÃO
+    // =========================================================
+
+    await this.etapa(
+        'AGUARDANDO_AUTENTICACAO_CERTIFICADO'
+    );
+
+    const inicio =
+        Date.now();
+
+    while (
+        Date.now() - inicio <
+        30000
+    ) {
+
+        if (
+            await this.estaAutenticado()
+        ) {
+
+            console.log(
+                '✅ [eSocial] Login pelo certificado confirmado.'
+            );
+
+            await this.etapa(
+                'AUTENTICADO'
+            );
+
             return true;
         }
 
-        // Tela inicial do eSocial.
-        await clicarPorTexto(page, [
-            /Entrar com gov\.br/i,
-            /gov\.br/i
-        ], 1800);
+        const urlAtual =
+            page.url();
 
-        await page.waitForTimeout(1200);
-
-        if (!await this.estaAutenticado()) {
-            // Tela do gov.br. O certificado A1 é entregue pelo BrowserContext
-            // quando a origem TLS configurada o solicitar.
-            const clicouCertificado = await clicarPorTexto(page, [
-                /Seu certificado digital/i,
-                /Certificado Digital/i,
-                /Certificado digital/i
-            ], 3000);
-
-            if (clicouCertificado) {
-                await page.waitForTimeout(2000);
-            }
-        }
-
-        const inicio = Date.now();
-        while (Date.now() - inicio < 60000) {
-            if (await this.estaAutenticado()) {
-                await this.etapa('AUTENTICADO');
-                return true;
-            }
-
-            const texto = normalizarTexto(
-                await page.locator('body').innerText().catch(() => '')
+        const texto =
+            normalizarTexto(
+                await page
+                    .locator('body')
+                    .innerText()
+                    .catch(
+                        () => ''
+                    )
             );
 
-            if (
-                texto.includes('captcha') ||
-                texto.includes('verificacao em duas etapas') ||
-                texto.includes('verificação em duas etapas') ||
-                texto.includes('codigo de verificacao') ||
-                texto.includes('código de verificação')
-            ) {
-                const diag = await obterDiagnosticoSeguro(page, 'AUTENTICACAO');
-                throw criarErroRobo(
-                    'INTERVENCAO_LOGIN_NECESSARIA',
-                    'O gov.br solicitou uma etapa adicional de autenticação que não pode ser automatizada com segurança.',
-                    diag
-                );
-            }
+        if (
+            texto.includes(
+                'captcha'
+            ) ||
+            texto.includes(
+                'verificacao em duas etapas'
+            ) ||
+            texto.includes(
+                'verificação em duas etapas'
+            ) ||
+            texto.includes(
+                'codigo de verificacao'
+            ) ||
+            texto.includes(
+                'código de verificação'
+            )
+        ) {
 
-            await page.waitForTimeout(1500);
+            const diag =
+                await obterDiagnosticoSeguro(
+                    page,
+                    'AUTENTICACAO'
+                );
+
+            throw criarErroRobo(
+                'INTERVENCAO_LOGIN_NECESSARIA',
+                'O gov.br solicitou uma etapa adicional de autenticação que não pode ser automatizada com segurança.',
+                diag
+            );
         }
 
-        const diagnostico = await obterDiagnosticoSeguro(page, 'AUTENTICACAO');
+        if (
+            /chrome-error/i.test(
+                urlAtual
+            ) ||
+            texto.includes(
+                'err_ssl'
+            ) ||
+            texto.includes(
+                'certificado invalido'
+            ) ||
+            texto.includes(
+                'certificado inválido'
+            )
+        ) {
+
+            const diag =
+                await obterDiagnosticoSeguro(
+                    page,
+                    'ERRO_CERTIFICADO'
+                );
+
+            throw criarErroRobo(
+                'ERRO_CERTIFICADO_GOVBR',
+                'O navegador encontrou um erro ao apresentar o certificado digital ao gov.br.',
+                diag
+            );
+        }
+
+        await page.waitForTimeout(
+            1000
+        );
+    }
+
+    const diagnostico =
+        await obterDiagnosticoSeguro(
+            page,
+            'AUTENTICACAO'
+        );
+
+    // Se continuou exatamente no login inicial,
+    // deixa isso explícito.
+    if (
+        /sso\.acesso\.gov\.br\/login/i
+            .test(
+                page.url()
+            ) &&
+        page.url() ===
+            urlAntesCertificado
+    ) {
+
         throw criarErroRobo(
-            'LOGIN_NAO_CONFIRMADO',
-            'Não foi possível confirmar o login no eSocial com o certificado configurado.',
+            'CERTIFICADO_NAO_REDIRECIONOU',
+            'O gov.br recebeu a ação em "Seu certificado digital", mas não iniciou o redirecionamento para a autenticação pelo certificado.',
             diagnostico
         );
     }
+
+    throw criarErroRobo(
+        'LOGIN_NAO_CONFIRMADO',
+        'O certificado foi acionado, mas não foi possível confirmar o login no eSocial.',
+        diagnostico
+    );
+}
 
     async estaAutenticado() {
         if (!this.page) return false;
