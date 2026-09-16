@@ -6,7 +6,7 @@
 (() => {
     'use strict';
 
-    window.ESOCIAL_FRONTEND_VERSION = 'ROBO_V1_20260915_1411';
+    window.ESOCIAL_FRONTEND_VERSION = 'ROBO_V2_20260916_0805';
     console.log('eSocial frontend:', window.ESOCIAL_FRONTEND_VERSION);
 
     // ============================================================
@@ -4056,10 +4056,19 @@ const resumoColaborador =
                         renderizarTabelaEventosESocial();
                     };
 
-                container.insertBefore(
-                    li,
-                    nextBtn
-                );
+                if (
+                    nextBtn &&
+                    nextBtn.parentNode === container
+                ) {
+                    container.insertBefore(
+                        li,
+                        nextBtn
+                    );
+                } else {
+                    container.appendChild(
+                        li
+                    );
+                }
             }
         }
 
@@ -9658,17 +9667,23 @@ function garantirControlesRoboRelatoriosEsocial() {
             '<div class="card-body py-2 px-3"></div>';
 
 
-        const paiPainel =
-            container.closest(
-                '.card, .dashboard-content, .container-fluid'
-            ) ||
-            container.parentElement;
-
-
-        paiPainel?.insertBefore(
-            painel,
-            container.nextSibling
-        );
+        // O painel precisa ser inserido em relação ao PAI DIRETO do
+        // container. Usar closest() aqui pode devolver um ancestral e fazer
+        // insertBefore() receber um nó de referência que não é filho dele.
+        // insertAdjacentElement('afterend') evita esse erro e mantém o painel
+        // logo abaixo dos controles.
+        if (
+            container.parentElement
+        ) {
+            container.insertAdjacentElement(
+                'afterend',
+                painel
+            );
+        } else {
+            container.appendChild(
+                painel
+            );
+        }
     }
 
 
