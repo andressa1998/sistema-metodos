@@ -416,965 +416,467 @@ class EsocialRelatoriosRobo {
             );
         }
 
-        const context = this.context;
-        const pagePrincipal = this.page;
+        const page = this.page;
 
         await this.etapa(
-            'INTERCEPTANDO_REQUISICAO_CERTIFICADO',
+            'REPRODUZINDO_SUBMIT_CERTIFICADO_NO_PYTHON',
             {
-                host: 'certificado.sso.acesso.gov.br'
+                host:
+                    'certificado.sso.acesso.gov.br'
             }
         );
 
-        console.log(
-            '🌐 [eSocial] Interceptando o clique REAL em "Seu certificado digital" no BrowserContext...'
-        );
-
-        const timeoutBridge = envNumber(
-            'ESOCIAL_CERT_BRIDGE_TIMEOUT_MS',
-            45000
-        );
-
-        let resolveuInterceptacao = false;
-        let resolverInterceptacao;
-        let rejeitarInterceptacao;
-
-        const promessaInterceptacao = new Promise(
-            (resolve, reject) => {
-                resolverInterceptacao = resolve;
-                rejeitarInterceptacao = reject;
-            }
-        );
-
-        const padraoRota =
-            'https://certificado.sso.acesso.gov.br/**';
-
-        const paginasAntes =
-            context.pages();
-
-        console.log(
-            '🌐 [eSocial] Páginas antes do clique:',
-            paginasAntes.length
-        );
-
-        const paginasNovas = [];
-
-        let monitorarRedeAposClique = false;
-        const requisicoesAposClique = [];
-
-        const aoRequestDiagnostico =
-            request => {
-                if (!monitorarRedeAposClique) {
-                    return;
-                }
-
-                try {
-                    const url = new URL(
-                        request.url()
-                    );
-
-                    const hostsInteressantes = new Set([
-                        'sso.acesso.gov.br',
-                        'certificado.sso.acesso.gov.br',
-                        'login.esocial.gov.br'
-                    ]);
-
-                    if (
-                        !hostsInteressantes.has(
-                            url.hostname
-                        )
-                    ) {
-                        return;
-                    }
-
-                    const item = {
-                        method:
-                            request.method(),
-                        host:
-                            url.hostname,
-                        path:
-                            url.pathname,
-                        resourceType:
-                            request.resourceType(),
-                        navigation:
-                            request.isNavigationRequest()
-                    };
-
-                    requisicoesAposClique.push(
-                        item
-                    );
-
-                    console.log(
-                        '📡 [eSocial] Requisição após clique:',
-                        item
-                    );
-                } catch (_) {}
-            };
-
-        const aoRequestFailedDiagnostico =
-            request => {
-                if (!monitorarRedeAposClique) {
-                    return;
-                }
-
-                try {
-                    const url = new URL(
-                        request.url()
-                    );
-
-                    if (
-                        ![
-                            'sso.acesso.gov.br',
-                            'certificado.sso.acesso.gov.br',
-                            'login.esocial.gov.br'
-                        ].includes(
-                            url.hostname
-                        )
-                    ) {
-                        return;
-                    }
-
-                    console.warn(
-                        '⚠️ [eSocial] Requisição falhou após clique:',
-                        {
-                            method:
-                                request.method(),
-                            host:
-                                url.hostname,
-                            path:
-                                url.pathname,
-                            failure:
-                                request.failure()
-                                    ?.errorText ||
-                                null
-                        }
-                    );
-                } catch (_) {}
-            };
-
-        context.on(
-            'request',
-            aoRequestDiagnostico
-        );
-
-        context.on(
-            'requestfailed',
-            aoRequestFailedDiagnostico
-        );
-
-        const aoCriarPagina =
-            novaPagina => {
-                paginasNovas.push(
-                    novaPagina
-                );
-
-                console.log(
-                    '🪟 [eSocial] Nova página/popup criada.'
-                );
-
-                novaPagina
-                    .waitForLoadState(
-                        'domcontentloaded',
-                        {
-                            timeout: 10000
-                        }
-                    )
-                    .catch(() => null)
-                    .then(async () => {
-                        try {
-                            const atual =
-                                novaPagina.url();
-
-                            console.log(
-                                '🪟 [eSocial] Popup:',
-                                {
-                                    host: (() => {
-                                        try {
-                                            return new URL(
-                                                atual
-                                            ).hostname;
-                                        } catch (_) {
-                                            return null;
-                                        }
-                                    })(),
-                                    path: (() => {
-                                        try {
-                                            return new URL(
-                                                atual
-                                            ).pathname;
-                                        } catch (_) {
-                                            return null;
-                                        }
-                                    })()
-                                }
-                            );
-                        } catch (_) {}
-                    });
-            };
-
-        context.on(
-            'page',
-            aoCriarPagina
-        );
-
-        const manipuladorRota =
-            async route => {
-                if (resolveuInterceptacao) {
-                    try {
-                        await route.continue();
-                    } catch (_) {}
-                    return;
-                }
-
-                resolveuInterceptacao = true;
-
-                try {
-                    const request =
-                        route.request();
-
-                    const headers =
-                        await request
-                            .allHeaders()
-                            .catch(() => ({}));
-
-                    const url =
-                        request.url();
-
-                    const metodo =
-                        request.method();
-
-                    const postData =
-                        request.postData();
-
-                    let paginaRequisicao =
-                        null;
-
-                    try {
-                        paginaRequisicao =
-                            request.frame()
-                                .page();
-                    } catch (_) {}
-
-                    console.log(
-                        '🌐 [eSocial] Requisição REAL do certificado capturada:',
-                        {
-                            method: metodo,
-                            host:
-                                'certificado.sso.acesso.gov.br',
-                            path: (() => {
-                                try {
-                                    return new URL(
-                                        url
-                                    ).pathname;
-                                } catch (_) {
-                                    return null;
-                                }
-                            })(),
-                            temCookie:
-                                Boolean(
-                                    headers?.cookie
-                                ),
-                            temReferer:
-                                Boolean(
-                                    headers?.referer
-                                ),
-                            emNovaPagina:
-                                Boolean(
-                                    paginaRequisicao &&
-                                    paginaRequisicao !==
-                                        pagePrincipal
-                                )
-                        }
-                    );
-
-                    const resultado =
-                        await executarBridgePython(
-                            {
-                                url,
-                                method:
-                                    metodo,
-                                headers,
-                                postData,
-                                timeoutSeconds:
-                                    20
-                            },
-                            timeoutBridge
+        const dadosSubmit =
+            await linkCertificado.evaluate(
+                elemento => {
+                    const form =
+                        elemento.form ||
+                        elemento.closest(
+                            'form'
                         );
 
-                    if (!resultado?.ok) {
-                        throw criarErroRobo(
-                            resultado?.code ||
-                                'FALHA_BRIDGE_PYTHON',
-                            resultado?.error ||
-                                'O bridge Python não conseguiu executar a requisição mTLS.',
-                            {
-                                etapa:
-                                    'REQUISICAO_CERTIFICADO_INTERCEPTADA',
-                                details:
-                                    resultado?.details ||
-                                    null
-                            }
-                        );
+                    if (!form) {
+                        return null;
                     }
 
-                    console.log(
-                        '🐍 [eSocial] Resposta mTLS da requisição REAL:',
-                        {
-                            status:
-                                resultado.status ||
-                                null,
-                            locationHost:
-                                resultado
-                                    ?.locationSummary
-                                    ?.host ||
-                                null,
-                            locationPath:
-                                resultado
-                                    ?.locationSummary
-                                    ?.path ||
-                                null,
-                            quantidadeCookies:
-                                Array.isArray(
-                                    resultado.cookies
-                                )
-                                    ? resultado
-                                        .cookies
-                                        .length
-                                    : 0
-                        }
-                    );
+                    const formAction =
+                        elemento.getAttribute(
+                            'formaction'
+                        ) ||
+                        elemento.formAction ||
+                        form.action ||
+                        '';
 
-                    const cookies =
-                        Array.isArray(
-                            resultado.cookies
+                    const formMethod =
+                        (
+                            elemento.getAttribute(
+                                'formmethod'
+                            ) ||
+                            form.method ||
+                            'get'
                         )
-                            ? resultado.cookies
-                            : [];
+                            .toUpperCase();
 
-                    const cookiesPlaywright =
-                        cookies
-                            .filter(
-                                cookie =>
-                                    cookie?.name &&
-                                    cookie?.domain
-                            )
-                            .map(cookie => {
-                                const item = {
-                                    name:
-                                        String(
-                                            cookie.name
-                                        ),
-                                    value:
-                                        String(
-                                            cookie.value ||
-                                            ''
-                                        ),
-                                    domain:
-                                        String(
-                                            cookie.domain
-                                        ),
-                                    path:
-                                        String(
-                                            cookie.path ||
-                                            '/'
-                                        ),
-                                    secure:
-                                        Boolean(
-                                            cookie.secure
-                                        ),
-                                    httpOnly:
-                                        Boolean(
-                                            cookie.httpOnly
-                                        )
-                                };
-
-                                const expires =
-                                    Number(
-                                        cookie.expires
-                                    );
-
-                                if (
-                                    Number.isFinite(
-                                        expires
-                                    ) &&
-                                    expires > 0
-                                ) {
-                                    item.expires =
-                                        expires;
-                                }
-
-                                return item;
-                            });
+                    const formData =
+                        new FormData(
+                            form
+                        );
 
                     if (
-                        cookiesPlaywright.length
+                        elemento.name
                     ) {
-                        await context
-                            .addCookies(
-                                cookiesPlaywright
-                            );
-                    }
-
-                    const status =
-                        Number(
-                            resultado.status
-                        );
-
-                    const location =
-                        String(
-                            resultado.location ||
+                        formData.append(
+                            elemento.name,
+                            elemento.value ||
                             ''
                         );
-
-                    if (
-                        !Number.isFinite(
-                            status
-                        )
-                    ) {
-                        throw criarErroRobo(
-                            'RESPOSTA_MTLS_INVALIDA',
-                            'O bridge Python não retornou um status HTTP válido.'
-                        );
                     }
 
-                    if (
-                        status >= 300 &&
-                        status < 400 &&
-                        location
-                    ) {
-                        await route.fulfill({
-                            status,
-                            headers: {
-                                location,
-                                'cache-control':
-                                    'no-store'
-                            },
-                            body: ''
-                        });
+                    const params =
+                        new URLSearchParams();
 
-                        resolverInterceptacao({
-                            success:
-                                true,
-                            status,
-                            location,
-                            quantidadeCookies:
-                                cookiesPlaywright
-                                    .length,
-                            paginaRequisicao
-                        });
-
-                        return;
-                    }
-
-                    await route.abort(
-                        'failed'
-                    );
-
-                    throw criarErroRobo(
-                        'CERTIFICADO_SEM_REDIRECT',
-                        (
-                            'A requisição real do certificado foi executada via Python, ' +
-                            `mas retornou HTTP ${status} sem o redirecionamento esperado.`
-                        ),
-                        {
-                            etapa:
-                                'REQUISICAO_CERTIFICADO_INTERCEPTADA',
-                            status,
-                            contentType:
-                                resultado
-                                    .contentType ||
-                                null
-                        }
-                    );
-
-                } catch (error) {
-                    try {
-                        await route.abort(
-                            'failed'
-                        );
-                    } catch (_) {}
-
-                    rejeitarInterceptacao(
-                        error
-                    );
-                }
-            };
-
-        // BrowserContext.route é intencional:
-        // captura também a PRIMEIRA requisição de popups/novas páginas.
-        await context.route(
-            padraoRota,
-            manipuladorRota
-        );
-
-        const diagnosticarElemento =
-            async () => {
-                try {
-                    return await linkCertificado.evaluate(
-                        elemento => {
-                            const attrs = {};
-
-                            for (
-                                const attr
-                                of Array.from(
-                                    elemento.attributes ||
-                                    []
-                                )
-                            ) {
-                                if (
-                                    [
-                                        'id',
-                                        'class',
-                                        'role',
-                                        'type',
-                                        'target',
-                                        'href',
-                                        'onclick'
-                                    ].includes(
-                                        attr.name
-                                    )
-                                ) {
-                                    attrs[
-                                        attr.name
-                                    ] =
-                                        String(
-                                            attr.value ||
-                                            ''
-                                        ).slice(
-                                            0,
-                                            300
-                                        );
-                                }
-                            }
-
-                            const ancestrais = [];
-
-                            let atual =
-                                elemento.parentElement;
-
-                            for (
-                                let i = 0;
-                                atual && i < 4;
-                                i++,
-                                atual =
-                                    atual.parentElement
-                            ) {
-                                const item = {
-                                    tag:
-                                        atual.tagName,
-                                    id:
-                                        atual.id ||
-                                        null,
-                                    role:
-                                        atual.getAttribute(
-                                            'role'
-                                        ),
-                                    href:
-                                        atual.getAttribute(
-                                            'href'
-                                        ),
-                                    target:
-                                        atual.getAttribute(
-                                            'target'
-                                        ),
-                                    onclick:
-                                        atual
-                                            .getAttribute(
-                                                'onclick'
-                                            )
-                                            ?.slice(
-                                                0,
-                                                300
-                                            ) ||
-                                        null
-                                };
-
-                                ancestrais.push(
-                                    item
-                                );
-                            }
-
-                            const form =
-                                elemento.form ||
-                                elemento.closest(
-                                    'form'
-                                );
-
-                            const invalidos =
-                                form
-                                    ? Array.from(
-                                        form.elements ||
-                                        []
-                                    )
-                                        .filter(
-                                            campo => {
-                                                try {
-                                                    return (
-                                                        typeof campo.checkValidity ===
-                                                            'function' &&
-                                                        !campo.checkValidity()
-                                                    );
-                                                } catch (_) {
-                                                    return false;
-                                                }
-                                            }
-                                        )
-                                        .map(
-                                            campo => ({
-                                                tag:
-                                                    campo.tagName,
-                                                id:
-                                                    campo.id ||
-                                                    null,
-                                                name:
-                                                    campo.name ||
-                                                    null,
-                                                type:
-                                                    campo.type ||
-                                                    null,
-                                                required:
-                                                    Boolean(
-                                                        campo.required
-                                                    )
-                                            })
-                                        )
-                                    : [];
-
-                            return {
-                                tag:
-                                    elemento.tagName,
-                                attrs,
-                                button: {
-                                    type:
-                                        elemento.type ||
-                                        null,
-                                    name:
-                                        elemento.name ||
-                                        null,
-                                    value:
-                                        elemento.value ||
-                                        null,
-                                    formAction:
-                                        elemento.formAction ||
-                                        null,
-                                    formMethod:
-                                        elemento.formMethod ||
-                                        null,
-                                    formTarget:
-                                        elemento.formTarget ||
-                                        null,
-                                    formNoValidate:
-                                        Boolean(
-                                            elemento.formNoValidate
-                                        )
-                                },
-                                form: form
-                                    ? {
-                                        id:
-                                            form.id ||
-                                            null,
-                                        action:
-                                            form.action ||
-                                            null,
-                                        method:
-                                            form.method ||
-                                            null,
-                                        noValidate:
-                                            Boolean(
-                                                form.noValidate
-                                            ),
-                                        checkValidity:
-                                            (() => {
-                                                try {
-                                                    return form.checkValidity();
-                                                } catch (_) {
-                                                    return null;
-                                                }
-                                            })(),
-                                        invalidos
-                                    }
-                                    : null,
-                                ancestrais
-                            };
-                        }
-                    );
-                } catch (_) {
-                    return null;
-                }
-            };
-
-        try {
-            const estrutura =
-                await diagnosticarElemento();
-
-            console.log(
-                '🔎 [eSocial] Estrutura do elemento de certificado:',
-                estrutura
-            );
-
-            if (
-                estrutura?.form &&
-                estrutura.form.checkValidity === false
-            ) {
-                console.log(
-                    '🧩 [eSocial] O formulário está inválido por campos do login por CPF; desativando validação HTML somente para a opção de certificado.',
-                    {
-                        invalidos:
-                            estrutura.form.invalidos
-                    }
-                );
-
-                await linkCertificado.evaluate(
-                    elemento => {
-                        const form =
-                            elemento.form ||
-                            elemento.closest(
-                                'form'
-                            );
-
-                        if (form) {
-                            form.noValidate =
-                                true;
-                        }
-
-                        try {
-                            elemento.formNoValidate =
-                                true;
-                        } catch (_) {}
-                    }
-                );
-            }
-
-            monitorarRedeAposClique =
-                true;
-
-            console.log(
-                '🔐 [eSocial] Clicando na opção real de certificado...'
-            );
-
-            await linkCertificado.click({
-                timeout: 10000
-            });
-
-            const resultado =
-                await Promise.race([
-                    promessaInterceptacao,
-                    new Promise(
-                        (_, reject) =>
-                            setTimeout(
-                                () => {
-                                    const paginasDepois =
-                                        context.pages();
-
-                                    console.log(
-                                        '🌐 [eSocial] Nenhuma requisição de certificado capturada.',
-                                        {
-                                            paginasAntes:
-                                                paginasAntes.length,
-                                            paginasDepois:
-                                                paginasDepois.length,
-                                            popupsDetectados:
-                                                paginasNovas.length,
-                                            requisicoesAposClique
-                                        }
-                                    );
-
-                                    reject(
-                                        criarErroRobo(
-                                            'REQUISICAO_CERTIFICADO_NAO_CAPTURADA',
-                                            'O clique em "Seu certificado digital" não gerou uma requisição capturável ao endpoint de certificado em até 20 segundos.'
-                                        )
-                                    );
-                                },
-                                20000
-                            )
-                    )
-                ]);
-
-            await this.etapa(
-                'AGUARDANDO_RETORNO_CERTIFICADO'
-            );
-
-            const inicio =
-                Date.now();
-
-            while (
-                Date.now() - inicio <
-                25000
-            ) {
-                const paginas =
-                    context.pages();
-
-                for (
-                    const paginaAtual
-                    of paginas
-                ) {
-                    if (
-                        paginaAtual.isClosed()
-                    ) {
-                        continue;
-                    }
-
-                    const sinais = [
-                        paginaAtual
-                            .getByText(
-                                /Trocar Perfil\/Módulo/i
-                            ),
-                        paginaAtual
-                            .getByText(
-                                /Trocar Perfil/i
-                            ),
-                        paginaAtual
-                            .getByText(
-                                /Titular do Certificado/i
-                            ),
-                        paginaAtual
-                            .getByRole(
-                                'button',
-                                {
-                                    name:
-                                        /SAIR/i
-                                }
-                            )
-                    ];
-
-                    let autenticada =
-                        false;
+                    const nomesCampos =
+                        [];
 
                     for (
-                        const sinal
-                        of sinais
+                        const [
+                            nome,
+                            valor
+                        ]
+                        of formData.entries()
                     ) {
-                        if (
-                            await locatorVisivel(
-                                sinal
-                            )
-                        ) {
-                            autenticada =
-                                true;
-                            break;
-                        }
-                    }
-
-                    if (
-                        autenticada
-                    ) {
-                        this.page =
-                            paginaAtual;
-
-                        console.log(
-                            '✅ [eSocial] Login confirmado após o fluxo real do certificado.',
-                            {
-                                emPopup:
-                                    paginaAtual !==
-                                        pagePrincipal
-                            }
+                        nomesCampos.push(
+                            String(nome)
                         );
 
-                        return {
-                            ...resultado,
-                            authenticated:
-                                true,
-                            finalUrl:
-                                paginaAtual
-                                    .url()
-                        };
+                        params.append(
+                            String(nome),
+                            typeof valor ===
+                                'string'
+                                ? valor
+                                : ''
+                        );
                     }
-                }
 
-                await pagePrincipal
-                    .waitForTimeout(
-                        750
-                    )
-                    .catch(
-                        () => null
-                    );
-            }
-
-            const estadosPaginas =
-                [];
-
-            for (
-                const paginaAtual
-                of context.pages()
-            ) {
-                if (
-                    paginaAtual.isClosed()
-                ) {
-                    continue;
-                }
-
-                const atual =
-                    paginaAtual.url();
-
-                estadosPaginas.push({
-                    host: (() => {
-                        try {
-                            return new URL(
-                                atual
-                            ).hostname;
-                        } catch (_) {
-                            return null;
-                        }
-                    })(),
-                    path: (() => {
-                        try {
-                            return new URL(
-                                atual
-                            ).pathname;
-                        } catch (_) {
-                            return null;
-                        }
-                    })(),
-                    titulo:
-                        await paginaAtual
-                            .title()
-                            .catch(
-                                () => ''
+                    return {
+                        url:
+                            formAction,
+                        method:
+                            formMethod,
+                        body:
+                            params.toString(),
+                        fieldNames:
+                            Array.from(
+                                new Set(
+                                    nomesCampos
+                                )
                             )
+                    };
+                }
+            );
+
+        if (
+            !dadosSubmit?.url
+        ) {
+            throw criarErroRobo(
+                'SUBMIT_CERTIFICADO_NAO_EXTRAIDO',
+                'Não foi possível extrair o submit real do botão "Seu certificado digital".'
+            );
+        }
+
+        const destino =
+            new URL(
+                dadosSubmit.url
+            );
+
+        if (
+            destino.protocol !==
+                'https:' ||
+            destino.hostname !==
+                'certificado.sso.acesso.gov.br'
+        ) {
+            throw criarErroRobo(
+                'SUBMIT_CERTIFICADO_URL_INVALIDA',
+                'O formulário retornou um destino inesperado para o certificado digital.'
+            );
+        }
+
+        const cookiesAtuais =
+            await this.context
+                .cookies();
+
+        const userAgent =
+            await page
+                .evaluate(
+                    () =>
+                        navigator.userAgent
+                )
+                .catch(
+                    () => ''
+                );
+
+        console.log(
+            '🐍 [eSocial] Reproduzindo no Python o submit real do certificado:',
+            {
+                method:
+                    dadosSubmit.method,
+                host:
+                    destino.hostname,
+                path:
+                    destino.pathname,
+                campos:
+                    dadosSubmit
+                        .fieldNames,
+                quantidadeCookies:
+                    cookiesAtuais.length
+            }
+        );
+
+        const timeoutBridge =
+            envNumber(
+                'ESOCIAL_CERT_BRIDGE_TIMEOUT_MS',
+                45000
+            );
+
+        const resultado =
+            await executarBridgePython(
+                {
+                    url:
+                        dadosSubmit.url,
+                    method:
+                        dadosSubmit.method,
+                    body:
+                        dadosSubmit.body,
+                    referer:
+                        page.url(),
+                    userAgent,
+                    cookies:
+                        cookiesAtuais,
+                    timeoutSeconds:
+                        20
+                },
+                timeoutBridge
+            );
+
+        if (!resultado?.ok) {
+            throw criarErroRobo(
+                resultado?.code ||
+                    'FALHA_BRIDGE_PYTHON',
+                resultado?.error ||
+                    'O bridge Python não conseguiu executar o submit mTLS.',
+                {
+                    etapa:
+                        'SUBMIT_CERTIFICADO_PYTHON',
+                    details:
+                        resultado?.details ||
+                        null
+                }
+            );
+        }
+
+        const cookiesRecebidos =
+            Array.isArray(
+                resultado.cookies
+            )
+                ? resultado.cookies
+                : [];
+
+        const cookiesPlaywright =
+            cookiesRecebidos
+                .filter(
+                    cookie =>
+                        cookie?.name &&
+                        cookie?.domain
+                )
+                .map(cookie => {
+                    const item = {
+                        name:
+                            String(
+                                cookie.name
+                            ),
+                        value:
+                            String(
+                                cookie.value ||
+                                ''
+                            ),
+                        domain:
+                            String(
+                                cookie.domain
+                            ),
+                        path:
+                            String(
+                                cookie.path ||
+                                '/'
+                            ),
+                        secure:
+                            Boolean(
+                                cookie.secure
+                            ),
+                        httpOnly:
+                            Boolean(
+                                cookie.httpOnly
+                            )
+                    };
+
+                    const expires =
+                        Number(
+                            cookie.expires
+                        );
+
+                    if (
+                        Number.isFinite(
+                            expires
+                        ) &&
+                        expires > 0
+                    ) {
+                        item.expires =
+                            expires;
+                    }
+
+                    return item;
                 });
+
+        if (
+            cookiesPlaywright.length
+        ) {
+            await this.context
+                .addCookies(
+                    cookiesPlaywright
+                );
+        }
+
+        console.log(
+            '🐍 [eSocial] Resposta do submit mTLS:',
+            {
+                status:
+                    resultado.status ||
+                    null,
+                locationHost:
+                    resultado
+                        ?.locationSummary
+                        ?.host ||
+                    null,
+                locationPath:
+                    resultado
+                        ?.locationSummary
+                        ?.path ||
+                    null,
+                quantidadeCookies:
+                    cookiesPlaywright.length
+            }
+        );
+
+        const status =
+            Number(
+                resultado.status
+            );
+
+        const location =
+            String(
+                resultado.location ||
+                ''
+            );
+
+        if (
+            !Number.isFinite(
+                status
+            )
+        ) {
+            throw criarErroRobo(
+                'RESPOSTA_MTLS_INVALIDA',
+                'O bridge Python não retornou um status HTTP válido.'
+            );
+        }
+
+        if (
+            status < 300 ||
+            status >= 400 ||
+            !location
+        ) {
+            throw criarErroRobo(
+                'CERTIFICADO_SEM_REDIRECT',
+                (
+                    'O submit mTLS foi executado, mas não retornou o redirecionamento esperado. ' +
+                    `HTTP ${status}.`
+                ),
+                {
+                    etapa:
+                        'SUBMIT_CERTIFICADO_PYTHON',
+                    status
+                }
+            );
+        }
+
+        await this.etapa(
+            'RETORNANDO_FLUXO_AO_CHROMIUM',
+            {
+                host: (() => {
+                    try {
+                        return new URL(
+                            location
+                        ).hostname;
+                    } catch (_) {
+                        return null;
+                    }
+                })()
+            }
+        );
+
+        console.log(
+            '🌐 [eSocial] Devolvendo o redirect do certificado ao Chromium:',
+            {
+                host: (() => {
+                    try {
+                        return new URL(
+                            location
+                        ).hostname;
+                    } catch (_) {
+                        return null;
+                    }
+                })(),
+                path: (() => {
+                    try {
+                        return new URL(
+                            location
+                        ).pathname;
+                    } catch (_) {
+                        return null;
+                    }
+                })()
+            }
+        );
+
+        try {
+            await page.goto(
+                location,
+                {
+                    waitUntil:
+                        'domcontentloaded',
+                    timeout:
+                        30000
+                }
+            );
+        } catch (error) {
+            console.warn(
+                '⚠️ [eSocial] Navegação após mTLS:',
+                error?.message ||
+                error
+            );
+        }
+
+        const inicio =
+            Date.now();
+
+        while (
+            Date.now() - inicio <
+            25000
+        ) {
+            if (
+                await this.estaAutenticado()
+            ) {
+                console.log(
+                    '✅ [eSocial] Login confirmado após o submit mTLS reproduzido no Python.'
+                );
+
+                return {
+                    success:
+                        true,
+                    authenticated:
+                        true,
+                    status,
+                    quantidadeCookies:
+                        cookiesPlaywright.length,
+                    finalUrl:
+                        page.url()
+                };
             }
 
-            console.log(
-                '🌐 [eSocial] Páginas após o fluxo REAL do certificado:',
-                estadosPaginas
+            await page.waitForTimeout(
+                750
             );
-
-            return {
-                ...resultado,
-                authenticated:
-                    false,
-                finalUrl:
-                    pagePrincipal
-                        .url()
-            };
-
-        } finally {
-            monitorarRedeAposClique =
-                false;
-
-            context.off(
-                'request',
-                aoRequestDiagnostico
-            );
-
-            context.off(
-                'requestfailed',
-                aoRequestFailedDiagnostico
-            );
-
-            context.off(
-                'page',
-                aoCriarPagina
-            );
-
-            try {
-                await context.unroute(
-                    padraoRota,
-                    manipuladorRota
-                );
-            } catch (_) {}
         }
+
+        console.log(
+            '🌐 [eSocial] Estado após devolver o redirect ao Chromium:',
+            {
+                host: (() => {
+                    try {
+                        return new URL(
+                            page.url()
+                        ).hostname;
+                    } catch (_) {
+                        return null;
+                    }
+                })(),
+                path: (() => {
+                    try {
+                        return new URL(
+                            page.url()
+                        ).pathname;
+                    } catch (_) {
+                        return null;
+                    }
+                })(),
+                titulo:
+                    await page
+                        .title()
+                        .catch(
+                            () => ''
+                        )
+            }
+        );
+
+        return {
+            success:
+                true,
+            authenticated:
+                false,
+            status,
+            quantidadeCookies:
+                cookiesPlaywright.length,
+            finalUrl:
+                page.url()
+        };
     }
 
     async autenticar() {

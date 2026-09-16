@@ -2,23 +2,26 @@
 # -*- coding: utf-8 -*-
 
 """
-Bridge Python V5 - proxy mTLS para uma requisição REAL interceptada do Chromium.
+Bridge Python V8 — reproduz o SUBMIT real do formulário gov.br com A1/mTLS.
 
-O Node/Playwright deixa o gov.br executar o clique real em
-"Seu certificado digital", intercepta a requisição destinada a
-certificado.sso.acesso.gov.br e envia ao Python:
-- URL exata
-- método HTTP
-- headers reais do navegador (incluindo Cookie/Referer/User-Agent)
-- body, quando existir
+O navegador não chega a emitir uma requisição HTTP quando o servidor pede o
+certificado: o Chromium abre primeiro o seletor nativo de certificado. Em modo
+headless no Render, esse seletor não pode ser operado.
 
-O Python executa essa MESMA requisição usando o PFX A1 e devolve:
-- status HTTP
-- Location
-- cookies recebidos
+Por isso o Node extrai do DOM:
+- formAction real do botão "Seu certificado digital"
+- método do formulário
+- body application/x-www-form-urlencoded, incluindo operation=login-certificate
+- cookies atuais do BrowserContext
+- Referer/User-Agent
 
-O BrowserContext recebe esses cookies e o Playwright cumpre a resposta
-interceptada. Assim o restante do fluxo continua no próprio navegador.
+O Python executa exatamente esse submit com o PFX A1 e NÃO segue redirects.
+A resposta (normalmente 302) e os cookies retornam ao Node, que devolve o fluxo
+ao Chromium pela URL Location.
+
+Segredos:
+- produção: ESOCIAL_CERT_BASE64 + ESOCIAL_CERT_PASSWORD
+- teste local opcional: ESOCIAL_CERT_PFX_PATH
 """
 
 import base64
@@ -28,7 +31,7 @@ import re
 import sys
 import tempfile
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 import requests
 from cryptography.hazmat.primitives import serialization
@@ -37,19 +40,17 @@ from cryptography.hazmat.primitives.serialization.pkcs12 import (
 )
 
 CERT_HOST = "certificado.sso.acesso.gov.br"
-METODOS_PERMITIDOS = {"GET", "POST"}
+METODOS = {"GET", "POST"}
+REDIRECTS = {301, 302, 303, 307, 308}
 
-HEADERS_BLOQUEADOS = {
-    "host",
-    "content-length",
-    "connection",
-    "proxy-connection",
-    "transfer-encoding",
-    "upgrade",
-}
+DEFAULT_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/153.0.0.0 Safari/537.36"
+)
 
 
-def resposta_json(payload):
+def enviar_json(payload):
     sys.stdout.write(
         json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
     )
@@ -57,7 +58,7 @@ def resposta_json(payload):
 
 
 def falhar(code, message, details=None):
-    resposta_json({
+    enviar_json({
         "ok": False,
         "code": code,
         "error": message,
@@ -92,7 +93,6 @@ def carregar_pfx():
     if b64:
         b64 = re.sub(r"^data:.*?;base64,", "", b64, flags=re.I)
         b64 = re.sub(r"\s+", "", b64)
-
         try:
             dados = base64.b64decode(b64, validate=True)
         except Exception:
@@ -100,18 +100,14 @@ def carregar_pfx():
                 "CERT_BASE64_INVALIDO",
                 "ESOCIAL_CERT_BASE64 não pôde ser decodificado.",
             )
-
     elif pfx_path:
         caminho = Path(pfx_path)
-
         if not caminho.exists():
             falhar(
                 "CERT_ARQUIVO_NAO_ENCONTRADO",
                 "Arquivo PFX não encontrado.",
             )
-
         dados = caminho.read_bytes()
-
     else:
         falhar(
             "CERT_NAO_CONFIGURADO",
@@ -157,7 +153,6 @@ def escrever_pems(chave, certificado, cadeia, pasta):
     )
 
     cert_bytes = certificado.public_bytes(serialization.Encoding.PEM)
-
     for ca in cadeia:
         cert_bytes += ca.public_bytes(serialization.Encoding.PEM)
 
@@ -176,54 +171,74 @@ def validar_url(url):
     try:
         p = urlparse(url)
     except Exception:
-        falhar("URL_INVALIDA", "URL mTLS inválida.")
+        falhar("URL_INVALIDA", "URL do certificado inválida.")
 
-    if p.scheme.lower() != "https" or p.hostname != CERT_HOST:
+    if (
+        p.scheme.lower() != "https"
+        or p.hostname != CERT_HOST
+        or not p.path.startswith("/login")
+    ):
         falhar(
             "URL_NAO_PERMITIDA",
-            "A requisição interceptada não pertence ao domínio de certificado do gov.br.",
+            "A URL não pertence ao endpoint esperado de certificado do gov.br.",
         )
 
 
-def exportar_cookies(response):
+def criar_cookie(item):
+    nome = str(item.get("name") or "")
+    valor = str(item.get("value") or "")
+    dominio = str(item.get("domain") or "")
+    caminho = str(item.get("path") or "/")
+
+    if not nome or not dominio:
+        return None
+
+    expires = item.get("expires")
+    try:
+        exp = float(expires)
+        expires = int(exp) if exp > 0 else None
+    except Exception:
+        expires = None
+
+    return requests.cookies.create_cookie(
+        name=nome,
+        value=valor,
+        domain=dominio,
+        path=caminho,
+        secure=bool(item.get("secure", False)),
+        expires=expires,
+    )
+
+
+def carregar_cookies(sessao, cookies):
+    for item in cookies or []:
+        try:
+            cookie = criar_cookie(item)
+            if cookie is not None:
+                sessao.cookies.set_cookie(cookie)
+        except Exception:
+            continue
+
+
+def exportar_cookies(sessao):
     saida = []
 
-    for cookie in response.cookies:
+    for c in sessao.cookies:
         item = {
-            "name": cookie.name,
-            "value": cookie.value,
-            "domain": cookie.domain or ".sso.acesso.gov.br",
-            "path": cookie.path or "/",
-            "secure": bool(cookie.secure),
+            "name": c.name,
+            "value": c.value,
+            "domain": c.domain,
+            "path": c.path or "/",
+            "secure": bool(c.secure),
             "httpOnly": False,
         }
 
-        if cookie.expires and cookie.expires > 0:
-            item["expires"] = int(cookie.expires)
+        if c.expires and c.expires > 0:
+            item["expires"] = int(c.expires)
 
         saida.append(item)
 
     return saida
-
-
-def limpar_headers(headers):
-    resultado = {}
-
-    for chave, valor in (headers or {}).items():
-        nome = str(chave or "").strip().lower()
-
-        if (
-            not nome
-            or nome in HEADERS_BLOQUEADOS
-            or nome.startswith(":")
-        ):
-            continue
-
-        # Cookie é propositalmente preservado: é justamente o que correlaciona
-        # a autorização atual do gov.br com a requisição de certificado.
-        resultado[nome] = str(valor or "")
-
-    return resultado
 
 
 def main():
@@ -236,16 +251,18 @@ def main():
         )
 
     url = str(entrada.get("url") or "").strip()
-    metodo = str(entrada.get("method") or "GET").upper().strip()
-    headers = limpar_headers(entrada.get("headers") or {})
-    post_data = entrada.get("postData")
+    metodo = str(entrada.get("method") or "POST").upper().strip()
+    body = entrada.get("body")
+    referer = str(entrada.get("referer") or "").strip()
+    user_agent = str(entrada.get("userAgent") or "").strip() or DEFAULT_USER_AGENT
+    cookies = entrada.get("cookies") or []
 
     validar_url(url)
 
-    if metodo not in METODOS_PERMITIDOS:
+    if metodo not in METODOS:
         falhar(
             "METODO_NAO_PERMITIDO",
-            f"Método HTTP não permitido no bridge: {metodo}.",
+            f"Método HTTP não permitido: {metodo}.",
         )
 
     try:
@@ -265,12 +282,41 @@ def main():
             pasta,
         )
 
+        sessao = requests.Session()
+        carregar_cookies(sessao, cookies)
+
+        headers = {
+            "User-Agent": user_agent,
+            "Accept": (
+                "text/html,application/xhtml+xml,application/xml;q=0.9,"
+                "image/avif,image/webp,*/*;q=0.8"
+            ),
+            "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
+            "Cache-Control": "no-cache",
+            "Pragma": "no-cache",
+            "Upgrade-Insecure-Requests": "1",
+        }
+
+        if referer.startswith("https://"):
+            headers["Referer"] = referer
+            try:
+                rp = urlparse(referer)
+                headers["Origin"] = f"{rp.scheme}://{rp.netloc}"
+            except Exception:
+                pass
+
+        data = None
+
+        if metodo == "POST":
+            headers["Content-Type"] = "application/x-www-form-urlencoded"
+            data = str(body or "")
+
         try:
-            resposta = requests.request(
+            resposta = sessao.request(
                 method=metodo,
                 url=url,
                 headers=headers,
-                data=post_data if metodo == "POST" else None,
+                data=data,
                 cert=(cert_path, key_path),
                 timeout=timeout,
                 allow_redirects=False,
@@ -279,21 +325,21 @@ def main():
         except requests.exceptions.SSLError:
             falhar(
                 "ERRO_SSL_MTLS",
-                "Falha SSL/TLS durante a autenticação pelo certificado digital.",
+                "Falha SSL/TLS durante o submit do certificado digital.",
                 resumo_url(url),
             )
 
         except requests.exceptions.Timeout:
             falhar(
                 "TIMEOUT_MTLS",
-                "Tempo excedido durante a autenticação pelo certificado digital.",
+                "Tempo excedido durante o submit do certificado digital.",
                 resumo_url(url),
             )
 
         except requests.exceptions.RequestException as exc:
             falhar(
                 "ERRO_HTTP_MTLS",
-                "Falha HTTP durante a autenticação pelo certificado digital.",
+                "Falha HTTP durante o submit do certificado digital.",
                 {
                     **resumo_url(url),
                     "tipo": exc.__class__.__name__,
@@ -302,18 +348,21 @@ def main():
 
         location = resposta.headers.get("Location")
 
-        content_type = resposta.headers.get("Content-Type", "")
-
-        # Para o fluxo esperado, normalmente temos 302.
-        # Se vier 200, devolvemos diagnóstico; o Node não tratará isso como login.
-        resposta_json({
+        enviar_json({
             "ok": True,
-            "strategy": "intercepted-browser-request-mtls",
+            "strategy": "exact-form-submit-with-mtls",
             "status": resposta.status_code,
-            "location": location,
-            "locationSummary": resumo_url(location) if location else None,
-            "contentType": content_type[:120],
-            "cookies": exportar_cookies(resposta),
+            "location": (
+                urljoin(resposta.url, location)
+                if location
+                else None
+            ),
+            "locationSummary": (
+                resumo_url(urljoin(resposta.url, location))
+                if location
+                else None
+            ),
+            "cookies": exportar_cookies(sessao),
         })
 
 
