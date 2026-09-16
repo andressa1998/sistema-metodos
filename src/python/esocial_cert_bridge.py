@@ -2,25 +2,18 @@
 # -*- coding: utf-8 -*-
 
 """
-Bridge Python V3 - autenticação mTLS gov.br/eSocial.
+Bridge Python V4 - somente a etapa mTLS do certificado gov.br.
 
-Fluxo:
-1) Recebe do Node:
-   - url: endpoint certificado.sso.acesso.gov.br/login?...authorization_id=...
-   - authorizeUrl: URL OAuth original https://sso.acesso.gov.br/authorize?...state=...
-   - cookies: cookies da sessão Playwright/eSocial
-2) Preserva a sessão original do eSocial.
-3) Faz o handshake mTLS em uma sessão limpa com o A1.
-4) Mescla os cookies novos do certificado na sessão principal.
-5) REENTRA na authorizeUrl original. Esse passo é essencial para o provedor
-   OAuth perceber que a sessão gov.br já foi autenticada e então emitir o
-   retorno para redirect_uri do eSocial.
-6) Segue redirects até a página final e devolve cookies + URL ao Node.
+IMPORTANTE:
+- O OAuth (/authorize) volta a ser executado no Chromium/Playwright.
+- O Python faz APENAS o handshake mTLS em uma sessão limpa.
+- Isso reproduz o teste local que retornou HTTP 302.
+- Os cookies criados pelo certificado são devolvidos ao Node para serem
+  injetados no BrowserContext antes de o Chromium reabrir o /authorize original.
 
 Segredos:
-- O PFX é lido apenas de ESOCIAL_CERT_BASE64 / ESOCIAL_CERT_PASSWORD
-  (ou ESOCIAL_CERT_PFX_PATH apenas para testes locais).
-- Cookies e conteúdo completo não são escritos em stdout.
+- ESOCIAL_CERT_BASE64 + ESOCIAL_CERT_PASSWORD no servidor.
+- ESOCIAL_CERT_PFX_PATH é aceito somente para testes locais.
 """
 
 import base64
@@ -39,10 +32,7 @@ from cryptography.hazmat.primitives.serialization.pkcs12 import (
 )
 
 CERT_HOST = "certificado.sso.acesso.gov.br"
-SSO_HOST = "sso.acesso.gov.br"
-ESOCIAL_HOST = "login.esocial.gov.br"
 REDIRECT_CODES = {301, 302, 303, 307, 308}
-MAX_REDIRECTS = 15
 
 DEFAULT_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -76,23 +66,18 @@ def resumo_url(url):
             "path": p.path or "/",
             "queryKeys": sorted(
                 {
-                    item.split("=", 1)[0]
-                    for item in (p.query or "").split("&")
-                    if item
+                    parte.split("=", 1)[0]
+                    for parte in (p.query or "").split("&")
+                    if parte
                 }
             ),
         }
     except Exception:
-        return {"host": "", "path": "", "queryKeys": []}
-
-
-def titulo_html(texto):
-    if not texto:
-        return ""
-    m = re.search(r"<title[^>]*>(.*?)</title>", texto, flags=re.I | re.S)
-    if not m:
-        return ""
-    return re.sub(r"\s+", " ", m.group(1)).strip()[:160]
+        return {
+            "host": "",
+            "path": "",
+            "queryKeys": [],
+        }
 
 
 def carregar_pfx():
@@ -163,6 +148,7 @@ def escrever_pems(chave, certificado, cadeia, pasta):
     )
 
     cert_bytes = certificado.public_bytes(serialization.Encoding.PEM)
+
     for ca in cadeia:
         cert_bytes += ca.public_bytes(serialization.Encoding.PEM)
 
@@ -181,214 +167,49 @@ def validar_url_certificado(url):
     try:
         p = urlparse(url)
     except Exception:
-        falhar("URL_CERT_INVALIDA", "URL do certificado inválida.")
+        falhar(
+            "URL_CERT_INVALIDA",
+            "URL do certificado inválida.",
+        )
 
-    if p.scheme.lower() != "https" or p.hostname != CERT_HOST:
+    if (
+        p.scheme.lower() != "https"
+        or p.hostname != CERT_HOST
+        or not p.path.startswith("/login")
+    ):
         falhar(
             "URL_CERT_NAO_PERMITIDA",
             "A URL mTLS não pertence ao endpoint esperado do gov.br.",
         )
 
     qs = parse_qs(p.query)
-    if not qs.get("authorization_id") or not qs.get("client_id"):
+
+    if not qs.get("client_id") or not qs.get("authorization_id"):
         falhar(
             "URL_CERT_SEM_PARAMETROS",
             "URL do certificado sem client_id/authorization_id.",
         )
 
 
-def validar_authorize_url(url):
-    try:
-        p = urlparse(url)
-    except Exception:
-        falhar("AUTHORIZE_URL_INVALIDA", "URL OAuth original inválida.")
-
-    if (
-        p.scheme.lower() != "https"
-        or p.hostname != SSO_HOST
-        or not p.path.startswith("/authorize")
-    ):
-        falhar(
-            "AUTHORIZE_URL_NAO_PERMITIDA",
-            "A URL OAuth original não pertence ao /authorize do gov.br.",
-        )
-
-    qs = parse_qs(p.query)
-
-    if (qs.get("client_id") or [""])[0] != "login.esocial.gov.br":
-        falhar(
-            "AUTHORIZE_CLIENT_INVALIDO",
-            "A URL OAuth não pertence ao cliente do eSocial.",
-        )
-
-    if not qs.get("state") or not qs.get("redirect_uri"):
-        falhar(
-            "AUTHORIZE_SEM_ESTADO",
-            "A URL OAuth original está sem state/redirect_uri.",
-        )
-
-
-def headers_padrao(user_agent):
-    return {
-        "Accept": (
-            "text/html,application/xhtml+xml,application/xml;q=0.9,"
-            "image/avif,image/webp,*/*;q=0.8"
-        ),
-        "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
-        "Cache-Control": "no-cache",
-        "Pragma": "no-cache",
-        "User-Agent": user_agent,
-    }
-
-
-def criar_cookie(item):
-    nome = str(item.get("name") or "")
-    valor = str(item.get("value") or "")
-    dominio = str(item.get("domain") or "")
-    caminho = str(item.get("path") or "/")
-
-    if not nome or not dominio:
-        return None
-
-    expires = item.get("expires")
-    try:
-        exp = float(expires)
-        expires = int(exp) if exp > 0 else None
-    except Exception:
-        expires = None
-
-    return requests.cookies.create_cookie(
-        name=nome,
-        value=valor,
-        domain=dominio,
-        path=caminho,
-        secure=bool(item.get("secure", False)),
-        expires=expires,
-    )
-
-
-def adicionar_cookies(sessao, cookies):
-    for item in cookies or []:
-        try:
-            c = criar_cookie(item)
-            if c is not None:
-                sessao.cookies.set_cookie(c)
-        except Exception:
-            continue
-
-
-def copiar_cookies(origem, destino):
-    for c in origem.cookies:
-        try:
-            destino.cookies.set_cookie(c)
-        except Exception:
-            continue
-
-
 def exportar_cookies(sessao):
     saida = []
-    for c in sessao.cookies:
+
+    for cookie in sessao.cookies:
         item = {
-            "name": c.name,
-            "value": c.value,
-            "domain": c.domain,
-            "path": c.path or "/",
-            "secure": bool(c.secure),
+            "name": cookie.name,
+            "value": cookie.value,
+            "domain": cookie.domain,
+            "path": cookie.path or "/",
+            "secure": bool(cookie.secure),
             "httpOnly": False,
         }
-        if c.expires and c.expires > 0:
-            item["expires"] = int(c.expires)
+
+        if cookie.expires and cookie.expires > 0:
+            item["expires"] = int(cookie.expires)
+
         saida.append(item)
+
     return saida
-
-
-def remover_cookies_sso(sessao):
-    remover = []
-
-    for c in sessao.cookies:
-        d = str(c.domain or "").lstrip(".").lower()
-        if (
-            d == SSO_HOST
-            or d.endswith("." + SSO_HOST)
-            or d == CERT_HOST
-            or d.endswith("." + CERT_HOST)
-        ):
-            remover.append((c.domain, c.path, c.name))
-
-    for domain, path, name in remover:
-        try:
-            sessao.cookies.clear(domain=domain, path=path, name=name)
-        except Exception:
-            pass
-
-
-def request_get(sessao, url, timeout, cert=None, referer=None):
-    headers = {}
-    if referer and str(referer).startswith("https://"):
-        headers["Referer"] = referer
-
-    try:
-        return sessao.get(
-            url,
-            timeout=timeout,
-            allow_redirects=False,
-            cert=cert,
-            headers=headers,
-        )
-    except requests.exceptions.SSLError:
-        falhar(
-            "ERRO_SSL_MTLS",
-            "Falha SSL/TLS durante a autenticação pelo certificado digital.",
-            resumo_url(url),
-        )
-    except requests.exceptions.Timeout:
-        falhar(
-            "TIMEOUT_HTTP",
-            "Tempo excedido durante a autenticação no gov.br.",
-            resumo_url(url),
-        )
-    except requests.exceptions.RequestException as exc:
-        falhar(
-            "ERRO_HTTP_GOVBR",
-            "Falha HTTP durante a autenticação no gov.br.",
-            {
-                **resumo_url(url),
-                "tipo": exc.__class__.__name__,
-            },
-        )
-
-
-def seguir_redirects(sessao, resposta, timeout, cert_tuple, redirects):
-    atual = resposta
-
-    for _ in range(MAX_REDIRECTS):
-        location = atual.headers.get("Location")
-
-        if atual.status_code not in REDIRECT_CODES or not location:
-            return atual
-
-        destino = urljoin(atual.url, location)
-        host = (urlparse(destino).hostname or "").lower()
-        usar_cert = host == CERT_HOST
-
-        redirects.append({
-            "status": atual.status_code,
-            "from": resumo_url(atual.url),
-            "to": resumo_url(destino),
-        })
-
-        atual = request_get(
-            sessao,
-            destino,
-            timeout,
-            cert=cert_tuple if usar_cert else None,
-            referer=atual.url,
-        )
-
-    falhar(
-        "REDIRECT_LIMITE",
-        "Quantidade máxima de redirecionamentos excedida.",
-    )
 
 
 def main():
@@ -400,19 +221,22 @@ def main():
             "Entrada JSON do bridge é inválida.",
         )
 
-    url_cert = str(entrada.get("url") or "").strip()
-    authorize_url = str(entrada.get("authorizeUrl") or "").strip()
+    url_certificado = str(
+        entrada.get("url") or ""
+    ).strip()
 
-    validar_url_certificado(url_cert)
-    validar_authorize_url(authorize_url)
+    validar_url_certificado(url_certificado)
 
     try:
-        timeout = int(entrada.get("timeoutSeconds") or 15)
+        timeout = int(
+            entrada.get("timeoutSeconds") or 15
+        )
     except Exception:
         timeout = 15
 
     timeout = max(5, min(timeout, 30))
 
+    # Usa UA estável igual ao teste local que funcionou.
     user_agent = (
         os.getenv("ESOCIAL_CERT_BRIDGE_USER_AGENT", "").strip()
         or DEFAULT_USER_AGENT
@@ -422,135 +246,80 @@ def main():
 
     with tempfile.TemporaryDirectory(prefix="esocial-cert-") as pasta:
         cert_path, key_path = escrever_pems(
-            chave, certificado, cadeia, pasta
-        )
-        cert_tuple = (cert_path, key_path)
-
-        # ------------------------------------------------------
-        # Sessão principal: preserva cookies do eSocial.
-        # ------------------------------------------------------
-        principal = requests.Session()
-        principal.headers.update(headers_padrao(user_agent))
-        adicionar_cookies(principal, entrada.get("cookies") or [])
-
-        # Cookies SSO antigos podem representar uma sessão ainda não autenticada.
-        # Mantemos eSocial, limpamos SSO/certificado antes de mesclar a nova sessão.
-        remover_cookies_sso(principal)
-
-        # ------------------------------------------------------
-        # Sessão limpa apenas para handshake mTLS.
-        # ------------------------------------------------------
-        cert_session = requests.Session()
-        cert_session.headers.update(headers_padrao(user_agent))
-
-        resposta_cert = request_get(
-            cert_session,
-            url_cert,
-            timeout,
-            cert=cert_tuple,
-            referer=None,
+            chave,
+            certificado,
+            cadeia,
+            pasta,
         )
 
-        initial_status = resposta_cert.status_code
-        initial_location = resposta_cert.headers.get("Location")
+        sessao = requests.Session()
+
+        sessao.headers.update({
+            "User-Agent": user_agent,
+            "Accept": (
+                "text/html,application/xhtml+xml,application/xml;q=0.9,"
+                "image/avif,image/webp,*/*;q=0.8"
+            ),
+            "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
+            "Cache-Control": "no-cache",
+            "Pragma": "no-cache",
+        })
+
+        try:
+            resposta = sessao.get(
+                url_certificado,
+                cert=(cert_path, key_path),
+                timeout=timeout,
+                allow_redirects=False,
+            )
+        except requests.exceptions.SSLError:
+            falhar(
+                "ERRO_SSL_MTLS",
+                "Falha SSL/TLS durante a autenticação pelo certificado digital.",
+                resumo_url(url_certificado),
+            )
+        except requests.exceptions.Timeout:
+            falhar(
+                "TIMEOUT_MTLS",
+                "Tempo excedido durante a autenticação por certificado.",
+                resumo_url(url_certificado),
+            )
+        except requests.exceptions.RequestException as exc:
+            falhar(
+                "ERRO_HTTP_MTLS",
+                "Falha HTTP durante a autenticação por certificado.",
+                {
+                    **resumo_url(url_certificado),
+                    "tipo": exc.__class__.__name__,
+                },
+            )
+
+        location = resposta.headers.get("Location")
 
         if (
-            resposta_cert.status_code not in REDIRECT_CODES
-            or not initial_location
+            resposta.status_code not in REDIRECT_CODES
+            or not location
         ):
-            try:
-                corpo = resposta_cert.text
-            except Exception:
-                corpo = ""
-
             falhar(
                 "CERTIFICADO_SEM_REDIRECT",
                 (
-                    "O endpoint de certificado respondeu, mas não concluiu "
-                    "o redirecionamento esperado após o mTLS."
+                    "O certificado foi apresentado, mas o endpoint não devolveu "
+                    "o redirecionamento esperado."
                 ),
                 {
-                    "status": resposta_cert.status_code,
-                    "final": resumo_url(resposta_cert.url),
-                    "title": titulo_html(corpo),
+                    "status": resposta.status_code,
+                    "final": resumo_url(resposta.url),
                 },
             )
-
-        # Os cookies produzidos pelo certificado representam a nova sessão gov.br.
-        copiar_cookies(cert_session, principal)
-
-        # ------------------------------------------------------
-        # Passo essencial V3:
-        # reentrar no /authorize ORIGINAL com a sessão gov.br já autenticada.
-        # O provedor deve então emitir o retorno OAuth para LoginGovBR.aspx.
-        # ------------------------------------------------------
-        authorize_resposta = request_get(
-            principal,
-            authorize_url,
-            timeout,
-            cert=None,
-            referer=url_cert,
-        )
-
-        authorize_status = authorize_resposta.status_code
-        authorize_location = authorize_resposta.headers.get("Location")
-
-        if (
-            authorize_resposta.status_code == 200
-            and not authorize_location
-        ):
-            try:
-                corpo = authorize_resposta.text
-            except Exception:
-                corpo = ""
-
-            falhar(
-                "SSO_NAO_RECONHECEU_CERTIFICADO",
-                (
-                    "O certificado foi aceito por mTLS, mas ao retomar o "
-                    "/authorize o gov.br ainda apresentou uma página em vez "
-                    "de concluir o OAuth."
-                ),
-                {
-                    "status": authorize_resposta.status_code,
-                    "final": resumo_url(authorize_resposta.url),
-                    "title": titulo_html(corpo),
-                },
-            )
-
-        redirects = []
-        final = seguir_redirects(
-            principal,
-            authorize_resposta,
-            timeout,
-            cert_tuple,
-            redirects,
-        )
-
-        try:
-            corpo_final = final.text
-        except Exception:
-            corpo_final = ""
-
-        final_resumo = resumo_url(final.url)
 
         resposta_json({
             "ok": True,
-            "strategy": "mtls-then-replay-original-authorize",
-            "initialStatus": initial_status,
+            "strategy": "clean-mtls-browser-finishes-oauth",
+            "initialStatus": resposta.status_code,
             "initialLocation": resumo_url(
-                urljoin(resposta_cert.url, initial_location)
+                urljoin(resposta.url, location)
             ),
-            "authorizeStatus": authorize_status,
-            "authorizeLocation": resumo_url(
-                urljoin(authorize_resposta.url, authorize_location)
-            ) if authorize_location else None,
-            "finalStatus": final.status_code,
-            "finalUrl": final.url,
-            "final": final_resumo,
-            "title": titulo_html(corpo_final),
-            "redirects": redirects,
-            "cookies": exportar_cookies(principal),
+            "cookies": exportar_cookies(sessao),
         })
 
 

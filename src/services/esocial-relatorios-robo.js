@@ -423,24 +423,8 @@ class EsocialRelatoriosRobo {
         });
 
         console.log(
-            '🐍 [eSocial] Enviando a sessão atual para o bridge Python...'
+            '🐍 [eSocial] Executando somente o handshake mTLS no Python...'
         );
-
-        let cookiesAtuais = [];
-        try {
-            cookiesAtuais = await this.context.cookies();
-        } catch (error) {
-            throw criarErroRobo(
-                'COOKIES_NAO_LIDOS',
-                'Não foi possível ler os cookies da sessão antes da autenticação pelo certificado.',
-                await obterDiagnosticoSeguro(page, 'LER_COOKIES_SESSAO', error)
-            );
-        }
-
-        let userAgent = '';
-        try {
-            userAgent = await page.evaluate(() => navigator.userAgent);
-        } catch (_) {}
 
         const timeoutBridge = envNumber(
             'ESOCIAL_CERT_BRIDGE_TIMEOUT_MS',
@@ -451,9 +435,6 @@ class EsocialRelatoriosRobo {
             {
                 url: urlCertificado,
                 authorizeUrl,
-                currentUrl: page.url(),
-                userAgent,
-                cookies: cookiesAtuais,
                 timeoutSeconds: 15
             },
             timeoutBridge
@@ -487,6 +468,7 @@ class EsocialRelatoriosRobo {
                 };
 
                 const expires = Number(cookie.expires);
+
                 if (Number.isFinite(expires) && expires > 0) {
                     item.expires = expires;
                 }
@@ -494,37 +476,152 @@ class EsocialRelatoriosRobo {
                 return item;
             });
 
+        // Remove apenas a sessão antiga/incompleta do SSO/certificado.
+        // Os cookies do login.esocial.gov.br permanecem intactos.
+        try {
+            await this.context.clearCookies({
+                domain: /(^|\.)sso\.acesso\.gov\.br$|(^|\.)certificado\.sso\.acesso\.gov\.br$/
+            });
+
+            console.log(
+                '🍪 [eSocial] Cookies antigos do SSO removidos do Chromium.'
+            );
+        } catch (error) {
+            console.warn(
+                '⚠️ [eSocial] Não foi possível limpar seletivamente os cookies SSO:',
+                error?.message || error
+            );
+        }
+
         if (cookiesPlaywright.length) {
-            await this.context.addCookies(cookiesPlaywright);
+            await this.context.addCookies(
+                cookiesPlaywright
+            );
         }
 
         console.log(
-            '🐍 [eSocial] Bridge Python concluído:',
+            '🐍 [eSocial] Handshake mTLS Python concluído:',
             {
                 initialStatus: resultado.initialStatus || null,
-                authorizeStatus: resultado.authorizeStatus || null,
-                finalStatus: resultado.finalStatus || null,
-                finalHost: resultado?.final?.host || null,
-                finalPath: resultado?.final?.path || null,
-                redirects: Array.isArray(resultado.redirects)
-                    ? resultado.redirects.map(item => ({
-                        status: item?.status || null,
-                        host: item?.to?.host || null,
-                        path: item?.to?.path || null
-                    }))
-                    : [],
+                locationHost: resultado?.initialLocation?.host || null,
+                locationPath: resultado?.initialLocation?.path || null,
                 quantidadeCookies: cookiesPlaywright.length
+            }
+        );
+
+        // O Python para aqui.
+        // O /authorize precisa voltar a ser processado por um navegador real,
+        // pois o gov.br pode executar JavaScript/challenges antes de concluir OAuth.
+        await this.etapa(
+            'RETOMANDO_AUTHORIZE_NO_CHROMIUM',
+            {
+                host: 'sso.acesso.gov.br',
+                path: '/authorize'
+            }
+        );
+
+        console.log(
+            '🌐 [eSocial] Retomando /authorize original no Chromium...'
+        );
+
+        try {
+            await page.goto(
+                authorizeUrl,
+                {
+                    waitUntil: 'domcontentloaded',
+                    timeout: 30000
+                }
+            );
+        } catch (error) {
+            console.warn(
+                '⚠️ [eSocial] Navegação do /authorize após mTLS:',
+                error?.message || error
+            );
+        }
+
+        // Dá tempo para scripts/challenges/redirects do gov.br executarem.
+        const inicioRetorno = Date.now();
+
+        while (
+            Date.now() - inicioRetorno < 20000
+        ) {
+            if (
+                await this.estaAutenticado()
+            ) {
+                console.log(
+                    '✅ [eSocial] Login confirmado após retomar /authorize no Chromium.'
+                );
+
+                return {
+                    success: true,
+                    authenticated: true,
+                    initialStatus: resultado.initialStatus || null,
+                    quantidadeCookies: cookiesPlaywright.length,
+                    finalUrl: page.url()
+                };
+            }
+
+            const atual = page.url();
+
+            if (
+                /login\.esocial\.gov\.br/i.test(atual) &&
+                !/\/login\.aspx(?:$|\?)/i.test(atual)
+            ) {
+                await page.waitForTimeout(1000);
+
+                if (
+                    await this.estaAutenticado()
+                ) {
+                    return {
+                        success: true,
+                        authenticated: true,
+                        initialStatus: resultado.initialStatus || null,
+                        quantidadeCookies: cookiesPlaywright.length,
+                        finalUrl: page.url()
+                    };
+                }
+            }
+
+            await page.waitForTimeout(
+                750
+            );
+        }
+
+        const urlFinal = page.url();
+
+        let tituloFinal = '';
+
+        try {
+            tituloFinal = await page.title();
+        } catch (_) {}
+
+        console.log(
+            '🌐 [eSocial] Estado após retomar /authorize:',
+            {
+                host: (() => {
+                    try {
+                        return new URL(urlFinal).hostname;
+                    } catch (_) {
+                        return null;
+                    }
+                })(),
+                path: (() => {
+                    try {
+                        return new URL(urlFinal).pathname;
+                    } catch (_) {
+                        return null;
+                    }
+                })(),
+                titulo: tituloFinal
             }
         );
 
         return {
             success: true,
+            authenticated: false,
             initialStatus: resultado.initialStatus || null,
-            authorizeStatus: resultado.authorizeStatus || null,
-            finalStatus: resultado.finalStatus || null,
-            finalUrl: resultado.finalUrl || null,
-            final: resultado.final || null,
-            quantidadeCookies: cookiesPlaywright.length
+            quantidadeCookies: cookiesPlaywright.length,
+            finalUrl: urlFinal
         };
     }
 
@@ -853,11 +950,8 @@ class EsocialRelatoriosRobo {
             '🔐 [eSocial] Resultado mTLS/Python:',
             {
                 success: resultadoMtls?.success,
+                authenticated: resultadoMtls?.authenticated,
                 initialStatus: resultadoMtls?.initialStatus,
-                authorizeStatus: resultadoMtls?.authorizeStatus,
-                finalStatus: resultadoMtls?.finalStatus,
-                finalHost: resultadoMtls?.final?.host || null,
-                finalPath: resultadoMtls?.final?.path || null,
                 quantidadeCookies: resultadoMtls?.quantidadeCookies
             }
         );
@@ -865,94 +959,27 @@ class EsocialRelatoriosRobo {
         if (!resultadoMtls?.success) {
             throw criarErroRobo(
                 'MTLS_GOVBR_HTTP_ERRO',
-                `O fluxo Python/gov.br não concluiu a autenticação com certificado.`,
+                'O fluxo Python/gov.br não concluiu a autenticação com certificado.',
                 {
                     etapa: 'AUTENTICACAO_MTLS_API',
-                    host: resultadoMtls?.final?.host || destinoCertificado.host,
-                    path: resultadoMtls?.final?.path || destinoCertificado.pathname,
-                    status: resultadoMtls?.finalStatus || resultadoMtls?.initialStatus || null
+                    status: resultadoMtls?.initialStatus || null
                 }
             );
         }
 
-        // =====================================================
-        // 5. CONTINUAR A SESSÃO NO CHROMIUM
-        // =====================================================
-
-        let urlRetorno = this.loginUrl;
-
-        try {
-            if (resultadoMtls?.finalUrl) {
-                const finalUrl = new URL(resultadoMtls.finalUrl);
-                const contemCodigoOauth =
-                    finalUrl.searchParams.has('code') ||
-                    /LoginGovBR\.aspx/i.test(finalUrl.pathname);
-
-                if (
-                    finalUrl.protocol === 'https:' &&
-                    finalUrl.hostname === 'login.esocial.gov.br' &&
-                    !contemCodigoOauth
-                ) {
-                    urlRetorno = finalUrl.href;
-                }
-            }
-        } catch (_) {
-            urlRetorno = this.loginUrl;
-        }
-
-        const resumoRetorno = (() => {
-            try {
-                const parsed = new URL(urlRetorno);
-                return {
-                    host: parsed.hostname,
-                    path: parsed.pathname
-                };
-            } catch (_) {
-                return {
-                    host: 'login.esocial.gov.br',
-                    path: '/login.aspx'
-                };
-            }
-        })();
-
-        console.log(
-            '🔐 [eSocial] Retomando Chromium com a sessão autenticada:',
-            resumoRetorno
-        );
-
-        await this.etapa(
-            'RETORNANDO_SESSAO_AO_CHROMIUM',
-            resumoRetorno
-        );
-
-        try {
-            await page.goto(
-                urlRetorno,
-                {
-                    waitUntil: 'domcontentloaded',
-                    timeout: 30000
-                }
+        if (
+            resultadoMtls?.authenticated ||
+            await this.estaAutenticado()
+        ) {
+            console.log(
+                '✅ [eSocial] Login pelo certificado confirmado.'
             );
-        } catch (error) {
-            console.warn(
-                '⚠️ [eSocial] Navegação após autenticação Python falhou:',
-                error?.message || error
+
+            await this.etapa(
+                'AUTENTICADO'
             );
-        }
 
-        await page.waitForTimeout(1200);
-
-        if (!await this.estaAutenticado()) {
-            try {
-                await page.goto(
-                    this.loginUrl,
-                    {
-                        waitUntil: 'domcontentloaded',
-                        timeout: 30000
-                    }
-                );
-                await page.waitForTimeout(1200);
-            } catch (_) {}
+            return true;
         }
 
         // =====================================================
