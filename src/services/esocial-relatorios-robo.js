@@ -416,7 +416,8 @@ class EsocialRelatoriosRobo {
             );
         }
 
-        const page = this.page;
+        const context = this.context;
+        const pagePrincipal = this.page;
 
         await this.etapa(
             'INTERCEPTANDO_REQUISICAO_CERTIFICADO',
@@ -426,7 +427,7 @@ class EsocialRelatoriosRobo {
         );
 
         console.log(
-            '🌐 [eSocial] Interceptando o clique REAL em "Seu certificado digital"...'
+            '🌐 [eSocial] Interceptando o clique REAL em "Seu certificado digital" no BrowserContext...'
         );
 
         const timeoutBridge = envNumber(
@@ -447,6 +448,71 @@ class EsocialRelatoriosRobo {
 
         const padraoRota =
             'https://certificado.sso.acesso.gov.br/**';
+
+        const paginasAntes =
+            context.pages();
+
+        console.log(
+            '🌐 [eSocial] Páginas antes do clique:',
+            paginasAntes.length
+        );
+
+        const paginasNovas = [];
+
+        const aoCriarPagina =
+            novaPagina => {
+                paginasNovas.push(
+                    novaPagina
+                );
+
+                console.log(
+                    '🪟 [eSocial] Nova página/popup criada.'
+                );
+
+                novaPagina
+                    .waitForLoadState(
+                        'domcontentloaded',
+                        {
+                            timeout: 10000
+                        }
+                    )
+                    .catch(() => null)
+                    .then(async () => {
+                        try {
+                            const atual =
+                                novaPagina.url();
+
+                            console.log(
+                                '🪟 [eSocial] Popup:',
+                                {
+                                    host: (() => {
+                                        try {
+                                            return new URL(
+                                                atual
+                                            ).hostname;
+                                        } catch (_) {
+                                            return null;
+                                        }
+                                    })(),
+                                    path: (() => {
+                                        try {
+                                            return new URL(
+                                                atual
+                                            ).pathname;
+                                        } catch (_) {
+                                            return null;
+                                        }
+                                    })()
+                                }
+                            );
+                        } catch (_) {}
+                    });
+            };
+
+        context.on(
+            'page',
+            aoCriarPagina
+        );
 
         const manipuladorRota =
             async route => {
@@ -477,24 +543,44 @@ class EsocialRelatoriosRobo {
                     const postData =
                         request.postData();
 
+                    let paginaRequisicao =
+                        null;
+
+                    try {
+                        paginaRequisicao =
+                            request.frame()
+                                .page();
+                    } catch (_) {}
+
                     console.log(
-                        '🌐 [eSocial] Requisição real do certificado capturada:',
+                        '🌐 [eSocial] Requisição REAL do certificado capturada:',
                         {
                             method: metodo,
-                            host: 'certificado.sso.acesso.gov.br',
+                            host:
+                                'certificado.sso.acesso.gov.br',
                             path: (() => {
                                 try {
-                                    return new URL(url).pathname;
+                                    return new URL(
+                                        url
+                                    ).pathname;
                                 } catch (_) {
                                     return null;
                                 }
                             })(),
-                            temCookie: Boolean(
-                                headers?.cookie
-                            ),
-                            temReferer: Boolean(
-                                headers?.referer
-                            )
+                            temCookie:
+                                Boolean(
+                                    headers?.cookie
+                                ),
+                            temReferer:
+                                Boolean(
+                                    headers?.referer
+                                ),
+                            emNovaPagina:
+                                Boolean(
+                                    paginaRequisicao &&
+                                    paginaRequisicao !==
+                                        pagePrincipal
+                                )
                         }
                     );
 
@@ -502,10 +588,12 @@ class EsocialRelatoriosRobo {
                         await executarBridgePython(
                             {
                                 url,
-                                method: metodo,
+                                method:
+                                    metodo,
                                 headers,
                                 postData,
-                                timeoutSeconds: 20
+                                timeoutSeconds:
+                                    20
                             },
                             timeoutBridge
                         );
@@ -527,7 +615,7 @@ class EsocialRelatoriosRobo {
                     }
 
                     console.log(
-                        '🐍 [eSocial] Resposta mTLS da requisição real:',
+                        '🐍 [eSocial] Resposta mTLS da requisição REAL:',
                         {
                             status:
                                 resultado.status ||
@@ -546,7 +634,9 @@ class EsocialRelatoriosRobo {
                                 Array.isArray(
                                     resultado.cookies
                                 )
-                                    ? resultado.cookies.length
+                                    ? resultado
+                                        .cookies
+                                        .length
                                     : 0
                         }
                     );
@@ -616,7 +706,7 @@ class EsocialRelatoriosRobo {
                     if (
                         cookiesPlaywright.length
                     ) {
-                        await this.context
+                        await context
                             .addCookies(
                                 cookiesPlaywright
                             );
@@ -634,7 +724,9 @@ class EsocialRelatoriosRobo {
                         );
 
                     if (
-                        !Number.isFinite(status)
+                        !Number.isFinite(
+                            status
+                        )
                     ) {
                         throw criarErroRobo(
                             'RESPOSTA_MTLS_INVALIDA',
@@ -658,11 +750,14 @@ class EsocialRelatoriosRobo {
                         });
 
                         resolverInterceptacao({
-                            success: true,
+                            success:
+                                true,
                             status,
                             location,
                             quantidadeCookies:
-                                cookiesPlaywright.length
+                                cookiesPlaywright
+                                    .length,
+                            paginaRequisicao
                         });
 
                         return;
@@ -683,7 +778,8 @@ class EsocialRelatoriosRobo {
                                 'REQUISICAO_CERTIFICADO_INTERCEPTADA',
                             status,
                             contentType:
-                                resultado.contentType ||
+                                resultado
+                                    .contentType ||
                                 null
                         }
                     );
@@ -701,12 +797,123 @@ class EsocialRelatoriosRobo {
                 }
             };
 
-        await page.route(
+        // BrowserContext.route é intencional:
+        // captura também a PRIMEIRA requisição de popups/novas páginas.
+        await context.route(
             padraoRota,
             manipuladorRota
         );
 
+        const diagnosticarElemento =
+            async () => {
+                try {
+                    return await linkCertificado.evaluate(
+                        elemento => {
+                            const attrs = {};
+
+                            for (
+                                const attr
+                                of Array.from(
+                                    elemento.attributes ||
+                                    []
+                                )
+                            ) {
+                                if (
+                                    [
+                                        'id',
+                                        'class',
+                                        'role',
+                                        'type',
+                                        'target',
+                                        'href',
+                                        'onclick'
+                                    ].includes(
+                                        attr.name
+                                    )
+                                ) {
+                                    attrs[
+                                        attr.name
+                                    ] =
+                                        String(
+                                            attr.value ||
+                                            ''
+                                        ).slice(
+                                            0,
+                                            300
+                                        );
+                                }
+                            }
+
+                            const ancestrais = [];
+
+                            let atual =
+                                elemento.parentElement;
+
+                            for (
+                                let i = 0;
+                                atual && i < 4;
+                                i++,
+                                atual =
+                                    atual.parentElement
+                            ) {
+                                const item = {
+                                    tag:
+                                        atual.tagName,
+                                    id:
+                                        atual.id ||
+                                        null,
+                                    role:
+                                        atual.getAttribute(
+                                            'role'
+                                        ),
+                                    href:
+                                        atual.getAttribute(
+                                            'href'
+                                        ),
+                                    target:
+                                        atual.getAttribute(
+                                            'target'
+                                        ),
+                                    onclick:
+                                        atual
+                                            .getAttribute(
+                                                'onclick'
+                                            )
+                                            ?.slice(
+                                                0,
+                                                300
+                                            ) ||
+                                        null
+                                };
+
+                                ancestrais.push(
+                                    item
+                                );
+                            }
+
+                            return {
+                                tag:
+                                    elemento
+                                        .tagName,
+                                attrs,
+                                ancestrais
+                            };
+                        }
+                    );
+                } catch (_) {
+                    return null;
+                }
+            };
+
         try {
+            const estrutura =
+                await diagnosticarElemento();
+
+            console.log(
+                '🔎 [eSocial] Estrutura do elemento de certificado:',
+                estrutura
+            );
+
             console.log(
                 '🔐 [eSocial] Clicando na opção real de certificado...'
             );
@@ -721,13 +928,29 @@ class EsocialRelatoriosRobo {
                     new Promise(
                         (_, reject) =>
                             setTimeout(
-                                () =>
+                                () => {
+                                    const paginasDepois =
+                                        context.pages();
+
+                                    console.log(
+                                        '🌐 [eSocial] Nenhuma requisição de certificado capturada.',
+                                        {
+                                            paginasAntes:
+                                                paginasAntes.length,
+                                            paginasDepois:
+                                                paginasDepois.length,
+                                            popupsDetectados:
+                                                paginasNovas.length
+                                        }
+                                    );
+
                                     reject(
                                         criarErroRobo(
                                             'REQUISICAO_CERTIFICADO_NAO_CAPTURADA',
-                                            'O clique em "Seu certificado digital" não gerou uma requisição interceptável ao endpoint de certificado em até 20 segundos.'
+                                            'O clique em "Seu certificado digital" não gerou uma requisição capturável ao endpoint de certificado em até 20 segundos.'
                                         )
-                                    ),
+                                    );
+                                },
                                 20000
                             )
                     )
@@ -744,32 +967,112 @@ class EsocialRelatoriosRobo {
                 Date.now() - inicio <
                 25000
             ) {
-                if (
-                    await this.estaAutenticado()
-                ) {
-                    console.log(
-                        '✅ [eSocial] Login confirmado após o fluxo real do certificado.'
-                    );
+                const paginas =
+                    context.pages();
 
-                    return {
-                        ...resultado,
-                        authenticated: true,
-                        finalUrl:
-                            page.url()
-                    };
+                for (
+                    const paginaAtual
+                    of paginas
+                ) {
+                    if (
+                        paginaAtual.isClosed()
+                    ) {
+                        continue;
+                    }
+
+                    const sinais = [
+                        paginaAtual
+                            .getByText(
+                                /Trocar Perfil\/Módulo/i
+                            ),
+                        paginaAtual
+                            .getByText(
+                                /Trocar Perfil/i
+                            ),
+                        paginaAtual
+                            .getByText(
+                                /Titular do Certificado/i
+                            ),
+                        paginaAtual
+                            .getByRole(
+                                'button',
+                                {
+                                    name:
+                                        /SAIR/i
+                                }
+                            )
+                    ];
+
+                    let autenticada =
+                        false;
+
+                    for (
+                        const sinal
+                        of sinais
+                    ) {
+                        if (
+                            await locatorVisivel(
+                                sinal
+                            )
+                        ) {
+                            autenticada =
+                                true;
+                            break;
+                        }
+                    }
+
+                    if (
+                        autenticada
+                    ) {
+                        this.page =
+                            paginaAtual;
+
+                        console.log(
+                            '✅ [eSocial] Login confirmado após o fluxo real do certificado.',
+                            {
+                                emPopup:
+                                    paginaAtual !==
+                                        pagePrincipal
+                            }
+                        );
+
+                        return {
+                            ...resultado,
+                            authenticated:
+                                true,
+                            finalUrl:
+                                paginaAtual
+                                    .url()
+                        };
+                    }
                 }
 
-                await page.waitForTimeout(
-                    750
-                );
+                await pagePrincipal
+                    .waitForTimeout(
+                        750
+                    )
+                    .catch(
+                        () => null
+                    );
             }
 
-            const atual =
-                page.url();
+            const estadosPaginas =
+                [];
 
-            console.log(
-                '🌐 [eSocial] Página após o fluxo REAL do certificado:',
-                {
+            for (
+                const paginaAtual
+                of context.pages()
+            ) {
+                if (
+                    paginaAtual.isClosed()
+                ) {
+                    continue;
+                }
+
+                const atual =
+                    paginaAtual.url();
+
+                estadosPaginas.push({
                     host: (() => {
                         try {
                             return new URL(
@@ -789,23 +1092,36 @@ class EsocialRelatoriosRobo {
                         }
                     })(),
                     titulo:
-                        await page
+                        await paginaAtual
                             .title()
                             .catch(
                                 () => ''
                             )
-                }
+                });
+            }
+
+            console.log(
+                '🌐 [eSocial] Páginas após o fluxo REAL do certificado:',
+                estadosPaginas
             );
 
             return {
                 ...resultado,
-                authenticated: false,
-                finalUrl: atual
+                authenticated:
+                    false,
+                finalUrl:
+                    pagePrincipal
+                        .url()
             };
 
         } finally {
+            context.off(
+                'page',
+                aoCriarPagina
+            );
+
             try {
-                await page.unroute(
+                await context.unroute(
                     padraoRota,
                     manipuladorRota
                 );
