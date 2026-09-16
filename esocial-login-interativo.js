@@ -395,11 +395,14 @@ async function abrirLoginInterativoEsocial() {
                 '#wtEsocialLoginFrame'
             );
 
-        img.onclick =
+        const registrarCliqueRemoto =
             async event => {
                 if (!wtEsocialLoginToken) {
                     return;
                 }
+
+                event.preventDefault();
+                event.stopPropagation();
 
                 const rect =
                     img.getBoundingClientRect();
@@ -412,34 +415,121 @@ async function abrirLoginInterativoEsocial() {
                     event.clientY -
                     rect.top;
 
+                // Marcador visual para confirmar que o clique foi capturado.
+                const marcador =
+                    document.createElement('div');
+
+                marcador.style.cssText = `
+                    position:fixed;
+                    left:${event.clientX - 7}px;
+                    top:${event.clientY - 7}px;
+                    width:14px;
+                    height:14px;
+                    border:2px solid #dc3545;
+                    border-radius:50%;
+                    z-index:1000001;
+                    pointer-events:none;
+                    background:rgba(255,255,255,.35);
+                `;
+
+                document.body.appendChild(
+                    marcador
+                );
+
+                setTimeout(
+                    () => marcador.remove(),
+                    700
+                );
+
+                const status =
+                    document.getElementById(
+                        'wtEsocialLoginStatus'
+                    );
+
+                if (status) {
+                    status.textContent =
+                        'Enviando clique para o navegador remoto...';
+
+                    status.style.color =
+                        '#0d6efd';
+                }
+
                 try {
-                    await wtEsocialFetchJson(
-                        '/api/soc/relatorios-robo/login-interativo/click',
+                    const retorno =
+                        await wtEsocialFetchJson(
+                            '/api/soc/relatorios-robo/login-interativo/click',
+                            {
+                                method: 'POST',
+                                body:
+                                    JSON.stringify({
+                                        token:
+                                            wtEsocialLoginToken,
+                                        x,
+                                        y,
+                                        displayWidth:
+                                            rect.width,
+                                        displayHeight:
+                                            rect.height
+                                    })
+                            }
+                        );
+
+                    console.log(
+                        '[eSocial interativo] Clique remoto enviado:',
                         {
-                            method: 'POST',
-                            body:
-                                JSON.stringify({
-                                    token:
-                                        wtEsocialLoginToken,
-                                    x,
-                                    y,
-                                    displayWidth:
-                                        rect.width,
-                                    displayHeight:
-                                        rect.height
-                                })
+                            x,
+                            y,
+                            displayWidth:
+                                rect.width,
+                            displayHeight:
+                                rect.height,
+                            etapa:
+                                retorno?.etapa || null
                         }
                     );
 
                     await wtAtualizarFrameLogin();
+                    await wtAtualizarStatusLogin();
 
                 } catch (error) {
                     console.error(
                         'Erro clique login eSocial:',
                         error
                     );
+
+                    if (status) {
+                        status.textContent =
+                            'Erro ao enviar clique: ' +
+                            error.message;
+
+                        status.style.color =
+                            '#dc3545';
+                    }
                 }
             };
+
+        // pointerdown é mais confiável que onclick para a imagem
+        // que recebe atualizações frequentes de src.
+        img.addEventListener(
+            'pointerdown',
+            registrarCliqueRemoto,
+            {
+                passive: false
+            }
+        );
+
+        img.addEventListener(
+            'dragstart',
+            event => {
+                event.preventDefault();
+            }
+        );
+
+        img.style.cursor =
+            'crosshair';
+
+        img.style.pointerEvents =
+            'auto';
 
         img.onwheel =
             async event => {
@@ -529,7 +619,7 @@ async function abrirLoginInterativoEsocial() {
         wtEsocialLoginTimerFrame =
             setInterval(
                 wtAtualizarFrameLogin,
-                800
+                1200
             );
 
         wtEsocialLoginTimerStatus =
