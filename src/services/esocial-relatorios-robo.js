@@ -585,147 +585,145 @@ async autenticar() {
     const urlAntes =
         page.url();
 
-    // =========================================================
-    // 6. CLICAR NO <A>/<BUTTON> REAL
-    // =========================================================
+// =========================================================
+// 6. ABRIR DIRETAMENTE O ENDPOINT DO CERTIFICADO
+// =========================================================
 
-    try {
+try {
 
-        console.log(
-            '🔐 [eSocial] Clicando no elemento real do certificado...'
+    const urlGovBr =
+        new URL(page.url());
+
+    const clientId =
+        urlGovBr.searchParams.get(
+            'client_id'
         );
 
-        await linkCertificado.click({
-            timeout: 10000
-        });
+    const authorizationId =
+        urlGovBr.searchParams.get(
+            'authorization_id'
+        );
 
-    } catch (error) {
+    if (
+        !clientId ||
+        !authorizationId
+    ) {
 
-        console.error(
-            '❌ [eSocial] Erro no clique do certificado:',
-            error?.message ||
+        throw new Error(
+            'client_id ou authorization_id não encontrados na URL do gov.br.'
+        );
+    }
+
+    const destinoCertificado =
+        new URL(
+            'https://certificado.sso.acesso.gov.br/login'
+        );
+
+    destinoCertificado.searchParams.set(
+        'client_id',
+        clientId
+    );
+
+    destinoCertificado.searchParams.set(
+        'authorization_id',
+        authorizationId
+    );
+
+    console.log(
+        '🔐 [eSocial] Abrindo endpoint do certificado:',
+        destinoCertificado.href
+    );
+
+    await this.etapa(
+        'ABRINDO_ENDPOINT_CERTIFICADO',
+        {
+            host:
+                destinoCertificado.host
+        }
+    );
+
+    await page.goto(
+        destinoCertificado.href,
+        {
+            waitUntil:
+                'domcontentloaded',
+            timeout:
+                30000
+        }
+    );
+
+    console.log(
+        '🔐 [eSocial] URL após endpoint do certificado:',
+        page.url()
+    );
+
+    console.log(
+        '🔐 [eSocial] Título após endpoint:',
+        await page
+            .title()
+            .catch(
+                () => ''
+            )
+    );
+
+} catch (error) {
+
+    const mensagem =
+        error?.message ||
+        String(error);
+
+    console.error(
+        '❌ [eSocial] Falha acessando endpoint do certificado:',
+        mensagem
+    );
+
+    const diagnostico =
+        await obterDiagnosticoSeguro(
+            page,
+            'ABRIR_ENDPOINT_CERTIFICADO',
             error
         );
 
-        throw criarErroRobo(
-            'ERRO_CLIQUE_CERTIFICADO',
-            'Não foi possível clicar na opção de certificado digital: ' +
-                (
-                    error?.message ||
-                    String(error)
-                ),
-            await obterDiagnosticoSeguro(
-                page,
-                'CLICAR_CERTIFICADO',
-                error
-            )
-        );
-    }
-
-    // =========================================================
-    // 7. ESPERAR MUDANÇA DE URL
-    // =========================================================
-
-    let mudouUrl =
-        false;
-
-    for (
-        let tentativa = 0;
-        tentativa < 10;
-        tentativa++
+    if (
+        /ERR_BAD_SSL_CLIENT_AUTH_CERT/i
+            .test(mensagem)
     ) {
 
-        await page.waitForTimeout(
-            500
+        throw criarErroRobo(
+            'CERTIFICADO_REJEITADO',
+            'O gov.br rejeitou o certificado A1 apresentado pelo Render.',
+            diagnostico
         );
-
-        if (
-            page.url() !==
-            urlAntes
-        ) {
-
-            mudouUrl =
-                true;
-
-            break;
-        }
     }
-
-    console.log(
-        '🔐 [eSocial] URL após clique:',
-        page.url()
-    );
-
-    // =========================================================
-    // 8. FALLBACK PELO HREF
-    // =========================================================
 
     if (
-        !mudouUrl &&
-        hrefCertificado &&
-        hrefCertificado !== '#' &&
-        !hrefCertificado
-            .toLowerCase()
-            .startsWith(
-                'javascript:'
-            )
+        /ERR_SSL_CLIENT_AUTH/i
+            .test(mensagem)
     ) {
 
-        try {
-
-            const destino =
-                new URL(
-                    hrefCertificado,
-                    urlAntes
-                ).href;
-
-            console.log(
-                '⚠️ [eSocial] Clique não redirecionou.'
-            );
-
-            console.log(
-                '🔐 [eSocial] Usando HREF diretamente:',
-                destino
-            );
-
-            await page.goto(
-                destino,
-                {
-                    waitUntil:
-                        'domcontentloaded',
-                    timeout:
-                        30000
-                }
-            );
-
-        } catch (error) {
-
-            const mensagem =
-                error?.message ||
-                String(error);
-
-            console.error(
-                '❌ [eSocial] Falha abrindo HREF:',
-                mensagem
-            );
-
-            throw criarErroRobo(
-                'ERRO_ABRIR_CERTIFICADO',
-                'A opção do certificado foi localizada, mas a autenticação não pôde ser aberta: ' +
-                    mensagem,
-                await obterDiagnosticoSeguro(
-                    page,
-                    'ABRIR_CERTIFICADO',
-                    error
-                )
-            );
-        }
+        throw criarErroRobo(
+            'ERRO_SSL_CERTIFICADO',
+            'O gov.br solicitou o certificado digital, mas a autenticação TLS falhou.',
+            diagnostico
+        );
     }
 
-    console.log(
-        '🔐 [eSocial] URL final após acionar certificado:',
-        page.url()
+    throw criarErroRobo(
+        'FALHA_ENDPOINT_CERTIFICADO',
+        'Não foi possível acessar o endpoint de autenticação por certificado: ' +
+            mensagem,
+        diagnostico
     );
+}
+
+await page.waitForTimeout(
+    1500
+);
+
+console.log(
+    '🔐 [eSocial] URL final após certificado:',
+    page.url()
+);
 
     // =========================================================
     // 9. AGUARDAR AUTENTICAÇÃO
