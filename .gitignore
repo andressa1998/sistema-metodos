@@ -2,3 +2,11 @@ certificados/
 *.pfx
 *.p12
 .env
+.python-packages/
+
+certificados/
+*.pfx
+*.p12
+*.pem
+.env
+.env.*

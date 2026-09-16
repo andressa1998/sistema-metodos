@@ -5,6 +5,7 @@
 // ============================================================
 // Objetivo:
 // - reutilizar o certificado A1 já configurado em ESOCIAL_CERT_BASE64;
+// - delegar somente a etapa mTLS do gov.br ao bridge Python;
 // - manter uma única sessão autenticada;
 // - trocar o perfil para cada CNPJ representado;
 // - solicitar/baixar o relatório "Relação de trabalhadores - eSocial";
@@ -18,6 +19,8 @@
 // ============================================================
 
 const fs = require('fs');
+const path = require('path');
+const { spawn } = require('child_process');
 
 function env(name, fallback = '') {
     const value = process.env[name];
@@ -198,6 +201,130 @@ async function obterDiagnosticoSeguro(page, etapa, erro = null) {
     };
 }
 
+
+function executarBridgePython(payload, timeoutMs = 45000) {
+    return new Promise((resolve, reject) => {
+        const pythonBin = env('ESOCIAL_PYTHON_BIN', 'python3');
+        const scriptPath = env(
+            'ESOCIAL_CERT_BRIDGE_PATH',
+            path.join(__dirname, '..', 'python', 'esocial_cert_bridge.py')
+        );
+
+        const raizProjeto = path.resolve(__dirname, '..', '..');
+        const pacotesPython = path.join(raizProjeto, '.python-packages');
+        const pythonPathAtual = process.env.PYTHONPATH || '';
+        const pythonPath = [pacotesPython, pythonPathAtual]
+            .filter(Boolean)
+            .join(path.delimiter);
+
+        const filho = spawn(
+            pythonBin,
+            [scriptPath],
+            {
+                cwd: raizProjeto,
+                env: {
+                    ...process.env,
+                    PYTHONPATH: pythonPath
+                },
+                stdio: ['pipe', 'pipe', 'pipe'],
+                windowsHide: true,
+                shell: false
+            }
+        );
+
+        let stdout = '';
+        let stderr = '';
+        let encerrado = false;
+
+        const limiteSaida = 2 * 1024 * 1024;
+        const limiteErro = 32 * 1024;
+
+        const timer = setTimeout(() => {
+            if (encerrado) return;
+            encerrado = true;
+            try {
+                filho.kill('SIGKILL');
+            } catch (_) {}
+            reject(
+                criarErroRobo(
+                    'TIMEOUT_BRIDGE_PYTHON',
+                    `O bridge Python excedeu ${Math.round(timeoutMs / 1000)} segundos.`
+                )
+            );
+        }, timeoutMs);
+
+        filho.stdout.on('data', chunk => {
+            if (stdout.length < limiteSaida) {
+                stdout += chunk.toString('utf8');
+            }
+        });
+
+        filho.stderr.on('data', chunk => {
+            if (stderr.length < limiteErro) {
+                stderr += chunk.toString('utf8');
+            }
+        });
+
+        filho.on('error', error => {
+            if (encerrado) return;
+            encerrado = true;
+            clearTimeout(timer);
+
+            const mensagem = String(error?.message || error);
+            const codigo = /ENOENT/i.test(mensagem)
+                ? 'PYTHON_NAO_ENCONTRADO'
+                : 'ERRO_EXECUTAR_PYTHON';
+
+            reject(
+                criarErroRobo(
+                    codigo,
+                    codigo === 'PYTHON_NAO_ENCONTRADO'
+                        ? `Python não foi encontrado no servidor (${pythonBin}).`
+                        : `Falha ao iniciar o bridge Python: ${mensagem}`
+                )
+            );
+        });
+
+        filho.on('close', codigoSaida => {
+            if (encerrado) return;
+            encerrado = true;
+            clearTimeout(timer);
+
+            const texto = stdout.trim();
+            let resultado;
+
+            try {
+                resultado = JSON.parse(texto || '{}');
+            } catch (_) {
+                const stderrSeguro = stderr
+                    .replace(/cookie[^\n]*/gi, '[cookies omitidos]')
+                    .slice(0, 1200);
+
+                return reject(
+                    criarErroRobo(
+                        'RESPOSTA_PYTHON_INVALIDA',
+                        `O bridge Python retornou uma resposta inválida (exit ${codigoSaida}).` +
+                            (stderrSeguro ? ` Detalhe: ${stderrSeguro}` : '')
+                    )
+                );
+            }
+
+            resolve(resultado);
+        });
+
+        try {
+            filho.stdin.end(JSON.stringify(payload));
+        } catch (error) {
+            try {
+                filho.kill('SIGKILL');
+            } catch (_) {}
+            clearTimeout(timer);
+            encerrado = true;
+            reject(error);
+        }
+    });
+}
+
 function criarErroRobo(codigo, mensagem, diagnostico = null) {
     const erro = new Error(mensagem);
     erro.code = codigo;
@@ -235,18 +362,6 @@ class EsocialRelatoriosRobo {
             );
         }
 
-        const pfx = obterPfxBuffer();
-        const passphrase = env('ESOCIAL_CERT_PASSWORD');
-        if (!passphrase) {
-            throw new Error('ESOCIAL_CERT_PASSWORD não configurado no Render.');
-        }
-
-        const clientCertificates = obterOrigensCertificado().map(origin => ({
-            origin,
-            pfx,
-            passphrase
-        }));
-
         try {
             this.browser = await playwright.chromium.launch({
                 headless: this.headless,
@@ -271,8 +386,7 @@ class EsocialRelatoriosRobo {
         this.context = await this.browser.newContext({
             acceptDownloads: true,
             ignoreHTTPSErrors: false,
-            locale: 'pt-BR',
-            clientCertificates
+            locale: 'pt-BR'
         });
 
         this.page = await this.context.newPage();
@@ -294,7 +408,7 @@ class EsocialRelatoriosRobo {
         this.page = null;
     }
 
-    async autenticarCertificadoGovBrViaApi(urlCertificado) {
+    async autenticarCertificadoGovBrViaPython(urlCertificado) {
         if (!this.context || !this.page) {
             throw criarErroRobo(
                 'NAVEGADOR_NAO_INICIADO',
@@ -302,172 +416,113 @@ class EsocialRelatoriosRobo {
             );
         }
 
+        const page = this.page;
+
+        await this.etapa('AUTENTICANDO_CERTIFICADO_PYTHON', {
+            host: 'certificado.sso.acesso.gov.br'
+        });
+
         console.log(
-            '🔑 [eSocial] Iniciando autenticação mTLS via APIRequestContext...'
+            '🐍 [eSocial] Enviando a sessão atual para o bridge Python...'
         );
 
-        let playwright;
+        let cookiesAtuais = [];
         try {
-            playwright = require('playwright');
+            cookiesAtuais = await this.context.cookies();
         } catch (error) {
             throw criarErroRobo(
-                'PLAYWRIGHT_NAO_INSTALADO',
-                'Playwright não está instalado. Atualize o package.json e faça novo deploy.'
-            );
-        }
-
-        const pfx = obterPfxBuffer();
-        const passphrase = env('ESOCIAL_CERT_PASSWORD');
-
-        if (!passphrase) {
-            throw criarErroRobo(
-                'SENHA_CERTIFICADO_NAO_CONFIGURADA',
-                'ESOCIAL_CERT_PASSWORD não está configurado.'
-            );
-        }
-
-        let storageStateInicial = null;
-
-        try {
-            storageStateInicial = await this.context.storageState();
-        } catch (error) {
-            console.warn(
-                '⚠️ [eSocial] Não foi possível copiar o estado inicial do navegador:',
-                error?.message || error
+                'COOKIES_NAO_LIDOS',
+                'Não foi possível ler os cookies da sessão antes da autenticação pelo certificado.',
+                await obterDiagnosticoSeguro(page, 'LER_COOKIES_SESSAO', error)
             );
         }
 
         let userAgent = '';
-
         try {
-            userAgent = await this.page.evaluate(() => navigator.userAgent);
+            userAgent = await page.evaluate(() => navigator.userAgent);
         } catch (_) {}
 
-        let apiContext = null;
+        const timeoutBridge = envNumber(
+            'ESOCIAL_CERT_BRIDGE_TIMEOUT_MS',
+            45000
+        );
 
-        try {
-            apiContext = await playwright.request.newContext({
-                ignoreHTTPSErrors: false,
-                storageState: storageStateInicial || undefined,
-                extraHTTPHeaders: {
-                    'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
-                    ...(userAgent
-                        ? {
-                            'User-Agent': userAgent
-                        }
-                        : {})
-                },
-                clientCertificates: [
-                    {
-                        origin: 'https://certificado.sso.acesso.gov.br',
-                        pfx,
-                        passphrase
-                    }
-                ]
+        const resultado = await executarBridgePython(
+            {
+                url: urlCertificado,
+                currentUrl: page.url(),
+                userAgent,
+                cookies: cookiesAtuais,
+                timeoutSeconds: 15
+            },
+            timeoutBridge
+        );
+
+        if (!resultado?.ok) {
+            throw criarErroRobo(
+                resultado?.code || 'FALHA_BRIDGE_PYTHON',
+                resultado?.error || 'O bridge Python não conseguiu concluir a autenticação mTLS.',
+                {
+                    etapa: 'AUTENTICACAO_CERTIFICADO_PYTHON',
+                    details: resultado?.details || null
+                }
+            );
+        }
+
+        const cookiesRecebidos = Array.isArray(resultado.cookies)
+            ? resultado.cookies
+            : [];
+
+        const cookiesPlaywright = cookiesRecebidos
+            .filter(cookie => cookie?.name && cookie?.domain)
+            .map(cookie => {
+                const item = {
+                    name: String(cookie.name),
+                    value: String(cookie.value || ''),
+                    domain: String(cookie.domain),
+                    path: String(cookie.path || '/'),
+                    secure: Boolean(cookie.secure),
+                    httpOnly: Boolean(cookie.httpOnly)
+                };
+
+                const expires = Number(cookie.expires);
+                if (Number.isFinite(expires) && expires > 0) {
+                    item.expires = expires;
+                }
+
+                return item;
             });
 
-            console.log(
-                '🔑 [eSocial] APIRequestContext criado com certificado A1.'
-            );
-
-            console.log(
-                '🔑 [eSocial] Solicitando:',
-                urlCertificado
-            );
-
-            const resposta = await apiContext.get(
-                urlCertificado,
-                {
-                    timeout: 30000,
-                    failOnStatusCode: false
-                }
-            );
-
-            const status = resposta.status();
-            const urlFinal = resposta.url();
-
-            console.log(
-                '🔑 [eSocial] Status mTLS:',
-                status
-            );
-
-            console.log(
-                '🔑 [eSocial] URL final mTLS:',
-                urlFinal
-            );
-
-            let bodyParcial = '';
-
-            try {
-                bodyParcial = (await resposta.text())
-                    .replace(/\s+/g, ' ')
-                    .slice(0, 700);
-            } catch (_) {}
-
-            if (status >= 400) {
-                console.log(
-                    '🔑 [eSocial] Corpo resposta mTLS:',
-                    bodyParcial
-                );
-            }
-
-            const estadoApi = await apiContext.storageState();
-            const cookies = Array.isArray(estadoApi?.cookies)
-                ? estadoApi.cookies
-                : [];
-
-            console.log(
-                '🍪 [eSocial] Cookies recebidos após mTLS:',
-                cookies.map(cookie => `${cookie.name}@${cookie.domain}`)
-            );
-
-            if (cookies.length) {
-                await this.context.addCookies(cookies);
-
-                console.log(
-                    '🍪 [eSocial] Cookies transferidos para o Chromium.'
-                );
-            }
-
-            return {
-                success: status < 400,
-                status,
-                urlFinal,
-                quantidadeCookies: cookies.length,
-                bodyParcial
-            };
-
-        } catch (error) {
-            const mensagem = error?.message || String(error);
-
-            console.error(
-                '❌ [eSocial] Falha mTLS via API:',
-                mensagem
-            );
-
-            let codigo = 'FALHA_MTLS_GOVBR';
-
-            if (/certificate|cert|ssl|tls|pfx|pkcs/i.test(mensagem)) {
-                codigo = 'ERRO_CERTIFICADO_MTLS';
-            }
-
-            throw criarErroRobo(
-                codigo,
-                'Falha ao autenticar o certificado A1 diretamente no gov.br: ' +
-                    mensagem,
-                {
-                    etapa: 'AUTENTICACAO_MTLS_API',
-                    url: urlCertificado
-                }
-            );
-
-        } finally {
-            if (apiContext) {
-                try {
-                    await apiContext.dispose();
-                } catch (_) {}
-            }
+        if (cookiesPlaywright.length) {
+            await this.context.addCookies(cookiesPlaywright);
         }
+
+        console.log(
+            '🐍 [eSocial] Bridge Python concluído:',
+            {
+                initialStatus: resultado.initialStatus || null,
+                finalStatus: resultado.finalStatus || null,
+                finalHost: resultado?.final?.host || null,
+                finalPath: resultado?.final?.path || null,
+                redirects: Array.isArray(resultado.redirects)
+                    ? resultado.redirects.map(item => ({
+                        status: item?.status || null,
+                        host: item?.to?.host || null,
+                        path: item?.to?.path || null
+                    }))
+                    : [],
+                quantidadeCookies: cookiesPlaywright.length
+            }
+        );
+
+        return {
+            success: true,
+            initialStatus: resultado.initialStatus || null,
+            finalStatus: resultado.finalStatus || null,
+            finalUrl: resultado.finalUrl || null,
+            final: resultado.final || null,
+            quantidadeCookies: cookiesPlaywright.length
+        };
     }
 
     async autenticar() {
@@ -709,32 +764,34 @@ class EsocialRelatoriosRobo {
         );
 
         console.log(
-            '🔐 [eSocial] Endpoint do certificado:',
-            destinoCertificado.href
+            '🔐 [eSocial] Endpoint do certificado preparado:',
+            destinoCertificado.host
         );
 
         // =====================================================
-        // 4. AUTENTICAR VIA APIRequestContext + PFX
+        // 4. AUTENTICAR VIA PYTHON + PFX, PRESERVANDO A MESMA SESSÃO
         // =====================================================
 
         await this.etapa(
-            'AUTENTICANDO_CERTIFICADO_MTLS',
+            'PREPARANDO_CERTIFICADO_MTLS',
             {
                 host: destinoCertificado.host
             }
         );
 
         const resultadoMtls =
-            await this.autenticarCertificadoGovBrViaApi(
+            await this.autenticarCertificadoGovBrViaPython(
                 destinoCertificado.href
             );
 
         console.log(
-            '🔐 [eSocial] Resultado mTLS:',
+            '🔐 [eSocial] Resultado mTLS/Python:',
             {
                 success: resultadoMtls?.success,
-                status: resultadoMtls?.status,
-                urlFinal: resultadoMtls?.urlFinal,
+                initialStatus: resultadoMtls?.initialStatus,
+                finalStatus: resultadoMtls?.finalStatus,
+                finalHost: resultadoMtls?.final?.host || null,
+                finalPath: resultadoMtls?.final?.path || null,
                 quantidadeCookies: resultadoMtls?.quantidadeCookies
             }
         );
@@ -742,11 +799,12 @@ class EsocialRelatoriosRobo {
         if (!resultadoMtls?.success) {
             throw criarErroRobo(
                 'MTLS_GOVBR_HTTP_ERRO',
-                `O gov.br respondeu HTTP ${resultadoMtls?.status || 'desconhecido'} durante a autenticação com certificado.`,
+                `O fluxo Python/gov.br não concluiu a autenticação com certificado.`,
                 {
                     etapa: 'AUTENTICACAO_MTLS_API',
-                    url: resultadoMtls?.urlFinal || destinoCertificado.href,
-                    status: resultadoMtls?.status || null
+                    host: resultadoMtls?.final?.host || destinoCertificado.host,
+                    path: resultadoMtls?.final?.path || destinoCertificado.pathname,
+                    status: resultadoMtls?.finalStatus || resultadoMtls?.initialStatus || null
                 }
             );
         }
@@ -755,18 +813,50 @@ class EsocialRelatoriosRobo {
         // 5. CONTINUAR A SESSÃO NO CHROMIUM
         // =====================================================
 
-        const urlRetorno = resultadoMtls?.urlFinal || this.loginUrl;
+        let urlRetorno = this.loginUrl;
+
+        try {
+            if (resultadoMtls?.finalUrl) {
+                const finalUrl = new URL(resultadoMtls.finalUrl);
+                const contemCodigoOauth =
+                    finalUrl.searchParams.has('code') ||
+                    /LoginGovBR\.aspx/i.test(finalUrl.pathname);
+
+                if (
+                    finalUrl.protocol === 'https:' &&
+                    finalUrl.hostname === 'login.esocial.gov.br' &&
+                    !contemCodigoOauth
+                ) {
+                    urlRetorno = finalUrl.href;
+                }
+            }
+        } catch (_) {
+            urlRetorno = this.loginUrl;
+        }
+
+        const resumoRetorno = (() => {
+            try {
+                const parsed = new URL(urlRetorno);
+                return {
+                    host: parsed.hostname,
+                    path: parsed.pathname
+                };
+            } catch (_) {
+                return {
+                    host: 'login.esocial.gov.br',
+                    path: '/login.aspx'
+                };
+            }
+        })();
 
         console.log(
-            '🔐 [eSocial] Abrindo no Chromium a URL retornada pelo mTLS:',
-            urlRetorno
+            '🔐 [eSocial] Retomando Chromium com a sessão autenticada:',
+            resumoRetorno
         );
 
         await this.etapa(
             'RETORNANDO_SESSAO_AO_CHROMIUM',
-            {
-                url: urlRetorno
-            }
+            resumoRetorno
         );
 
         try {
@@ -779,29 +869,14 @@ class EsocialRelatoriosRobo {
             );
         } catch (error) {
             console.warn(
-                '⚠️ [eSocial] Navegação para a URL retornada pelo mTLS falhou:',
+                '⚠️ [eSocial] Navegação após autenticação Python falhou:',
                 error?.message || error
             );
         }
 
-        await page.waitForTimeout(1500);
+        await page.waitForTimeout(1200);
 
-        console.log(
-            '🔐 [eSocial] URL do Chromium após mTLS:',
-            page.url()
-        );
-
-        // Em alguns fluxos a API termina no próprio domínio de certificado.
-        // Com os cookies já transferidos, voltar ao login do eSocial permite
-        // que o gov.br conclua o redirecionamento usando a sessão autenticada.
-        if (
-            /certificado\.sso\.acesso\.gov\.br/i.test(page.url()) &&
-            !await this.estaAutenticado()
-        ) {
-            console.log(
-                '🔐 [eSocial] Ainda no endpoint de certificado; retomando o fluxo pelo eSocial.'
-            );
-
+        if (!await this.estaAutenticado()) {
             try {
                 await page.goto(
                     this.loginUrl,
@@ -810,14 +885,8 @@ class EsocialRelatoriosRobo {
                         timeout: 30000
                     }
                 );
-
-                await page.waitForTimeout(1500);
-            } catch (error) {
-                console.warn(
-                    '⚠️ [eSocial] Falha ao retomar o fluxo do eSocial:',
-                    error?.message || error
-                );
-            }
+                await page.waitForTimeout(1200);
+            } catch (_) {}
         }
 
         // =====================================================
@@ -870,7 +939,7 @@ class EsocialRelatoriosRobo {
 
         throw criarErroRobo(
             'LOGIN_NAO_CONFIRMADO',
-            'A autenticação mTLS foi executada, mas não foi possível confirmar o login no eSocial.',
+            'O Python concluiu a etapa mTLS e devolveu a sessão, mas o login no eSocial ainda não foi confirmado.',
             diagnostico
         );
     }
