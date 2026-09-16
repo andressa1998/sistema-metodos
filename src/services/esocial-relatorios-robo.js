@@ -408,7 +408,7 @@ class EsocialRelatoriosRobo {
         this.page = null;
     }
 
-    async autenticarCertificadoGovBrViaPython(urlCertificado) {
+    async autenticarCertificadoGovBrViaPython(urlCertificado, authorizeUrl) {
         if (!this.context || !this.page) {
             throw criarErroRobo(
                 'NAVEGADOR_NAO_INICIADO',
@@ -450,6 +450,7 @@ class EsocialRelatoriosRobo {
         const resultado = await executarBridgePython(
             {
                 url: urlCertificado,
+                authorizeUrl,
                 currentUrl: page.url(),
                 userAgent,
                 cookies: cookiesAtuais,
@@ -501,6 +502,7 @@ class EsocialRelatoriosRobo {
             '🐍 [eSocial] Bridge Python concluído:',
             {
                 initialStatus: resultado.initialStatus || null,
+                authorizeStatus: resultado.authorizeStatus || null,
                 finalStatus: resultado.finalStatus || null,
                 finalHost: resultado?.final?.host || null,
                 finalPath: resultado?.final?.path || null,
@@ -518,6 +520,7 @@ class EsocialRelatoriosRobo {
         return {
             success: true,
             initialStatus: resultado.initialStatus || null,
+            authorizeStatus: resultado.authorizeStatus || null,
             finalStatus: resultado.finalStatus || null,
             finalUrl: resultado.finalUrl || null,
             final: resultado.final || null,
@@ -565,8 +568,28 @@ class EsocialRelatoriosRobo {
         // 1. ABRIR GOV.BR
         // =====================================================
 
+        let authorizeUrl = null;
+
         if (!/sso\.acesso\.gov\.br/i.test(page.url())) {
             await this.etapa('ABRINDO_GOVBR');
+
+            const promessaAuthorize = page.waitForRequest(
+                request => {
+                    try {
+                        const url = new URL(request.url());
+                        return (
+                            url.protocol === 'https:' &&
+                            url.hostname === 'sso.acesso.gov.br' &&
+                            url.pathname.startsWith('/authorize')
+                        );
+                    } catch (_) {
+                        return false;
+                    }
+                },
+                {
+                    timeout: 12000
+                }
+            ).catch(() => null);
 
             const clicouGovBr = await clicarPorTexto(
                 page,
@@ -595,6 +618,20 @@ class EsocialRelatoriosRobo {
                 );
             }
 
+            const requisicaoAuthorize = await promessaAuthorize;
+
+            if (requisicaoAuthorize) {
+                authorizeUrl = requisicaoAuthorize.url();
+
+                console.log(
+                    '🔐 [eSocial] /authorize original capturado:',
+                    {
+                        host: 'sso.acesso.gov.br',
+                        path: '/authorize'
+                    }
+                );
+            }
+
             await page.waitForTimeout(2500);
         }
 
@@ -602,6 +639,33 @@ class EsocialRelatoriosRobo {
             '🔐 [eSocial] URL antes do certificado:',
             page.url()
         );
+
+        if (!authorizeUrl) {
+            try {
+                authorizeUrl = await page.evaluate(() => {
+                    const entradas = performance
+                        .getEntriesByType('resource')
+                        .map(item => item.name)
+                        .filter(Boolean)
+                        .reverse();
+
+                    return entradas.find(url =>
+                        /^https:\/\/sso\.acesso\.gov\.br\/authorize\?/i.test(url)
+                    ) || null;
+                });
+            } catch (_) {}
+        }
+
+        if (!authorizeUrl) {
+            throw criarErroRobo(
+                'AUTHORIZE_URL_NAO_CAPTURADA',
+                'Não foi possível capturar a URL OAuth original do gov.br antes da autenticação por certificado.',
+                await obterDiagnosticoSeguro(
+                    page,
+                    'CAPTURAR_AUTHORIZE_GOVBR'
+                )
+            );
+        }
 
         if (await this.estaAutenticado()) {
             await this.etapa('AUTENTICADO');
@@ -781,7 +845,8 @@ class EsocialRelatoriosRobo {
 
         const resultadoMtls =
             await this.autenticarCertificadoGovBrViaPython(
-                destinoCertificado.href
+                destinoCertificado.href,
+                authorizeUrl
             );
 
         console.log(
@@ -789,6 +854,7 @@ class EsocialRelatoriosRobo {
             {
                 success: resultadoMtls?.success,
                 initialStatus: resultadoMtls?.initialStatus,
+                authorizeStatus: resultadoMtls?.authorizeStatus,
                 finalStatus: resultadoMtls?.finalStatus,
                 finalHost: resultadoMtls?.final?.host || null,
                 finalPath: resultadoMtls?.final?.path || null,
