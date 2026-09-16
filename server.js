@@ -392,6 +392,34 @@ app.use(
     esocialLoginInterativoRoutes
 );
 
+// ------------------------------------------------------------
+// NAVEGADOR REMOTO eSOCIAL (V10)
+// ------------------------------------------------------------
+
+const esocialNavegadorRemotoRoutes = require(
+    './src/routes/esocial-navegador-remoto'
+);
+
+app.use(
+    '/api/soc',
+    esocialNavegadorRemotoRoutes
+);
+
+// noVNC é instalado pelo Dockerfile em /usr/share/novnc.
+// O frontend importa /esocial-novnc/core/rfb.js.
+app.use(
+    '/esocial-novnc',
+    express.static(
+        '/usr/share/novnc',
+        {
+            fallthrough: false,
+            maxAge: NODE_ENV === 'production'
+                ? '1h'
+                : 0
+        }
+    )
+);
+
 // ============================================================
 // ARQUIVOS ESTÁTICOS DO FRONTEND
 // ============================================================
@@ -459,6 +487,13 @@ app.use((err, req, res, next) => {
 // ============================================================
 // INICIAR SERVIDOR
 // ============================================================
+
+const {
+    instalarVncWebSocket
+} = require(
+    './src/services/esocial-vnc-websocket'
+);
+
 
 const server = app.listen(PORT, () => {
     logger.info(
@@ -538,6 +573,9 @@ const server = app.listen(PORT, () => {
 
     console.log('');
 });
+
+// WebSocket VNC usa o mesmo servidor/porta pública do Express.
+instalarVncWebSocket(server);
 
 // ============================================================
 // ENCERRAMENTO SEGURO
