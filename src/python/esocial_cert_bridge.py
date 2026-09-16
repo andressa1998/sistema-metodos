@@ -2,18 +2,23 @@
 # -*- coding: utf-8 -*-
 
 """
-Bridge Python V4 - somente a etapa mTLS do certificado gov.br.
+Bridge Python V5 - proxy mTLS para uma requisição REAL interceptada do Chromium.
 
-IMPORTANTE:
-- O OAuth (/authorize) volta a ser executado no Chromium/Playwright.
-- O Python faz APENAS o handshake mTLS em uma sessão limpa.
-- Isso reproduz o teste local que retornou HTTP 302.
-- Os cookies criados pelo certificado são devolvidos ao Node para serem
-  injetados no BrowserContext antes de o Chromium reabrir o /authorize original.
+O Node/Playwright deixa o gov.br executar o clique real em
+"Seu certificado digital", intercepta a requisição destinada a
+certificado.sso.acesso.gov.br e envia ao Python:
+- URL exata
+- método HTTP
+- headers reais do navegador (incluindo Cookie/Referer/User-Agent)
+- body, quando existir
 
-Segredos:
-- ESOCIAL_CERT_BASE64 + ESOCIAL_CERT_PASSWORD no servidor.
-- ESOCIAL_CERT_PFX_PATH é aceito somente para testes locais.
+O Python executa essa MESMA requisição usando o PFX A1 e devolve:
+- status HTTP
+- Location
+- cookies recebidos
+
+O BrowserContext recebe esses cookies e o Playwright cumpre a resposta
+interceptada. Assim o restante do fluxo continua no próprio navegador.
 """
 
 import base64
@@ -23,7 +28,7 @@ import re
 import sys
 import tempfile
 from pathlib import Path
-from urllib.parse import urljoin, urlparse, parse_qs
+from urllib.parse import urlparse
 
 import requests
 from cryptography.hazmat.primitives import serialization
@@ -32,13 +37,16 @@ from cryptography.hazmat.primitives.serialization.pkcs12 import (
 )
 
 CERT_HOST = "certificado.sso.acesso.gov.br"
-REDIRECT_CODES = {301, 302, 303, 307, 308}
+METODOS_PERMITIDOS = {"GET", "POST"}
 
-DEFAULT_USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/153.0.0.0 Safari/537.36"
-)
+HEADERS_BLOQUEADOS = {
+    "host",
+    "content-length",
+    "connection",
+    "proxy-connection",
+    "transfer-encoding",
+    "upgrade",
+}
 
 
 def resposta_json(payload):
@@ -66,18 +74,14 @@ def resumo_url(url):
             "path": p.path or "/",
             "queryKeys": sorted(
                 {
-                    parte.split("=", 1)[0]
-                    for parte in (p.query or "").split("&")
-                    if parte
+                    item.split("=", 1)[0]
+                    for item in (p.query or "").split("&")
+                    if item
                 }
             ),
         }
     except Exception:
-        return {
-            "host": "",
-            "path": "",
-            "queryKeys": [],
-        }
+        return {"host": "", "path": "", "queryKeys": []}
 
 
 def carregar_pfx():
@@ -88,6 +92,7 @@ def carregar_pfx():
     if b64:
         b64 = re.sub(r"^data:.*?;base64,", "", b64, flags=re.I)
         b64 = re.sub(r"\s+", "", b64)
+
         try:
             dados = base64.b64decode(b64, validate=True)
         except Exception:
@@ -95,14 +100,18 @@ def carregar_pfx():
                 "CERT_BASE64_INVALIDO",
                 "ESOCIAL_CERT_BASE64 não pôde ser decodificado.",
             )
+
     elif pfx_path:
         caminho = Path(pfx_path)
+
         if not caminho.exists():
             falhar(
                 "CERT_ARQUIVO_NAO_ENCONTRADO",
                 "Arquivo PFX não encontrado.",
             )
+
         dados = caminho.read_bytes()
+
     else:
         falhar(
             "CERT_NAO_CONFIGURADO",
@@ -163,42 +172,27 @@ def escrever_pems(chave, certificado, cadeia, pasta):
     return str(cert_path), str(key_path)
 
 
-def validar_url_certificado(url):
+def validar_url(url):
     try:
         p = urlparse(url)
     except Exception:
-        falhar(
-            "URL_CERT_INVALIDA",
-            "URL do certificado inválida.",
-        )
+        falhar("URL_INVALIDA", "URL mTLS inválida.")
 
-    if (
-        p.scheme.lower() != "https"
-        or p.hostname != CERT_HOST
-        or not p.path.startswith("/login")
-    ):
+    if p.scheme.lower() != "https" or p.hostname != CERT_HOST:
         falhar(
-            "URL_CERT_NAO_PERMITIDA",
-            "A URL mTLS não pertence ao endpoint esperado do gov.br.",
-        )
-
-    qs = parse_qs(p.query)
-
-    if not qs.get("client_id") or not qs.get("authorization_id"):
-        falhar(
-            "URL_CERT_SEM_PARAMETROS",
-            "URL do certificado sem client_id/authorization_id.",
+            "URL_NAO_PERMITIDA",
+            "A requisição interceptada não pertence ao domínio de certificado do gov.br.",
         )
 
 
-def exportar_cookies(sessao):
+def exportar_cookies(response):
     saida = []
 
-    for cookie in sessao.cookies:
+    for cookie in response.cookies:
         item = {
             "name": cookie.name,
             "value": cookie.value,
-            "domain": cookie.domain,
+            "domain": cookie.domain or ".sso.acesso.gov.br",
             "path": cookie.path or "/",
             "secure": bool(cookie.secure),
             "httpOnly": False,
@@ -212,6 +206,26 @@ def exportar_cookies(sessao):
     return saida
 
 
+def limpar_headers(headers):
+    resultado = {}
+
+    for chave, valor in (headers or {}).items():
+        nome = str(chave or "").strip().lower()
+
+        if (
+            not nome
+            or nome in HEADERS_BLOQUEADOS
+            or nome.startswith(":")
+        ):
+            continue
+
+        # Cookie é propositalmente preservado: é justamente o que correlaciona
+        # a autorização atual do gov.br com a requisição de certificado.
+        resultado[nome] = str(valor or "")
+
+    return resultado
+
+
 def main():
     try:
         entrada = json.loads(sys.stdin.read() or "{}")
@@ -221,26 +235,25 @@ def main():
             "Entrada JSON do bridge é inválida.",
         )
 
-    url_certificado = str(
-        entrada.get("url") or ""
-    ).strip()
+    url = str(entrada.get("url") or "").strip()
+    metodo = str(entrada.get("method") or "GET").upper().strip()
+    headers = limpar_headers(entrada.get("headers") or {})
+    post_data = entrada.get("postData")
 
-    validar_url_certificado(url_certificado)
+    validar_url(url)
+
+    if metodo not in METODOS_PERMITIDOS:
+        falhar(
+            "METODO_NAO_PERMITIDO",
+            f"Método HTTP não permitido no bridge: {metodo}.",
+        )
 
     try:
-        timeout = int(
-            entrada.get("timeoutSeconds") or 15
-        )
+        timeout = int(entrada.get("timeoutSeconds") or 20)
     except Exception:
-        timeout = 15
+        timeout = 20
 
-    timeout = max(5, min(timeout, 30))
-
-    # Usa UA estável igual ao teste local que funcionou.
-    user_agent = (
-        os.getenv("ESOCIAL_CERT_BRIDGE_USER_AGENT", "").strip()
-        or DEFAULT_USER_AGENT
-    )
+    timeout = max(5, min(timeout, 35))
 
     chave, certificado, cadeia = carregar_pfx()
 
@@ -252,74 +265,55 @@ def main():
             pasta,
         )
 
-        sessao = requests.Session()
-
-        sessao.headers.update({
-            "User-Agent": user_agent,
-            "Accept": (
-                "text/html,application/xhtml+xml,application/xml;q=0.9,"
-                "image/avif,image/webp,*/*;q=0.8"
-            ),
-            "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
-            "Cache-Control": "no-cache",
-            "Pragma": "no-cache",
-        })
-
         try:
-            resposta = sessao.get(
-                url_certificado,
+            resposta = requests.request(
+                method=metodo,
+                url=url,
+                headers=headers,
+                data=post_data if metodo == "POST" else None,
                 cert=(cert_path, key_path),
                 timeout=timeout,
                 allow_redirects=False,
             )
+
         except requests.exceptions.SSLError:
             falhar(
                 "ERRO_SSL_MTLS",
                 "Falha SSL/TLS durante a autenticação pelo certificado digital.",
-                resumo_url(url_certificado),
+                resumo_url(url),
             )
+
         except requests.exceptions.Timeout:
             falhar(
                 "TIMEOUT_MTLS",
-                "Tempo excedido durante a autenticação por certificado.",
-                resumo_url(url_certificado),
+                "Tempo excedido durante a autenticação pelo certificado digital.",
+                resumo_url(url),
             )
+
         except requests.exceptions.RequestException as exc:
             falhar(
                 "ERRO_HTTP_MTLS",
-                "Falha HTTP durante a autenticação por certificado.",
+                "Falha HTTP durante a autenticação pelo certificado digital.",
                 {
-                    **resumo_url(url_certificado),
+                    **resumo_url(url),
                     "tipo": exc.__class__.__name__,
                 },
             )
 
         location = resposta.headers.get("Location")
 
-        if (
-            resposta.status_code not in REDIRECT_CODES
-            or not location
-        ):
-            falhar(
-                "CERTIFICADO_SEM_REDIRECT",
-                (
-                    "O certificado foi apresentado, mas o endpoint não devolveu "
-                    "o redirecionamento esperado."
-                ),
-                {
-                    "status": resposta.status_code,
-                    "final": resumo_url(resposta.url),
-                },
-            )
+        content_type = resposta.headers.get("Content-Type", "")
 
+        # Para o fluxo esperado, normalmente temos 302.
+        # Se vier 200, devolvemos diagnóstico; o Node não tratará isso como login.
         resposta_json({
             "ok": True,
-            "strategy": "clean-mtls-browser-finishes-oauth",
-            "initialStatus": resposta.status_code,
-            "initialLocation": resumo_url(
-                urljoin(resposta.url, location)
-            ),
-            "cookies": exportar_cookies(sessao),
+            "strategy": "intercepted-browser-request-mtls",
+            "status": resposta.status_code,
+            "location": location,
+            "locationSummary": resumo_url(location) if location else None,
+            "contentType": content_type[:120],
+            "cookies": exportar_cookies(resposta),
         })
 
 
