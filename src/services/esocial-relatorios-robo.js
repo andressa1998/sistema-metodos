@@ -408,7 +408,7 @@ class EsocialRelatoriosRobo {
         this.page = null;
     }
 
-    async autenticarCertificadoGovBrViaPython(urlCertificado, authorizeUrl) {
+    async autenticarCertificadoGovBrViaPython(linkCertificado) {
         if (!this.context || !this.page) {
             throw criarErroRobo(
                 'NAVEGADOR_NAO_INICIADO',
@@ -418,12 +418,15 @@ class EsocialRelatoriosRobo {
 
         const page = this.page;
 
-        await this.etapa('AUTENTICANDO_CERTIFICADO_PYTHON', {
-            host: 'certificado.sso.acesso.gov.br'
-        });
+        await this.etapa(
+            'INTERCEPTANDO_REQUISICAO_CERTIFICADO',
+            {
+                host: 'certificado.sso.acesso.gov.br'
+            }
+        );
 
         console.log(
-            '🐍 [eSocial] Executando somente o handshake mTLS no Python...'
+            '🌐 [eSocial] Interceptando o clique REAL em "Seu certificado digital"...'
         );
 
         const timeoutBridge = envNumber(
@@ -431,198 +434,383 @@ class EsocialRelatoriosRobo {
             45000
         );
 
-        const resultado = await executarBridgePython(
-            {
-                url: urlCertificado,
-                authorizeUrl,
-                timeoutSeconds: 15
-            },
-            timeoutBridge
+        let resolveuInterceptacao = false;
+        let resolverInterceptacao;
+        let rejeitarInterceptacao;
+
+        const promessaInterceptacao = new Promise(
+            (resolve, reject) => {
+                resolverInterceptacao = resolve;
+                rejeitarInterceptacao = reject;
+            }
         );
 
-        if (!resultado?.ok) {
-            throw criarErroRobo(
-                resultado?.code || 'FALHA_BRIDGE_PYTHON',
-                resultado?.error || 'O bridge Python não conseguiu concluir a autenticação mTLS.',
-                {
-                    etapa: 'AUTENTICACAO_CERTIFICADO_PYTHON',
-                    details: resultado?.details || null
-                }
-            );
-        }
+        const padraoRota =
+            'https://certificado.sso.acesso.gov.br/**';
 
-        const cookiesRecebidos = Array.isArray(resultado.cookies)
-            ? resultado.cookies
-            : [];
-
-        const cookiesPlaywright = cookiesRecebidos
-            .filter(cookie => cookie?.name && cookie?.domain)
-            .map(cookie => {
-                const item = {
-                    name: String(cookie.name),
-                    value: String(cookie.value || ''),
-                    domain: String(cookie.domain),
-                    path: String(cookie.path || '/'),
-                    secure: Boolean(cookie.secure),
-                    httpOnly: Boolean(cookie.httpOnly)
-                };
-
-                const expires = Number(cookie.expires);
-
-                if (Number.isFinite(expires) && expires > 0) {
-                    item.expires = expires;
+        const manipuladorRota =
+            async route => {
+                if (resolveuInterceptacao) {
+                    try {
+                        await route.continue();
+                    } catch (_) {}
+                    return;
                 }
 
-                return item;
-            });
+                resolveuInterceptacao = true;
 
-        // Remove apenas a sessão antiga/incompleta do SSO/certificado.
-        // Os cookies do login.esocial.gov.br permanecem intactos.
+                try {
+                    const request =
+                        route.request();
+
+                    const headers =
+                        await request
+                            .allHeaders()
+                            .catch(() => ({}));
+
+                    const url =
+                        request.url();
+
+                    const metodo =
+                        request.method();
+
+                    const postData =
+                        request.postData();
+
+                    console.log(
+                        '🌐 [eSocial] Requisição real do certificado capturada:',
+                        {
+                            method: metodo,
+                            host: 'certificado.sso.acesso.gov.br',
+                            path: (() => {
+                                try {
+                                    return new URL(url).pathname;
+                                } catch (_) {
+                                    return null;
+                                }
+                            })(),
+                            temCookie: Boolean(
+                                headers?.cookie
+                            ),
+                            temReferer: Boolean(
+                                headers?.referer
+                            )
+                        }
+                    );
+
+                    const resultado =
+                        await executarBridgePython(
+                            {
+                                url,
+                                method: metodo,
+                                headers,
+                                postData,
+                                timeoutSeconds: 20
+                            },
+                            timeoutBridge
+                        );
+
+                    if (!resultado?.ok) {
+                        throw criarErroRobo(
+                            resultado?.code ||
+                                'FALHA_BRIDGE_PYTHON',
+                            resultado?.error ||
+                                'O bridge Python não conseguiu executar a requisição mTLS.',
+                            {
+                                etapa:
+                                    'REQUISICAO_CERTIFICADO_INTERCEPTADA',
+                                details:
+                                    resultado?.details ||
+                                    null
+                            }
+                        );
+                    }
+
+                    console.log(
+                        '🐍 [eSocial] Resposta mTLS da requisição real:',
+                        {
+                            status:
+                                resultado.status ||
+                                null,
+                            locationHost:
+                                resultado
+                                    ?.locationSummary
+                                    ?.host ||
+                                null,
+                            locationPath:
+                                resultado
+                                    ?.locationSummary
+                                    ?.path ||
+                                null,
+                            quantidadeCookies:
+                                Array.isArray(
+                                    resultado.cookies
+                                )
+                                    ? resultado.cookies.length
+                                    : 0
+                        }
+                    );
+
+                    const cookies =
+                        Array.isArray(
+                            resultado.cookies
+                        )
+                            ? resultado.cookies
+                            : [];
+
+                    const cookiesPlaywright =
+                        cookies
+                            .filter(
+                                cookie =>
+                                    cookie?.name &&
+                                    cookie?.domain
+                            )
+                            .map(cookie => {
+                                const item = {
+                                    name:
+                                        String(
+                                            cookie.name
+                                        ),
+                                    value:
+                                        String(
+                                            cookie.value ||
+                                            ''
+                                        ),
+                                    domain:
+                                        String(
+                                            cookie.domain
+                                        ),
+                                    path:
+                                        String(
+                                            cookie.path ||
+                                            '/'
+                                        ),
+                                    secure:
+                                        Boolean(
+                                            cookie.secure
+                                        ),
+                                    httpOnly:
+                                        Boolean(
+                                            cookie.httpOnly
+                                        )
+                                };
+
+                                const expires =
+                                    Number(
+                                        cookie.expires
+                                    );
+
+                                if (
+                                    Number.isFinite(
+                                        expires
+                                    ) &&
+                                    expires > 0
+                                ) {
+                                    item.expires =
+                                        expires;
+                                }
+
+                                return item;
+                            });
+
+                    if (
+                        cookiesPlaywright.length
+                    ) {
+                        await this.context
+                            .addCookies(
+                                cookiesPlaywright
+                            );
+                    }
+
+                    const status =
+                        Number(
+                            resultado.status
+                        );
+
+                    const location =
+                        String(
+                            resultado.location ||
+                            ''
+                        );
+
+                    if (
+                        !Number.isFinite(status)
+                    ) {
+                        throw criarErroRobo(
+                            'RESPOSTA_MTLS_INVALIDA',
+                            'O bridge Python não retornou um status HTTP válido.'
+                        );
+                    }
+
+                    if (
+                        status >= 300 &&
+                        status < 400 &&
+                        location
+                    ) {
+                        await route.fulfill({
+                            status,
+                            headers: {
+                                location,
+                                'cache-control':
+                                    'no-store'
+                            },
+                            body: ''
+                        });
+
+                        resolverInterceptacao({
+                            success: true,
+                            status,
+                            location,
+                            quantidadeCookies:
+                                cookiesPlaywright.length
+                        });
+
+                        return;
+                    }
+
+                    await route.abort(
+                        'failed'
+                    );
+
+                    throw criarErroRobo(
+                        'CERTIFICADO_SEM_REDIRECT',
+                        (
+                            'A requisição real do certificado foi executada via Python, ' +
+                            `mas retornou HTTP ${status} sem o redirecionamento esperado.`
+                        ),
+                        {
+                            etapa:
+                                'REQUISICAO_CERTIFICADO_INTERCEPTADA',
+                            status,
+                            contentType:
+                                resultado.contentType ||
+                                null
+                        }
+                    );
+
+                } catch (error) {
+                    try {
+                        await route.abort(
+                            'failed'
+                        );
+                    } catch (_) {}
+
+                    rejeitarInterceptacao(
+                        error
+                    );
+                }
+            };
+
+        await page.route(
+            padraoRota,
+            manipuladorRota
+        );
+
         try {
-            await this.context.clearCookies({
-                domain: /(^|\.)sso\.acesso\.gov\.br$|(^|\.)certificado\.sso\.acesso\.gov\.br$/
-            });
-
             console.log(
-                '🍪 [eSocial] Cookies antigos do SSO removidos do Chromium.'
+                '🔐 [eSocial] Clicando na opção real de certificado...'
             );
-        } catch (error) {
-            console.warn(
-                '⚠️ [eSocial] Não foi possível limpar seletivamente os cookies SSO:',
-                error?.message || error
+
+            await linkCertificado.click({
+                timeout: 10000
+            });
+
+            const resultado =
+                await Promise.race([
+                    promessaInterceptacao,
+                    new Promise(
+                        (_, reject) =>
+                            setTimeout(
+                                () =>
+                                    reject(
+                                        criarErroRobo(
+                                            'REQUISICAO_CERTIFICADO_NAO_CAPTURADA',
+                                            'O clique em "Seu certificado digital" não gerou uma requisição interceptável ao endpoint de certificado em até 20 segundos.'
+                                        )
+                                    ),
+                                20000
+                            )
+                    )
+                ]);
+
+            await this.etapa(
+                'AGUARDANDO_RETORNO_CERTIFICADO'
             );
-        }
 
-        if (cookiesPlaywright.length) {
-            await this.context.addCookies(
-                cookiesPlaywright
-            );
-        }
+            const inicio =
+                Date.now();
 
-        console.log(
-            '🐍 [eSocial] Handshake mTLS Python concluído:',
-            {
-                initialStatus: resultado.initialStatus || null,
-                locationHost: resultado?.initialLocation?.host || null,
-                locationPath: resultado?.initialLocation?.path || null,
-                quantidadeCookies: cookiesPlaywright.length
-            }
-        );
-
-        // O Python para aqui.
-        // O /authorize precisa voltar a ser processado por um navegador real,
-        // pois o gov.br pode executar JavaScript/challenges antes de concluir OAuth.
-        await this.etapa(
-            'RETOMANDO_AUTHORIZE_NO_CHROMIUM',
-            {
-                host: 'sso.acesso.gov.br',
-                path: '/authorize'
-            }
-        );
-
-        console.log(
-            '🌐 [eSocial] Retomando /authorize original no Chromium...'
-        );
-
-        try {
-            await page.goto(
-                authorizeUrl,
-                {
-                    waitUntil: 'domcontentloaded',
-                    timeout: 30000
-                }
-            );
-        } catch (error) {
-            console.warn(
-                '⚠️ [eSocial] Navegação do /authorize após mTLS:',
-                error?.message || error
-            );
-        }
-
-        // Dá tempo para scripts/challenges/redirects do gov.br executarem.
-        const inicioRetorno = Date.now();
-
-        while (
-            Date.now() - inicioRetorno < 20000
-        ) {
-            if (
-                await this.estaAutenticado()
+            while (
+                Date.now() - inicio <
+                25000
             ) {
-                console.log(
-                    '✅ [eSocial] Login confirmado após retomar /authorize no Chromium.'
-                );
-
-                return {
-                    success: true,
-                    authenticated: true,
-                    initialStatus: resultado.initialStatus || null,
-                    quantidadeCookies: cookiesPlaywright.length,
-                    finalUrl: page.url()
-                };
-            }
-
-            const atual = page.url();
-
-            if (
-                /login\.esocial\.gov\.br/i.test(atual) &&
-                !/\/login\.aspx(?:$|\?)/i.test(atual)
-            ) {
-                await page.waitForTimeout(1000);
-
                 if (
                     await this.estaAutenticado()
                 ) {
+                    console.log(
+                        '✅ [eSocial] Login confirmado após o fluxo real do certificado.'
+                    );
+
                     return {
-                        success: true,
+                        ...resultado,
                         authenticated: true,
-                        initialStatus: resultado.initialStatus || null,
-                        quantidadeCookies: cookiesPlaywright.length,
-                        finalUrl: page.url()
+                        finalUrl:
+                            page.url()
                     };
                 }
+
+                await page.waitForTimeout(
+                    750
+                );
             }
 
-            await page.waitForTimeout(
-                750
+            const atual =
+                page.url();
+
+            console.log(
+                '🌐 [eSocial] Página após o fluxo REAL do certificado:',
+                {
+                    host: (() => {
+                        try {
+                            return new URL(
+                                atual
+                            ).hostname;
+                        } catch (_) {
+                            return null;
+                        }
+                    })(),
+                    path: (() => {
+                        try {
+                            return new URL(
+                                atual
+                            ).pathname;
+                        } catch (_) {
+                            return null;
+                        }
+                    })(),
+                    titulo:
+                        await page
+                            .title()
+                            .catch(
+                                () => ''
+                            )
+                }
             );
+
+            return {
+                ...resultado,
+                authenticated: false,
+                finalUrl: atual
+            };
+
+        } finally {
+            try {
+                await page.unroute(
+                    padraoRota,
+                    manipuladorRota
+                );
+            } catch (_) {}
         }
-
-        const urlFinal = page.url();
-
-        let tituloFinal = '';
-
-        try {
-            tituloFinal = await page.title();
-        } catch (_) {}
-
-        console.log(
-            '🌐 [eSocial] Estado após retomar /authorize:',
-            {
-                host: (() => {
-                    try {
-                        return new URL(urlFinal).hostname;
-                    } catch (_) {
-                        return null;
-                    }
-                })(),
-                path: (() => {
-                    try {
-                        return new URL(urlFinal).pathname;
-                    } catch (_) {
-                        return null;
-                    }
-                })(),
-                titulo: tituloFinal
-            }
-        );
-
-        return {
-            success: true,
-            authenticated: false,
-            initialStatus: resultado.initialStatus || null,
-            quantidadeCookies: cookiesPlaywright.length,
-            finalUrl: urlFinal
-        };
     }
 
     async autenticar() {
@@ -820,7 +1008,7 @@ class EsocialRelatoriosRobo {
 
         await this.etapa('LOCALIZANDO_CERTIFICADO_DIGITAL');
 
-        let encontrouOpcaoCertificado = false;
+        let linkCertificado = null;
 
         try {
             const elementos = page.locator(
@@ -850,7 +1038,7 @@ class EsocialRelatoriosRobo {
                         texto.includes('seu certificado digital') &&
                         !texto.includes('nuvem')
                     ) {
-                        encontrouOpcaoCertificado = true;
+                        linkCertificado = elemento;
 
                         console.log(
                             '✅ [eSocial] Opção de certificado localizada:',
@@ -863,7 +1051,7 @@ class EsocialRelatoriosRobo {
             }
         } catch (_) {}
 
-        if (!encontrouOpcaoCertificado) {
+        if (!linkCertificado) {
             const diag = await obterDiagnosticoSeguro(
                 page,
                 'LOCALIZAR_CERTIFICADO'
@@ -877,95 +1065,36 @@ class EsocialRelatoriosRobo {
         }
 
         // =====================================================
-        // 3. MONTAR ENDPOINT DE CERTIFICADO DO GOV.BR
-        // =====================================================
-
-        let urlGovBr;
-
-        try {
-            urlGovBr = new URL(page.url());
-        } catch (error) {
-            throw criarErroRobo(
-                'URL_GOVBR_INVALIDA',
-                'A URL atual do gov.br não pôde ser interpretada.',
-                await obterDiagnosticoSeguro(
-                    page,
-                    'MONTAR_ENDPOINT_CERTIFICADO',
-                    error
-                )
-            );
-        }
-
-        const clientId = urlGovBr.searchParams.get('client_id');
-        const authorizationId = urlGovBr.searchParams.get('authorization_id');
-
-        if (!clientId || !authorizationId) {
-            throw criarErroRobo(
-                'PARAMETROS_GOVBR_NAO_ENCONTRADOS',
-                'client_id ou authorization_id não foram encontrados na URL do gov.br.',
-                await obterDiagnosticoSeguro(
-                    page,
-                    'MONTAR_ENDPOINT_CERTIFICADO'
-                )
-            );
-        }
-
-        const destinoCertificado = new URL(
-            'https://certificado.sso.acesso.gov.br/login'
-        );
-
-        destinoCertificado.searchParams.set(
-            'client_id',
-            clientId
-        );
-
-        destinoCertificado.searchParams.set(
-            'authorization_id',
-            authorizationId
-        );
-
-        console.log(
-            '🔐 [eSocial] Endpoint do certificado preparado:',
-            destinoCertificado.host
-        );
-
-        // =====================================================
-        // 4. AUTENTICAR VIA PYTHON + PFX, PRESERVANDO A MESMA SESSÃO
+        // 3. EXECUTAR O CLIQUE REAL E INTERCEPTAR A REQUISIÇÃO mTLS
         // =====================================================
 
         await this.etapa(
             'PREPARANDO_CERTIFICADO_MTLS',
             {
-                host: destinoCertificado.host
+                host:
+                    'certificado.sso.acesso.gov.br'
             }
         );
 
         const resultadoMtls =
             await this.autenticarCertificadoGovBrViaPython(
-                destinoCertificado.href,
-                authorizeUrl
+                linkCertificado
             );
 
         console.log(
-            '🔐 [eSocial] Resultado mTLS/Python:',
+            '🔐 [eSocial] Resultado do fluxo REAL mTLS/Python:',
             {
-                success: resultadoMtls?.success,
-                authenticated: resultadoMtls?.authenticated,
-                initialStatus: resultadoMtls?.initialStatus,
-                quantidadeCookies: resultadoMtls?.quantidadeCookies
+                success:
+                    resultadoMtls?.success,
+                authenticated:
+                    resultadoMtls?.authenticated,
+                status:
+                    resultadoMtls?.status,
+                quantidadeCookies:
+                    resultadoMtls
+                        ?.quantidadeCookies
             }
         );
-
-        if (!resultadoMtls?.success) {
-            throw criarErroRobo(
-                'MTLS_GOVBR_HTTP_ERRO',
-                'O fluxo Python/gov.br não concluiu a autenticação com certificado.',
-                {
-                    etapa: 'AUTENTICACAO_MTLS_API',
-                    status: resultadoMtls?.initialStatus || null
-                }
-            );
-        }
 
         if (
             resultadoMtls?.authenticated ||
