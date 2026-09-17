@@ -9935,6 +9935,8 @@ async function atualizarStatusConectorLocalEsocial() {
                 0,
                 status.processando ||
                 0,
+                status.ultimaAtualizacaoFila ||
+                '',
                 (
                     status.cnpjsSemAutorizacao ||
                     []
@@ -9951,6 +9953,18 @@ async function atualizarStatusConectorLocalEsocial() {
             );
 
         if (
+            Number(
+                status.eventosConciliados ||
+                0
+            ) >
+                0
+        ) {
+            recarregarEventosESocial()
+                .catch(
+                    () => null
+                );
+
+        } else if (
             ultimaAssinaturaStatusConectorLocalEsocial &&
             assinatura !==
                 ultimaAssinaturaStatusConectorLocalEsocial
@@ -10291,6 +10305,13 @@ function eventosPendentesParaConectorLocalEsocial(
                                 evento
                             );
 
+                        if (
+                            resumo.vinculoStatus ===
+                                'nao_localizado'
+                        ) {
+                            return false;
+                        }
+
                         return (
                             resumo.vinculoStatus !==
                                 'vinculado' ||
@@ -10443,6 +10464,8 @@ async function enfileirarEventosConectorLocalEsocial() {
         );
 
         await atualizarStatusConectorLocalEsocial();
+
+        await recarregarEventosESocial();
 
     } catch (
         error

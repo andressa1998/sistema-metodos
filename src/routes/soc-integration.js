@@ -51870,7 +51870,7 @@ router.post(
 
 
 // ============================================================
-// CONECTOR LOCAL eSOCIAL - V3.8
+// CONECTOR LOCAL eSOCIAL - V4.0
 // Chrome normal do Windows + certificado instalado no PC.
 // ============================================================
 
@@ -52020,6 +52020,69 @@ async function enfileirarEventoConectorLocalEsocial(evento, contexto = {}) {
             eventoFila,
             'AGUARDANDO_CONECTOR_LOCAL'
         );
+
+    if (
+        pendencia?.status ===
+            'resolvido' &&
+        String(
+            pendencia?.motivo ||
+            ''
+        ).trim() ===
+            'VINCULO_CONFIRMADO_PORTAL_SST'
+    ) {
+        const vinculoExistente =
+            await buscarVinculoPortalSstParaPendencia(
+                pendencia
+            );
+
+        if (
+            vinculoExistente
+        ) {
+            const aplicacao =
+                await aplicarVinculoPortalSstNaEmpresaExata(
+                    pendencia,
+                    vinculoExistente
+                );
+
+            return {
+                success:
+                    true,
+                imediato:
+                    true,
+                encontrado:
+                    true,
+                matricula:
+                    vinculoExistente.matricula_esocial ||
+                    vinculoExistente.matricula ||
+                    null,
+                eventosAtualizados:
+                    aplicacao.eventosAtualizados,
+                mensagem:
+                    'Este vínculo já havia sido resolvido pelo Portal SST. Nenhuma nova consulta foi criada.'
+            };
+        }
+    }
+
+    if (
+        pendencia?.status ===
+            'nao_localizado_conector_local' &&
+        String(
+            pendencia?.motivo ||
+            ''
+        ).trim() ===
+            'VINCULO_NAO_LOCALIZADO_PORTAL_SST'
+    ) {
+        return {
+            success:
+                true,
+            imediato:
+                true,
+            encontrado:
+                false,
+            mensagem:
+                'Este CPF já foi confirmado como não localizado no módulo SST para esta unidade. Nenhuma nova consulta foi criada.'
+        };
+    }
 
     if (!pendencia?.id) {
         throw new Error(
@@ -52390,6 +52453,22 @@ router.get(
     '/conector-local/status',
     async (req, res) => {
         try {
+            let eventosConciliados =
+                0;
+
+            try {
+                eventosConciliados =
+                    await reconciliarResultadosPortalSstV40();
+            } catch (
+                erroConciliacao
+            ) {
+                console.warn(
+                    '⚠️ Falha conciliando resultados Portal SST V4.0:',
+                    erroConciliacao?.message ||
+                    erroConciliacao
+                );
+            }
+
             const heartbeatMs =
                 ultimoHeartbeatConectorLocalEsocial
                     ? new Date(
@@ -52423,6 +52502,34 @@ router.get(
             const cnpjsSemAutorizacao =
                 await listarCnpjsSemAutorizacaoConectorLocalEsocial();
 
+            const {
+                data:
+                    ultimaMudancaLista
+            } =
+                await getSupabase()
+                    .from(
+                        'esocial_matriculas_pendentes'
+                    )
+                    .select(
+                        'updated_at'
+                    )
+                    .order(
+                        'updated_at',
+                        {
+                            ascending:
+                                false
+                        }
+                    )
+                    .limit(1);
+
+            const ultimaAtualizacaoFila =
+                Array.isArray(
+                    ultimaMudancaLista
+                )
+                    ? ultimaMudancaLista[0]?.updated_at ||
+                      null
+                    : null;
+
             return res.json({
                 success: true,
                 online,
@@ -52430,6 +52537,8 @@ router.get(
                     ultimoHeartbeatConectorLocalEsocial,
                 conector:
                     ultimoConectorLocalEsocial,
+                eventosConciliados,
+                ultimaAtualizacaoFila,
                 aguardando:
                     tarefas.filter(
                         item =>
@@ -52993,49 +53102,84 @@ router.get(
                 });
             }
 
-            const cache =
-                await buscarVinculoOficialCacheEsocial(
-                    evento
-                );
-
             if (
-                cache &&
-                String(
-                    cache.matricula_esocial ||
-                    cache.matricula ||
-                    ''
-                ).trim()
+                matriculaEventoEhOficial(
+                    evento
+                )
             ) {
                 return res.json({
-                    success: true,
-                    concluida: true,
-                    encontrado: true,
-                    status: 'resolvido',
-                    matricula: String(
-                        cache.matricula_esocial ||
-                        cache.matricula ||
-                        ''
-                    ).trim(),
+                    success:
+                        true,
+                    concluida:
+                        true,
+                    encontrado:
+                        true,
+                    status:
+                        'resolvido',
+                    matricula:
+                        String(
+                            evento.matricula ||
+                            ''
+                        ).trim(),
                     fonte:
-                        cache.fonte || null
+                        evento.matricula_origem ||
+                        null
                 });
             }
 
             const chave =
                 dadosChaveVinculoMatricula(evento);
 
+            let queryPendencia =
+                getSupabase()
+                    .from(
+                        'esocial_matriculas_pendentes'
+                    )
+                    .select('*');
+
+            const codigoEmpresaEvento =
+                String(
+                    evento?.codigo_empresa ||
+                    ''
+                ).trim();
+
+            if (
+                codigoEmpresaEvento
+            ) {
+                queryPendencia =
+                    queryPendencia
+                        .eq(
+                            'codigo_empresa',
+                            codigoEmpresaEvento
+                        )
+                        .eq(
+                            'cpf',
+                            normalizarCpfEsocial(
+                                evento.cpf ||
+                                ''
+                            )
+                        );
+            } else {
+                queryPendencia =
+                    queryPendencia.eq(
+                        'chave_vinculo',
+                        chave.chave
+                    );
+            }
+
             const {
                 data: pendencias,
                 error: erroPendencia
-            } = await getSupabase()
-                .from('esocial_matriculas_pendentes')
-                .select('*')
-                .eq('chave_vinculo', chave.chave)
-                .order(
-                    'updated_at',
-                    { ascending: false }
-                )
-                .limit(1);
+            } =
+                await queryPendencia
+                    .order(
+                        'updated_at',
+                        {
+                            ascending:
+                                false
+                        }
+                    )
+                    .limit(1);
 
             if (erroPendencia) {
                 throw erroPendencia;
@@ -54131,6 +54275,490 @@ router.post(
 );
 
 
+
+async function buscarVinculoPortalSstParaPendencia(
+    pendencia
+) {
+    if (
+        !pendencia
+    ) {
+        return null;
+    }
+
+    let query =
+        getSupabase()
+            .from(
+                'esocial_vinculos'
+            )
+            .select('*')
+            .eq(
+                'tp_insc_empregador',
+                String(
+                    pendencia.tp_insc_empregador ||
+                    ''
+                ).trim()
+            )
+            .eq(
+                'nr_insc_empregador',
+                String(
+                    pendencia.nr_insc_empregador ||
+                    ''
+                ).trim()
+            )
+            .eq(
+                'cpf',
+                normalizarCpfEsocial(
+                    pendencia.cpf ||
+                    ''
+                )
+            )
+            .eq(
+                'fonte',
+                'portal_sst'
+            )
+            .order(
+                'updated_at',
+                {
+                    ascending:
+                        false
+                }
+            )
+            .limit(20);
+
+    const {
+        data,
+        error
+    } =
+        await query;
+
+    if (
+        error
+    ) {
+        throw error;
+    }
+
+    let candidatos =
+        Array.isArray(data)
+            ? data
+            : [];
+
+    const dataAdmissao =
+        normalizarDataAdmissaoEsocial(
+            pendencia.data_admissao ||
+            ''
+        );
+
+    if (
+        dataAdmissao
+    ) {
+        const mesmaAdmissao =
+            candidatos.filter(
+                item =>
+                    normalizarDataAdmissaoEsocial(
+                        item?.data_admissao ||
+                        ''
+                    ) ===
+                        dataAdmissao
+            );
+
+        if (
+            mesmaAdmissao.length
+        ) {
+            candidatos =
+                mesmaAdmissao;
+        }
+    }
+
+    return candidatos[0] ||
+        null;
+}
+
+
+async function aplicarVinculoPortalSstNaEmpresaExata(
+    pendencia,
+    vinculo
+) {
+    const empresaId =
+        String(
+            pendencia?.codigo_empresa ||
+            ''
+        ).trim();
+
+    const cpf =
+        normalizarCpfEsocial(
+            pendencia?.cpf ||
+            ''
+        );
+
+    if (
+        !empresaId ||
+        cpf.length !==
+            11 ||
+        !vinculo
+    ) {
+        return {
+            eventosAtualizados:
+                0,
+            pendenciasResolvidas:
+                0
+        };
+    }
+
+    const {
+        data:
+            eventos,
+        error:
+            erroEventos
+    } =
+        await getSupabase()
+            .from(
+                'esocial_eventos'
+            )
+            .select('*')
+            .eq(
+                'codigo_empresa',
+                empresaId
+            )
+            .eq(
+                'cpf',
+                cpf
+            )
+            .in(
+                'tipo_evento',
+                [
+                    'S-2220',
+                    'S-2240'
+                ]
+            );
+
+    if (
+        erroEventos
+    ) {
+        throw erroEventos;
+    }
+
+    const listaEventos =
+        Array.isArray(
+            eventos
+        )
+            ? eventos
+            : [];
+
+    const dataAdmissaoPendencia =
+        normalizarDataAdmissaoEsocial(
+            pendencia?.data_admissao ||
+            vinculo?.data_admissao ||
+            ''
+        );
+
+    let candidatos =
+        listaEventos;
+
+    if (
+        dataAdmissaoPendencia
+    ) {
+        const mesmaAdmissao =
+            listaEventos.filter(
+                evento =>
+                    normalizarDataAdmissaoEsocial(
+                        evento?.data_admissao ||
+                        ''
+                    ) ===
+                        dataAdmissaoPendencia
+            );
+
+        if (
+            mesmaAdmissao.length
+        ) {
+            candidatos =
+                mesmaAdmissao;
+        }
+    } else {
+        const datas =
+            new Set(
+                listaEventos
+                    .map(
+                        evento =>
+                            normalizarDataAdmissaoEsocial(
+                                evento?.data_admissao ||
+                                ''
+                            )
+                    )
+                    .filter(Boolean)
+            );
+
+        // Se houver recontratações e não soubermos qual vínculo é,
+        // atualiza apenas o evento que originou a tarefa.
+        if (
+            datas.size >
+                1
+        ) {
+            candidatos =
+                listaEventos.filter(
+                    evento =>
+                        String(
+                            evento?.id ||
+                            ''
+                        ) ===
+                        String(
+                            pendencia?.evento_exemplo_id ||
+                            ''
+                        )
+                );
+        }
+    }
+
+    let eventosAtualizados =
+        0;
+
+    for (
+        const evento
+        of candidatos
+    ) {
+        const resultado =
+            await aplicarVinculoOficialNoEvento(
+                evento,
+                vinculo,
+                'portal_sst'
+            );
+
+        if (
+            resultado?.encontrada
+        ) {
+            eventosAtualizados++;
+        }
+    }
+
+    // Resolve TODAS as pendências do mesmo vínculo dentro da
+    // unidade exata. Isso evita novo lote da mesma unidade.
+    const {
+        data:
+            pendenciasMesmaEmpresa,
+        error:
+            erroPendencias
+    } =
+        await getSupabase()
+            .from(
+                'esocial_matriculas_pendentes'
+            )
+            .select(
+                'id,data_admissao,status'
+            )
+            .eq(
+                'codigo_empresa',
+                empresaId
+            )
+            .eq(
+                'cpf',
+                cpf
+            );
+
+    if (
+        erroPendencias
+    ) {
+        throw erroPendencias;
+    }
+
+    let idsResolver =
+        (
+            Array.isArray(
+                pendenciasMesmaEmpresa
+            )
+                ? pendenciasMesmaEmpresa
+                : []
+        )
+            .filter(
+                item => {
+                    if (
+                        !dataAdmissaoPendencia
+                    ) {
+                        return true;
+                    }
+
+                    const dataItem =
+                        normalizarDataAdmissaoEsocial(
+                            item?.data_admissao ||
+                            ''
+                        );
+
+                    return (
+                        !dataItem ||
+                        dataItem ===
+                            dataAdmissaoPendencia
+                    );
+                }
+            )
+            .map(
+                item =>
+                    item.id
+            )
+            .filter(Boolean);
+
+    if (
+        pendencia?.id &&
+        !idsResolver.includes(
+            pendencia.id
+        )
+    ) {
+        idsResolver.push(
+            pendencia.id
+        );
+    }
+
+    let pendenciasResolvidas =
+        0;
+
+    if (
+        idsResolver.length
+    ) {
+        const {
+            data:
+                resolvidas,
+            error:
+                erroResolver
+        } =
+            await getSupabase()
+                .from(
+                    'esocial_matriculas_pendentes'
+                )
+                .update({
+                    status:
+                        'resolvido',
+                    motivo:
+                        'VINCULO_CONFIRMADO_PORTAL_SST',
+                    ultimo_erro:
+                        null,
+                    proxima_tentativa_em:
+                        null,
+                    data_admissao:
+                        dataAdmissaoPendencia ||
+                        pendencia?.data_admissao ||
+                        null,
+                    updated_at:
+                        new Date().toISOString()
+                })
+                .in(
+                    'id',
+                    idsResolver
+                )
+                .select(
+                    'id'
+                );
+
+        if (
+            erroResolver
+        ) {
+            throw erroResolver;
+        }
+
+        pendenciasResolvidas =
+            Array.isArray(
+                resolvidas
+            )
+                ? resolvidas.length
+                : 0;
+    }
+
+    return {
+        eventosAtualizados,
+        pendenciasResolvidas
+    };
+}
+
+
+let ultimaConciliacaoPortalSstV40 =
+    0;
+
+
+async function reconciliarResultadosPortalSstV40() {
+    const agora =
+        Date.now();
+
+    if (
+        agora -
+        ultimaConciliacaoPortalSstV40 <
+            30000
+    ) {
+        return 0;
+    }
+
+    ultimaConciliacaoPortalSstV40 =
+        agora;
+
+    const {
+        data:
+            pendencias,
+        error
+    } =
+        await getSupabase()
+            .from(
+                'esocial_matriculas_pendentes'
+            )
+            .select('*')
+            .eq(
+                'status',
+                'resolvido'
+            )
+            .eq(
+                'motivo',
+                'VINCULO_CONFIRMADO_PORTAL_SST'
+            )
+            .order(
+                'updated_at',
+                {
+                    ascending:
+                        false
+                }
+            )
+            .limit(200);
+
+    if (
+        error
+    ) {
+        throw error;
+    }
+
+    let atualizados =
+        0;
+
+    for (
+        const pendencia
+        of (
+            Array.isArray(
+                pendencias
+            )
+                ? pendencias
+                : []
+        )
+    ) {
+        const vinculo =
+            await buscarVinculoPortalSstParaPendencia(
+                pendencia
+            );
+
+        if (
+            !vinculo
+        ) {
+            continue;
+        }
+
+        const resultado =
+            await aplicarVinculoPortalSstNaEmpresaExata(
+                pendencia,
+                vinculo
+            );
+
+        atualizados +=
+            Number(
+                resultado?.eventosAtualizados ||
+                0
+            );
+    }
+
+    return atualizados;
+}
+
+
 router.post(
     '/conector-local/resultado/:id',
     async (req, res) => {
@@ -54294,20 +54922,17 @@ router.post(
                 );
             }
 
-            await atualizarPendenciaMatricula(
-                pendencia.id,
-                {
-                    status: 'resolvido',
-                    motivo:
-                        'VINCULO_CONFIRMADO_PORTAL_SST',
-                    ultimo_erro: null,
-                    proxima_tentativa_em: null,
-                    data_admissao:
-                        dataAdmissao ||
-                        pendencia.data_admissao ||
-                        null
-                }
-            );
+            const aplicacao =
+                await aplicarVinculoPortalSstNaEmpresaExata(
+                    {
+                        ...pendencia,
+                        data_admissao:
+                            dataAdmissao ||
+                            pendencia.data_admissao ||
+                            null
+                    },
+                    vinculo
+                );
 
             return res.json({
                 success: true,
@@ -54315,7 +54940,12 @@ router.post(
                 matricula:
                     vinculo.matricula_esocial ||
                     matricula,
-                fonte: 'portal_sst'
+                fonte:
+                    'portal_sst',
+                eventosAtualizados:
+                    aplicacao.eventosAtualizados,
+                pendenciasResolvidas:
+                    aplicacao.pendenciasResolvidas
             });
         } catch (error) {
             const tarefaId = String(
