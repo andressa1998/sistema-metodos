@@ -10127,6 +10127,20 @@ async function enfileirarEventosConectorLocalEsocial() {
         return;
     }
 
+    const empresaSelecionadaObrigatoria =
+        document.getElementById(
+            'socEmpresa'
+        )?.value ||
+        '';
+
+    if (!empresaSelecionadaObrigatoria) {
+        mostrarAlertaESocial(
+            'Selecione uma Unidade/CNPJ específico antes de clicar em "Consultar pelo PC". Não é permitido consultar "Todas as Unidades".',
+            'warning'
+        );
+        return;
+    }
+
     const eventos =
         eventosPendentesParaConectorLocalEsocial();
 
@@ -10249,7 +10263,15 @@ async function enfileirarEventosConectorLocalEsocial() {
                                 eventos.map(
                                     item =>
                                         item.id
-                                )
+                                ),
+                            empresaId:
+                                String(
+                                    empresaFiltro?.id ??
+                                    empresaSelecionada
+                                ),
+                            cnpjSelecionado:
+                                empresaFiltro?.cnpj ||
+                                ''
                         })
                 }
             );
@@ -10341,6 +10363,113 @@ function instalarConectorLocalEsocial() {
     if (cancelar) {
         cancelar.classList.add(
             'd-none'
+        );
+    }
+
+
+    if (
+        botao?.parentElement &&
+        !document.getElementById(
+            'btnResetarMapeamentoConectorV37'
+        )
+    ) {
+        const btnReset =
+            document.createElement(
+                'button'
+            );
+
+        btnReset.id =
+            'btnResetarMapeamentoConectorV37';
+
+        btnReset.type =
+            'button';
+
+        btnReset.className =
+            'btn btn-outline-danger btn-sm ms-2';
+
+        btnReset.innerHTML =
+            '<i class="fas fa-rotate-left me-1"></i> Resetar consultas PC';
+
+        btnReset.title =
+            'Use uma vez após instalar a V3.7 para invalidar consultas feitas com o mapeamento antigo de CNPJ.';
+
+        btnReset.onclick =
+            async function () {
+                const confirmou =
+                    window.confirm(
+                        'Isso vai invalidar a fila/resultados do Conector PC do mapeamento antigo, preservando eventos já enviados em produção e CNPJs sem autorização. Continuar?'
+                    );
+
+                if (!confirmou) {
+                    return;
+                }
+
+                const htmlOriginal =
+                    btnReset.innerHTML;
+
+                btnReset.disabled =
+                    true;
+
+                btnReset.innerHTML =
+                    '<i class="fas fa-spinner fa-spin me-1"></i> Resetando...';
+
+                try {
+                    const token =
+                        await obterTokenESocial();
+
+                    const response =
+                        await fetch(
+                            apiUrl(
+                                '/api/soc/conector-local/resetar-mapeamento-v37'
+                            ),
+                            {
+                                method:
+                                    'POST',
+                                headers:
+                                    criarHeaders(
+                                        token,
+                                        true
+                                    ),
+                                body:
+                                    JSON.stringify({})
+                            }
+                        );
+
+                    const resultado =
+                        await lerRespostaJson(
+                            response
+                        );
+
+                    mostrarAlertaESocial(
+                        `Reset concluído: ${resultado.pendenciasCanceladas || 0} tarefa(s) antigas canceladas, ` +
+                        `${resultado.vinculosPortalRemovidos || 0} vínculo(s) Portal SST removido(s), ` +
+                        `${resultado.eventosLimpos || 0} evento(s) liberado(s) para nova validação.`,
+                        'success'
+                    );
+
+                    await recarregarEventosESocial();
+                    await atualizarStatusConectorLocalEsocial();
+
+                    btnReset.style.display =
+                        'none';
+
+                } catch (error) {
+                    mostrarAlertaESocial(
+                        'Não foi possível resetar as consultas antigas: ' +
+                        error.message,
+                        'danger'
+                    );
+
+                    btnReset.disabled =
+                        false;
+
+                    btnReset.innerHTML =
+                        htmlOriginal;
+                }
+            };
+
+        botao.parentElement.appendChild(
+            btnReset
         );
     }
 

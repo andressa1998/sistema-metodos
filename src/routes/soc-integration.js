@@ -2156,6 +2156,9 @@ function criarIndiceEmpresas(
     const porCnpjBase =
         new Map();
 
+    const cnpjBasesAmbiguas =
+        new Set();
+
 
     for (
         const empresa
@@ -2235,11 +2238,30 @@ function criarIndiceEmpresas(
             if (
                 cnpjBase
             ) {
+                const existenteBase =
+                    porCnpjBase.get(
+                        cnpjBase
+                    );
 
-                porCnpjBase.set(
-                    cnpjBase,
-                    empresa
-                );
+                if (
+                    existenteBase &&
+                    normalizarCnpj(
+                        existenteBase?.cnpj ||
+                        ''
+                    ) !== cnpj
+                ) {
+                    cnpjBasesAmbiguas.add(
+                        cnpjBase
+                    );
+
+                } else if (
+                    !existenteBase
+                ) {
+                    porCnpjBase.set(
+                        cnpjBase,
+                        empresa
+                    );
+                }
             }
         }
     }
@@ -2250,7 +2272,8 @@ function criarIndiceEmpresas(
         porCodigoSoc,
         codigosSocAmbiguos,
         porCnpj,
-        porCnpjBase
+        porCnpjBase,
+        cnpjBasesAmbiguas
     };
 }
 
@@ -2259,14 +2282,9 @@ function localizarEmpresaDoRegistro(
     registro,
     indiceEmpresas
 ) {
-
-    if (
-        !indiceEmpresas
-    ) {
-
+    if (!indiceEmpresas) {
         return null;
     }
-
 
     const inscricaoUnidade =
         normalizarCnpj(
@@ -2281,35 +2299,8 @@ function localizarEmpresaDoRegistro(
             )
         );
 
-
-    if (
-        inscricaoUnidade
-    ) {
-
-        const baseUnidade =
-            inscricaoUnidade
-                .substring(
-                    0,
-                    8
-                );
-
-
-        const porBase =
-            indiceEmpresas
-                .porCnpjBase
-                ?.get(
-                    baseUnidade
-                );
-
-
-        if (
-            porBase
-        ) {
-
-            return porBase;
-        }
-
-
+    if (inscricaoUnidade) {
+        // CNPJ completo tem prioridade absoluta.
         const porCnpj =
             indiceEmpresas
                 .porCnpj
@@ -2317,15 +2308,40 @@ function localizarEmpresaDoRegistro(
                     inscricaoUnidade
                 );
 
-
-        if (
-            porCnpj
-        ) {
-
+        if (porCnpj) {
             return porCnpj;
         }
-    }
 
+        // A raiz só pode ser usada quando não houver mais de uma filial.
+        const baseUnidade =
+            inscricaoUnidade.substring(
+                0,
+                8
+            );
+
+        const baseAmbigua =
+            indiceEmpresas
+                .cnpjBasesAmbiguas
+                ?.has(
+                    baseUnidade
+                );
+
+        if (
+            baseUnidade &&
+            !baseAmbigua
+        ) {
+            const porBase =
+                indiceEmpresas
+                    .porCnpjBase
+                    ?.get(
+                        baseUnidade
+                    );
+
+            if (porBase) {
+                return porBase;
+            }
+        }
+    }
 
     const codigoEmpresaSoc =
         texto(
@@ -2340,22 +2356,24 @@ function localizarEmpresaDoRegistro(
             )
         );
 
+    if (codigoEmpresaSoc) {
+        const porId =
+            indiceEmpresas
+                .porId
+                ?.get(
+                    codigoEmpresaSoc
+                );
 
-    if (
-        codigoEmpresaSoc
-    ) {
+        if (porId) {
+            return porId;
+        }
 
-        // Código SOC ambíguo (várias empresas/CNPJs reais sob o
-        // mesmo código) — sem o CNPJ da unidade no registro, não há
-        // como saber qual é a correta. Melhor não resolver do que
-        // adivinhar errado e arquivar o evento sob o CNPJ errado.
         const ambiguo =
             indiceEmpresas
                 .codigosSocAmbiguos
                 ?.has(
                     codigoEmpresaSoc
                 );
-
 
         const porSoc =
             ambiguo
@@ -2366,31 +2384,10 @@ function localizarEmpresaDoRegistro(
                         codigoEmpresaSoc
                     );
 
-
-        if (
-            porSoc
-        ) {
-
+        if (porSoc) {
             return porSoc;
         }
-
-
-        const porId =
-            indiceEmpresas
-                .porId
-                ?.get(
-                    codigoEmpresaSoc
-                );
-
-
-        if (
-            porId
-        ) {
-
-            return porId;
-        }
     }
-
 
     return null;
 }
@@ -51873,7 +51870,7 @@ router.post(
 
 
 // ============================================================
-// CONECTOR LOCAL eSOCIAL - V3.5
+// CONECTOR LOCAL eSOCIAL - V3.7
 // Chrome normal do Windows + certificado instalado no PC.
 // ============================================================
 
@@ -51929,13 +51926,28 @@ async function carregarEventoConectorLocalEsocial(id) {
     return data || null;
 }
 
-async function enfileirarEventoConectorLocalEsocial(evento) {
+async function enfileirarEventoConectorLocalEsocial(evento, contexto = {}) {
     if (!evento || typeof evento !== 'object') {
         throw new Error('Evento local inválido.');
     }
 
+    const empresaIdContexto =
+        String(
+            contexto?.empresaId ||
+            ''
+        ).trim();
+
+    const eventoFila =
+        empresaIdContexto
+            ? {
+                ...evento,
+                codigo_empresa:
+                    empresaIdContexto
+              }
+            : evento;
+
     const tipoEvento = String(
-        evento.tipo_evento || ''
+        eventoFila.tipo_evento || ''
     ).trim().toUpperCase();
 
     if (!['S-2220', 'S-2240'].includes(tipoEvento)) {
@@ -51944,7 +51956,7 @@ async function enfileirarEventoConectorLocalEsocial(evento) {
         );
     }
 
-    const cache = await buscarVinculoOficialCacheEsocial(evento);
+    const cache = await buscarVinculoOficialCacheEsocial(eventoFila);
 
     if (
         cache &&
@@ -51975,7 +51987,7 @@ async function enfileirarEventoConectorLocalEsocial(evento) {
 
     const semAutorizacao =
         await buscarPendenciaSemAutorizacaoConectorLocalEsocial(
-            evento
+            eventoFila
         );
 
     if (
@@ -51999,7 +52011,7 @@ async function enfileirarEventoConectorLocalEsocial(evento) {
 
     const pendencia =
         await criarOuAtualizarPendenciaMatriculaEsocial(
-            evento,
+            eventoFila,
             'AGUARDANDO_CONECTOR_LOCAL'
         );
 
@@ -52029,116 +52041,132 @@ async function enfileirarEventoConectorLocalEsocial(evento) {
     };
 }
 
-async function obterCnpjCompletoConectorLocalEsocial(pendencia) {
-    const tpInsc = String(
-        pendencia?.tp_insc_empregador || ''
-    ).trim();
+async function obterCnpjCompletoConectorLocalEsocial(
+    pendencia
+) {
+    const tpInsc =
+        String(
+            pendencia?.tp_insc_empregador ||
+            ''
+        ).trim();
 
     const nrInsc =
         normalizarNrInscEmpregadorEsocial(
             tpInsc,
-            pendencia?.nr_insc_empregador || ''
+            pendencia?.nr_insc_empregador ||
+            ''
         );
 
-    const empregadores =
-        await listarEmpregadoresRoboRelatoriosEsocial();
+    const codigoEmpresa =
+        String(
+            pendencia?.codigo_empresa ||
+            ''
+        ).trim();
 
-    const grupo = (
-        Array.isArray(empregadores)
-            ? empregadores
-            : []
-    ).find(
-        item =>
-            String(item?.tpInsc || '').trim() === tpInsc &&
-            nrInscEmpregadorEquivalenteEsocial(
-                tpInsc,
-                item?.nrInsc || '',
-                nrInsc
+    const empresas =
+        await buscarEmpresasSupabase();
+
+    const candidatas =
+        (
+            Array.isArray(
+                empresas
             )
-    );
-
-    let cnpj = normalizarCnpj(
-        grupo?.cnpjAcesso || ''
-    );
-
-    if (
-        cnpj.length !==
-            14
-    ) {
-        const empresas =
-            await buscarEmpresasSupabase();
-
-        const codigoEmpresa =
-            String(
-                pendencia?.codigo_empresa ||
-                ''
-            ).trim();
-
-        const candidatas =
-            (
-                Array.isArray(
-                    empresas
-                )
-                    ? empresas
-                    : []
+                ? empresas
+                : []
+        )
+            .map(
+                empresa => ({
+                    empresa,
+                    cnpj:
+                        normalizarCnpj(
+                            empresa?.cnpj ||
+                            ''
+                        )
+                })
             )
-                .map(
-                    empresa => ({
-                        empresa,
-                        cnpj:
-                            normalizarCnpj(
-                                empresa?.cnpj ||
-                                ''
-                            )
-                    })
-                )
-                .filter(
-                    item =>
-                        item.cnpj.length ===
-                        14
-                );
+            .filter(
+                item =>
+                    item.cnpj.length ===
+                    14
+            );
 
-        const exata =
+    // 1) ID interno exato da unidade.
+    if (codigoEmpresa) {
+        const porId =
             candidatas.find(
                 item =>
-                    codigoEmpresa &&
                     String(
                         item.empresa?.id ??
+                        ''
+                    ).trim() ===
+                        codigoEmpresa
+            );
+
+        if (porId) {
+            return porId.cnpj;
+        }
+
+        // 2) codigo_soc só é seguro quando aponta para UMA unidade.
+        const porCodigoSoc =
+            candidatas.filter(
+                item =>
+                    String(
                         item.empresa?.codigo_soc ??
                         ''
                     ).trim() ===
                         codigoEmpresa
             );
 
-        const mesmaRaiz =
-            candidatas.filter(
-                item =>
-                    normalizarNrInscEmpregadorEsocial(
-                        tpInsc,
-                        item.cnpj
-                    ) ===
-                        nrInsc
-            );
+        if (porCodigoSoc.length === 1) {
+            return porCodigoSoc[0].cnpj;
+        }
 
-        cnpj =
-            exata?.cnpj ||
-            mesmaRaiz.find(
-                item =>
-                    item.cnpj.slice(
-                        8,
-                        12
-                    ) ===
-                        '0001'
-            )?.cnpj ||
-            mesmaRaiz[0]?.cnpj ||
-            '';
+        if (porCodigoSoc.length > 1) {
+            console.warn(
+                '⚠️ Código SOC ambíguo. Nenhum CNPJ será escolhido automaticamente.',
+                {
+                    codigoEmpresa,
+                    cnpjs:
+                        porCodigoSoc.map(
+                            item => item.cnpj
+                        )
+                }
+            );
+            return '';
+        }
     }
 
-    return cnpj.length === 14
-        ? cnpj
-        : '';
-}
+    // 3) A raiz do empregador só pode decidir o CNPJ se existir UMA unidade.
+    const mesmaRaiz =
+        candidatas.filter(
+            item =>
+                normalizarNrInscEmpregadorEsocial(
+                    tpInsc,
+                    item.cnpj
+                ) ===
+                    nrInsc
+        );
 
+    if (mesmaRaiz.length === 1) {
+        return mesmaRaiz[0].cnpj;
+    }
+
+    if (mesmaRaiz.length > 1) {
+        console.warn(
+            '⚠️ Mais de uma filial usa a mesma raiz. O conector não vai adivinhar o CNPJ.',
+            {
+                nrInsc,
+                codigoEmpresa,
+                cnpjs:
+                    mesmaRaiz.map(
+                        item => item.cnpj
+                    )
+            }
+        );
+    }
+
+    return '';
+}
 
 async function buscarPendenciaSemAutorizacaoConectorLocalEsocial(
     evento
@@ -52424,9 +52452,326 @@ router.post(
 );
 
 router.post(
+    '/conector-local/resetar-mapeamento-v37',
+    async (req, res) => {
+        try {
+            const agora =
+                new Date().toISOString();
+
+            const {
+                data: vinculosPortal,
+                error: erroVinculos
+            } =
+                await getSupabase()
+                    .from(
+                        'esocial_vinculos'
+                    )
+                    .delete()
+                    .eq(
+                        'fonte',
+                        'portal_sst'
+                    )
+                    .select(
+                        'tp_insc_empregador,nr_insc_empregador,cpf,matricula_esocial'
+                    );
+
+            if (erroVinculos) {
+                throw erroVinculos;
+            }
+
+            const {
+                data: eventosPortal,
+                error: erroEventos
+            } =
+                await getSupabase()
+                    .from(
+                        'esocial_eventos'
+                    )
+                    .select(
+                        'id,ambiente_esocial,numero_recibo'
+                    )
+                    .eq(
+                        'matricula_origem',
+                        'portal_sst'
+                    );
+
+            if (erroEventos) {
+                throw erroEventos;
+            }
+
+            let eventosLimpos = 0;
+
+            for (
+                const evento
+                of (
+                    Array.isArray(
+                        eventosPortal
+                    )
+                        ? eventosPortal
+                        : []
+                )
+            ) {
+                const protegido =
+                    Number(
+                        evento?.ambiente_esocial
+                    ) === 1 &&
+                    Boolean(
+                        String(
+                            evento?.numero_recibo ||
+                            ''
+                        ).trim()
+                    );
+
+                if (protegido) {
+                    continue;
+                }
+
+                const { error: erroLimpeza } =
+                    await getSupabase()
+                        .from(
+                            'esocial_eventos'
+                        )
+                        .update({
+                            matricula: null,
+                            cod_categ: null,
+                            matricula_origem: null,
+                            matricula_oficial_atualizada_em: null,
+                            data_admissao_esocial: null,
+                            xml_gerado: null,
+                            xml_assinado: null,
+                            id_evento_esocial: null,
+                            verificacao_esocial_completa: false,
+                            verificado_esocial_em: null,
+                            updated_at: agora
+                        })
+                        .eq(
+                            'id',
+                            evento.id
+                        );
+
+                if (erroLimpeza) {
+                    throw erroLimpeza;
+                }
+
+                eventosLimpos++;
+            }
+
+            const {
+                data: pendencias,
+                error: erroPendencias
+            } =
+                await getSupabase()
+                    .from(
+                        'esocial_matriculas_pendentes'
+                    )
+                    .select(
+                        'id,status,motivo'
+                    )
+                    .neq(
+                        'status',
+                        'sem_autorizacao_conector_local'
+                    );
+
+            if (erroPendencias) {
+                throw erroPendencias;
+            }
+
+            const idsCancelar =
+                (
+                    Array.isArray(
+                        pendencias
+                    )
+                        ? pendencias
+                        : []
+                )
+                    .filter(
+                        item => {
+                            const status =
+                                String(
+                                    item?.status ||
+                                    ''
+                                );
+
+                            const motivo =
+                                String(
+                                    item?.motivo ||
+                                    ''
+                                );
+
+                            return (
+                                [
+                                    'aguardando_conector_local',
+                                    'processando_conector_local',
+                                    'erro_conector_local',
+                                    'nao_localizado_conector_local',
+                                    'resolvido'
+                                ].includes(status) &&
+                                (
+                                    /CONECTOR_LOCAL|PORTAL_SST|VINCULO_CONFIRMADO_PORTAL_SST|VINCULO_NAO_LOCALIZADO_PORTAL_SST/i.test(motivo) ||
+                                    [
+                                        'aguardando_conector_local',
+                                        'processando_conector_local',
+                                        'erro_conector_local',
+                                        'nao_localizado_conector_local'
+                                    ].includes(status)
+                                )
+                            );
+                        }
+                    )
+                    .map(
+                        item => item.id
+                    );
+
+            let pendenciasCanceladas = 0;
+
+            if (idsCancelar.length) {
+                const {
+                    data: canceladas,
+                    error: erroCancelamento
+                } =
+                    await getSupabase()
+                        .from(
+                            'esocial_matriculas_pendentes'
+                        )
+                        .update({
+                            status:
+                                'cancelado_mapeamento_v37',
+                            motivo:
+                                'CANCELADO_CORRECAO_MAPEAMENTO_V37',
+                            ultimo_erro:
+                                'Consulta anterior invalidada por possível associação a CNPJ incorreto.',
+                            proxima_tentativa_em:
+                                null,
+                            updated_at:
+                                agora
+                        })
+                        .in(
+                            'id',
+                            idsCancelar
+                        )
+                        .select(
+                            'id'
+                        );
+
+                if (erroCancelamento) {
+                    throw erroCancelamento;
+                }
+
+                pendenciasCanceladas =
+                    Array.isArray(
+                        canceladas
+                    )
+                        ? canceladas.length
+                        : 0;
+            }
+
+            return res.json({
+                success: true,
+                vinculosPortalRemovidos:
+                    Array.isArray(
+                        vinculosPortal
+                    )
+                        ? vinculosPortal.length
+                        : 0,
+                eventosLimpos,
+                pendenciasCanceladas
+            });
+
+        } catch (error) {
+            return res
+                .status(500)
+                .json({
+                    success: false,
+                    error:
+                        error?.message ||
+                        String(error)
+                });
+        }
+    }
+);
+
+
+router.post(
     '/conector-local/enfileirar-lote',
     async (req, res) => {
         try {
+            const empresaId =
+                String(
+                    req.body?.empresaId ||
+                    ''
+                ).trim();
+
+            const cnpjSelecionado =
+                normalizarCnpj(
+                    req.body?.cnpjSelecionado ||
+                    ''
+                );
+
+            if (!empresaId) {
+                return res
+                    .status(400)
+                    .json({
+                        success: false,
+                        error:
+                            'Selecione uma Unidade/CNPJ específico antes de consultar pelo PC.'
+                    });
+            }
+
+            const empresasSelecionadas =
+                await buscarEmpresasSupabase({
+                    empresaId
+                });
+
+            const empresaSelecionada =
+                (
+                    Array.isArray(
+                        empresasSelecionadas
+                    )
+                        ? empresasSelecionadas
+                        : []
+                )[0] ||
+                null;
+
+            if (!empresaSelecionada) {
+                return res
+                    .status(400)
+                    .json({
+                        success: false,
+                        error:
+                            'A unidade selecionada não foi encontrada.'
+                    });
+            }
+
+            const cnpjEmpresa =
+                normalizarCnpj(
+                    empresaSelecionada?.cnpj ||
+                    ''
+                );
+
+            if (cnpjEmpresa.length !== 14) {
+                return res
+                    .status(400)
+                    .json({
+                        success: false,
+                        error:
+                            'A unidade selecionada não possui CNPJ válido cadastrado.'
+                    });
+            }
+
+            if (
+                cnpjSelecionado &&
+                cnpjSelecionado !==
+                    cnpjEmpresa
+            ) {
+                return res
+                    .status(409)
+                    .json({
+                        success: false,
+                        error:
+                            'O CNPJ enviado pela tela não corresponde ao cadastro da unidade.'
+                    });
+            }
+
             const ids = Array.from(
                 new Set(
                     (
@@ -52470,9 +52815,31 @@ router.post(
                 )
             ) {
                 try {
+                    const codigoEvento =
+                        String(
+                            evento?.codigo_empresa ??
+                            evento?.codigoEmpresa ??
+                            ''
+                        ).trim();
+
+                    if (
+                        codigoEvento &&
+                        codigoEvento !==
+                            empresaId
+                    ) {
+                        throw new Error(
+                            `Evento ${evento?.id || ''} pertence à empresa ${codigoEvento}, mas a unidade selecionada é ${empresaId}.`
+                        );
+                    }
+
                     const resultado =
                         await enfileirarEventoConectorLocalEsocial(
-                            evento
+                            evento,
+                            {
+                                empresaId,
+                                cnpj:
+                                    cnpjEmpresa
+                            }
                         );
 
                     if (
@@ -52500,6 +52867,9 @@ router.post(
 
             return res.json({
                 success: true,
+                empresaId,
+                cnpj:
+                    cnpjEmpresa,
                 solicitados: ids.length,
                 enfileirados,
                 resolvidosDoCache: imediatos,
