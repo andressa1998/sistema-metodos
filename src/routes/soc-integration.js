@@ -51870,7 +51870,7 @@ router.post(
 
 
 // ============================================================
-// CONECTOR LOCAL eSOCIAL - V3.7
+// CONECTOR LOCAL eSOCIAL - V3.8
 // Chrome normal do Windows + certificado instalado no PC.
 // ============================================================
 
@@ -51956,7 +51956,12 @@ async function enfileirarEventoConectorLocalEsocial(evento, contexto = {}) {
         );
     }
 
-    const cache = await buscarVinculoOficialCacheEsocial(eventoFila);
+    const cache =
+        empresaIdContexto
+            ? null
+            : await buscarVinculoOficialCacheEsocial(
+                eventoFila
+              );
 
     if (
         cache &&
@@ -51987,7 +51992,8 @@ async function enfileirarEventoConectorLocalEsocial(evento, contexto = {}) {
 
     const semAutorizacao =
         await buscarPendenciaSemAutorizacaoConectorLocalEsocial(
-            eventoFila
+            eventoFila,
+            empresaIdContexto
         );
 
     if (
@@ -52169,12 +52175,20 @@ async function obterCnpjCompletoConectorLocalEsocial(
 }
 
 async function buscarPendenciaSemAutorizacaoConectorLocalEsocial(
-    evento
+    evento,
+    empresaId = ''
 ) {
     const chave =
         dadosChaveVinculoMatricula(
             evento
         );
+
+    const empresaIdNormalizado =
+        String(
+            empresaId ||
+            evento?.codigo_empresa ||
+            ''
+        ).trim();
 
     if (
         !chave.tpInsc ||
@@ -52183,44 +52197,59 @@ async function buscarPendenciaSemAutorizacaoConectorLocalEsocial(
         return null;
     }
 
+    let query =
+        getSupabase()
+            .from(
+                'esocial_matriculas_pendentes'
+            )
+            .select('*')
+            .eq(
+                'tp_insc_empregador',
+                chave.tpInsc
+            )
+            .eq(
+                'nr_insc_empregador',
+                chave.nrInsc
+            )
+            .eq(
+                'status',
+                'sem_autorizacao_conector_local'
+            );
+
+    if (
+        empresaIdNormalizado
+    ) {
+        query =
+            query.eq(
+                'codigo_empresa',
+                empresaIdNormalizado
+            );
+    }
+
     const {
         data,
         error
-    } = await getSupabase()
-        .from(
-            'esocial_matriculas_pendentes'
-        )
-        .select('*')
-        .eq(
-            'tp_insc_empregador',
-            chave.tpInsc
-        )
-        .eq(
-            'nr_insc_empregador',
-            chave.nrInsc
-        )
-        .eq(
-            'status',
-            'sem_autorizacao_conector_local'
-        )
-        .order(
-            'updated_at',
-            {
-                ascending:
-                    false
-            }
-        )
-        .limit(1)
-        .maybeSingle();
+    } =
+        await query
+            .order(
+                'updated_at',
+                {
+                    ascending:
+                        false
+                }
+            )
+            .limit(1)
+            .maybeSingle();
 
-    if (error) {
+    if (
+        error
+    ) {
         throw error;
     }
 
     return data ||
         null;
 }
-
 
 async function listarCnpjsSemAutorizacaoConectorLocalEsocial() {
     const {
@@ -52246,7 +52275,9 @@ async function listarCnpjsSemAutorizacaoConectorLocalEsocial() {
         )
         .limit(1000);
 
-    if (error) {
+    if (
+        error
+    ) {
         throw error;
     }
 
@@ -52262,7 +52293,14 @@ async function listarCnpjsSemAutorizacaoConectorLocalEsocial() {
         const item
         of registros
     ) {
+        const codigoEmpresa =
+            String(
+                item?.codigo_empresa ||
+                ''
+            ).trim();
+
         const chave =
+            codigoEmpresa ||
             [
                 String(
                     item?.tp_insc_empregador ||
@@ -52271,7 +52309,11 @@ async function listarCnpjsSemAutorizacaoConectorLocalEsocial() {
                 String(
                     item?.nr_insc_empregador ||
                     ''
-                ).trim()
+                ).trim(),
+                String(
+                    item?.id ||
+                    ''
+                )
             ].join('|');
 
         if (
@@ -52290,6 +52332,9 @@ async function listarCnpjsSemAutorizacaoConectorLocalEsocial() {
         mapa.set(
             chave,
             {
+                codigoEmpresa:
+                    codigoEmpresa ||
+                    null,
                 cnpj:
                     cnpj ||
                     String(
@@ -52340,7 +52385,6 @@ async function listarCnpjsSemAutorizacaoConectorLocalEsocial() {
                 )
         );
 }
-
 
 router.get(
     '/conector-local/status',
@@ -52452,7 +52496,7 @@ router.post(
 );
 
 router.post(
-    '/conector-local/resetar-mapeamento-v37',
+    '/conector-local/resetar-mapeamento-v38',
     async (req, res) => {
         try {
             const agora =
@@ -52566,10 +52610,6 @@ router.post(
                     )
                     .select(
                         'id,status,motivo'
-                    )
-                    .neq(
-                        'status',
-                        'sem_autorizacao_conector_local'
                     );
 
             if (erroPendencias) {
@@ -52604,6 +52644,7 @@ router.post(
                                     'processando_conector_local',
                                     'erro_conector_local',
                                     'nao_localizado_conector_local',
+                                    'sem_autorizacao_conector_local',
                                     'resolvido'
                                 ].includes(status) &&
                                 (
@@ -52612,7 +52653,8 @@ router.post(
                                         'aguardando_conector_local',
                                         'processando_conector_local',
                                         'erro_conector_local',
-                                        'nao_localizado_conector_local'
+                                        'nao_localizado_conector_local',
+                                        'sem_autorizacao_conector_local'
                                     ].includes(status)
                                 )
                             );
@@ -52635,9 +52677,9 @@ router.post(
                         )
                         .update({
                             status:
-                                'cancelado_mapeamento_v37',
+                                'cancelado_mapeamento_v38',
                             motivo:
-                                'CANCELADO_CORRECAO_MAPEAMENTO_V37',
+                                'CANCELADO_CORRECAO_MAPEAMENTO_V38',
                             ultimo_erro:
                                 'Consulta anterior invalidada por possível associação a CNPJ incorreto.',
                             proxima_tentativa_em:
@@ -52815,20 +52857,68 @@ router.post(
                 )
             ) {
                 try {
-                    const codigoEvento =
+                    const cnpjEvento =
+                        normalizarCnpj(
+                            evento?.cnpj_unidade ||
+                            evento?.cnpj ||
+                            ''
+                        );
+
+                    const unidadeEvento =
                         String(
-                            evento?.codigo_empresa ??
-                            evento?.codigoEmpresa ??
+                            evento?.unidade ||
+                            evento?.nome_unidade ||
+                            ''
+                        ).trim();
+
+                    const holdingEvento =
+                        String(
+                            evento?.holding ||
+                            ''
+                        ).trim();
+
+                    const unidadeSelecionada =
+                        String(
+                            empresaSelecionada?.unidade ||
+                            ''
+                        ).trim();
+
+                    const holdingSelecionada =
+                        String(
+                            empresaSelecionada?.holding ||
                             ''
                         ).trim();
 
                     if (
-                        codigoEvento &&
-                        codigoEvento !==
-                            empresaId
+                        cnpjEvento.length ===
+                            14 &&
+                        cnpjEvento !==
+                            cnpjEmpresa
                     ) {
                         throw new Error(
-                            `Evento ${evento?.id || ''} pertence à empresa ${codigoEvento}, mas a unidade selecionada é ${empresaId}.`
+                            `Evento ${evento?.id || ''} está no CNPJ ${cnpjEvento}, mas a unidade selecionada é ${cnpjEmpresa}.`
+                        );
+                    }
+
+                    if (
+                        unidadeEvento &&
+                        unidadeSelecionada &&
+                        unidadeEvento !==
+                            unidadeSelecionada
+                    ) {
+                        throw new Error(
+                            `Evento ${evento?.id || ''} pertence à unidade "${unidadeEvento}", mas foi selecionada "${unidadeSelecionada}".`
+                        );
+                    }
+
+                    if (
+                        holdingEvento &&
+                        holdingSelecionada &&
+                        holdingEvento !==
+                            holdingSelecionada
+                    ) {
+                        throw new Error(
+                            `Evento ${evento?.id || ''} pertence à holding "${holdingEvento}", mas foi selecionada "${holdingSelecionada}".`
                         );
                     }
 
@@ -53701,7 +53791,7 @@ router.post(
                         'esocial_matriculas_pendentes'
                     )
                     .select(
-                        'id,tp_insc_empregador,nr_insc_empregador'
+                        'id,tp_insc_empregador,nr_insc_empregador,codigo_empresa'
                     )
                     .in(
                         'id',
@@ -53762,12 +53852,8 @@ router.post(
                             agora
                     })
                     .eq(
-                        'tp_insc_empregador',
-                        primeira.tp_insc_empregador
-                    )
-                    .eq(
-                        'nr_insc_empregador',
-                        primeira.nr_insc_empregador
+                        'codigo_empresa',
+                        primeira.codigo_empresa
                     )
                     .in(
                         'status',

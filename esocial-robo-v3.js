@@ -9976,7 +9976,196 @@ async function atualizarStatusConectorLocalEsocial() {
 }
 
 
-function eventosPendentesParaConectorLocalEsocial() {
+
+function obterEmpresaSelecionadaNaTelaEsocial() {
+    const holding =
+        String(
+            document.getElementById(
+                'filtroHoldingEvento'
+            )?.value ||
+            ''
+        ).trim();
+
+    const unidade =
+        String(
+            document.getElementById(
+                'filtroUnidadeEvento'
+            )?.value ||
+            ''
+        ).trim();
+
+    if (!unidade) {
+        return {
+            ok: false,
+            holding,
+            unidade,
+            erro:
+                'Selecione uma Unidade/CNPJ específico. "Todas as Unidades" não é permitido para Consultar pelo PC.'
+        };
+    }
+
+    let candidatas =
+        empresasSocCache.filter(
+            empresa => {
+                const unidadeEmpresa =
+                    String(
+                        empresa?.unidade ||
+                        ''
+                    ).trim();
+
+                const holdingEmpresa =
+                    String(
+                        empresa?.holding ||
+                        ''
+                    ).trim();
+
+                return (
+                    unidadeEmpresa ===
+                        unidade &&
+                    (
+                        !holding ||
+                        holdingEmpresa ===
+                            holding
+                    )
+                );
+            }
+        );
+
+    // Se o nome da unidade não bastar, tenta resolver pelo CNPJ
+    // presente nos próprios eventos que estão aparecendo na tela.
+    if (
+        candidatas.length !==
+            1
+    ) {
+        const fonte =
+            eventosESocialHistorico.length
+                ? eventosESocialHistorico
+                : eventosESocialBase;
+
+        const cnpjsDaUnidade =
+            new Set(
+                fonte
+                    .filter(
+                        evento => {
+                            return (
+                                String(
+                                    evento?.unidade ||
+                                    evento?.nome_unidade ||
+                                    ''
+                                ).trim() ===
+                                    unidade &&
+                                (
+                                    !holding ||
+                                    String(
+                                        evento?.holding ||
+                                        ''
+                                    ).trim() ===
+                                        holding
+                                )
+                            );
+                        }
+                    )
+                    .map(
+                        evento =>
+                            String(
+                                evento?.cnpj_unidade ||
+                                evento?.cnpj ||
+                                ''
+                            ).replace(
+                                /\D/g,
+                                ''
+                            )
+                    )
+                    .filter(
+                        cnpj =>
+                            cnpj.length ===
+                            14
+                    )
+            );
+
+        if (
+            cnpjsDaUnidade.size ===
+                1
+        ) {
+            const cnpjExato =
+                Array.from(
+                    cnpjsDaUnidade
+                )[0];
+
+            candidatas =
+                empresasSocCache.filter(
+                    empresa =>
+                        String(
+                            empresa?.cnpj ||
+                            ''
+                        ).replace(
+                            /\D/g,
+                            ''
+                        ) ===
+                            cnpjExato
+                );
+        }
+    }
+
+    if (
+        candidatas.length !==
+            1
+    ) {
+        return {
+            ok: false,
+            holding,
+            unidade,
+            erro:
+                candidatas.length >
+                    1
+                    ? `A unidade "${unidade}" está duplicada no cadastro. Não vou escolher um CNPJ automaticamente.`
+                    : `Não consegui localizar o CNPJ cadastrado da unidade "${unidade}".`
+        };
+    }
+
+    const empresa =
+        candidatas[0];
+
+    const cnpj =
+        String(
+            empresa?.cnpj ||
+            ''
+        ).replace(
+            /\D/g,
+            ''
+        );
+
+    if (
+        cnpj.length !==
+            14
+    ) {
+        return {
+            ok: false,
+            holding,
+            unidade,
+            erro:
+                `A unidade "${unidade}" não possui CNPJ válido no cadastro.`
+        };
+    }
+
+    return {
+        ok: true,
+        holding,
+        unidade,
+        empresa,
+        empresaId:
+            String(
+                empresa?.id ??
+                ''
+            ),
+        cnpj
+    };
+}
+
+
+function eventosPendentesParaConectorLocalEsocial(
+    selecao
+) {
     const origem =
         (
             Array.isArray(
@@ -9987,37 +10176,26 @@ function eventosPendentesParaConectorLocalEsocial() {
             ? eventosESocialHistorico
             : eventosESocial;
 
-    const holdingSelecionada =
-        document.getElementById(
-            'socHolding'
-        )?.value ||
-        '';
+    const holding =
+        String(
+            selecao?.holding ||
+            ''
+        ).trim();
 
-    const empresaSelecionada =
-        document.getElementById(
-            'socEmpresa'
-        )?.value ||
-        '';
+    const unidade =
+        String(
+            selecao?.unidade ||
+            ''
+        ).trim();
 
-    const aplicarFiltroEmpresa =
-        Boolean(
-            holdingSelecionada ||
-            empresaSelecionada
+    const cnpjSelecionado =
+        String(
+            selecao?.cnpj ||
+            ''
+        ).replace(
+            /\D/g,
+            ''
         );
-
-    const codigosPermitidos =
-        aplicarFiltroEmpresa
-            ? new Set(
-                empresasPermitidasPeloFiltro()
-                    .map(
-                        empresa =>
-                            String(
-                                empresa.id ??
-                                ''
-                            ).trim()
-                    )
-              )
-            : null;
 
     return Array.from(
         new Map(
@@ -10030,32 +10208,56 @@ function eventosPendentesParaConectorLocalEsocial() {
             )
                 .filter(
                     evento => {
-                        if (
-                            aplicarFiltroEmpresa
-                        ) {
-                            const codigoEmpresaEvento =
-                                String(
-                                    evento?.codigo_empresa ??
-                                    evento?.codigoEmpresa ??
-                                    primeiroCampo(
-                                        evento,
-                                        [
-                                            'CODIGOEMPRESA',
-                                            'codigo_empresa',
-                                            'codigoEmpresa'
-                                        ],
-                                        ''
-                                    )
-                                ).trim();
+                        const holdingEvento =
+                            String(
+                                evento?.holding ||
+                                ''
+                            ).trim();
 
-                            if (
-                                !codigosPermitidos.has(
-                                    codigoEmpresaEvento
-                                )
-                            ) {
-                                return false;
-                            }
+                        const unidadeEvento =
+                            String(
+                                evento?.unidade ||
+                                evento?.nome_unidade ||
+                                ''
+                            ).trim();
+
+                        if (
+                            holding &&
+                            holdingEvento !==
+                                holding
+                        ) {
+                            return false;
                         }
+
+                        if (
+                            unidade &&
+                            unidadeEvento !==
+                                unidade
+                        ) {
+                            return false;
+                        }
+
+                        const cnpjEvento =
+                            String(
+                                evento?.cnpj_unidade ||
+                                evento?.cnpj ||
+                                ''
+                            ).replace(
+                                /\D/g,
+                                ''
+                            );
+
+                        if (
+                            cnpjSelecionado.length ===
+                                14 &&
+                            cnpjEvento.length ===
+                                14 &&
+                            cnpjEvento !==
+                                cnpjSelecionado
+                        ) {
+                            return false;
+                        }
+
                         const tipo =
                             String(
                                 evento?.tipo_evento ||
@@ -10108,7 +10310,6 @@ function eventosPendentesParaConectorLocalEsocial() {
     );
 }
 
-
 async function enfileirarEventosConectorLocalEsocial() {
     const status =
         await requisicaoJson(
@@ -10127,99 +10328,47 @@ async function enfileirarEventosConectorLocalEsocial() {
         return;
     }
 
-    const empresaSelecionadaObrigatoria =
-        document.getElementById(
-            'socEmpresa'
-        )?.value ||
-        '';
+    const selecao =
+        obterEmpresaSelecionadaNaTelaEsocial();
 
-    if (!empresaSelecionadaObrigatoria) {
+    if (
+        !selecao.ok
+    ) {
         mostrarAlertaESocial(
-            'Selecione uma Unidade/CNPJ específico antes de clicar em "Consultar pelo PC". Não é permitido consultar "Todas as Unidades".',
+            selecao.erro,
             'warning'
         );
+
         return;
     }
 
     const eventos =
-        eventosPendentesParaConectorLocalEsocial();
+        eventosPendentesParaConectorLocalEsocial(
+            selecao
+        );
 
     if (
         !eventos.length
     ) {
-        const empresaSelecionada =
-            document.getElementById(
-                'socEmpresa'
-            )?.value ||
-            '';
-
-        const holdingSelecionada =
-            document.getElementById(
-                'socHolding'
-            )?.value ||
-            '';
-
         mostrarAlertaESocial(
-            (
-                empresaSelecionada ||
-                holdingSelecionada
-            )
-                ? 'Não há vínculos/matrículas pendentes dentro do filtro selecionado.'
-                : 'Não há vínculos/matrículas pendentes para consultar.',
+            `Não há vínculos/matrículas pendentes para ${selecao.unidade}.`,
             'info'
         );
 
         return;
     }
 
-    const empresaSelecionada =
-        document.getElementById(
-            'socEmpresa'
-        )?.value ||
-        '';
-
-    const holdingSelecionada =
-        document.getElementById(
-            'socHolding'
-        )?.value ||
-        '';
-
-    const empresaFiltro =
-        empresaSelecionada
-            ? empresasSocCache.find(
-                item =>
-                    String(
-                        item.id ??
-                        ''
-                    ) ===
-                    String(
-                        empresaSelecionada
-                    )
-              )
-            : null;
-
     const escopoConsulta =
-        empresaFiltro
-            ? (
-                `${empresaFiltro.unidade || 'Empresa'} ` +
-                (
-                    empresaFiltro.cnpj
-                        ? `(${formatarCnpjFiltroEsocial(empresaFiltro.cnpj)})`
-                        : ''
-                )
-              ).trim()
-            : (
-                holdingSelecionada
-                    ? `holding "${holdingSelecionada}"`
-                    : 'todas as empresas'
-              );
+        `${selecao.unidade} (${formatarCnpjFiltroEsocial(selecao.cnpj)})`;
 
     const confirmou =
         window.confirm(
             `Enviar ${eventos.length} consulta(s) de vínculo/matrícula de ${escopoConsulta} para o Conector eSocial deste computador?`
         );
 
-    if (!confirmou) {
+    if (
+        !confirmou
+    ) {
         return;
     }
 
@@ -10265,13 +10414,9 @@ async function enfileirarEventosConectorLocalEsocial() {
                                         item.id
                                 ),
                             empresaId:
-                                String(
-                                    empresaFiltro?.id ??
-                                    empresaSelecionada
-                                ),
+                                selecao.empresaId,
                             cnpjSelecionado:
-                                empresaFiltro?.cnpj ||
-                                ''
+                                selecao.cnpj
                         })
                 }
             );
@@ -10370,7 +10515,7 @@ function instalarConectorLocalEsocial() {
     if (
         botao?.parentElement &&
         !document.getElementById(
-            'btnResetarMapeamentoConectorV37'
+            'btnResetarMapeamentoConectorV38'
         )
     ) {
         const btnReset =
@@ -10379,7 +10524,7 @@ function instalarConectorLocalEsocial() {
             );
 
         btnReset.id =
-            'btnResetarMapeamentoConectorV37';
+            'btnResetarMapeamentoConectorV38';
 
         btnReset.type =
             'button';
@@ -10391,7 +10536,7 @@ function instalarConectorLocalEsocial() {
             '<i class="fas fa-rotate-left me-1"></i> Resetar consultas PC';
 
         btnReset.title =
-            'Use uma vez após instalar a V3.7 para invalidar consultas feitas com o mapeamento antigo de CNPJ.';
+            'Use uma vez após instalar a V3.8 para invalidar consultas feitas com o mapeamento antigo de CNPJ.';
 
         btnReset.onclick =
             async function () {
@@ -10420,7 +10565,7 @@ function instalarConectorLocalEsocial() {
                     const response =
                         await fetch(
                             apiUrl(
-                                '/api/soc/conector-local/resetar-mapeamento-v37'
+                                '/api/soc/conector-local/resetar-mapeamento-v38'
                             ),
                             {
                                 method:
