@@ -51873,7 +51873,7 @@ router.post(
 
 
 // ============================================================
-// CONECTOR LOCAL eSOCIAL - V3
+// CONECTOR LOCAL eSOCIAL - V3.1
 // Chrome normal do Windows + certificado instalado no PC.
 // ============================================================
 
@@ -52138,7 +52138,8 @@ router.get(
                     'status',
                     [
                         'aguardando_conector_local',
-                        'processando_conector_local'
+                        'processando_conector_local',
+                        'erro_conector_local'
                     ]
                 )
                 .limit(1000);
@@ -52166,6 +52167,12 @@ router.get(
                         item =>
                             item.status ===
                             'processando_conector_local'
+                    ).length,
+                erros:
+                    tarefas.filter(
+                        item =>
+                            item.status ===
+                            'erro_conector_local'
                     ).length
             });
         } catch (error) {
@@ -52452,6 +52459,304 @@ router.post(
     }
 );
 
+
+router.get(
+    '/conector-local/proximo-lote',
+    async (req, res) => {
+        if (
+            !validarChaveConectorLocalEsocial(
+                req,
+                res
+            )
+        ) {
+            return;
+        }
+
+        try {
+            ultimoHeartbeatConectorLocalEsocial =
+                new Date().toISOString();
+
+            const agora =
+                Date.now();
+
+            const {
+                data: candidatas,
+                error
+            } = await getSupabase()
+                .from(
+                    'esocial_matriculas_pendentes'
+                )
+                .select('*')
+                .in(
+                    'status',
+                    [
+                        'aguardando_conector_local',
+                        'erro_conector_local'
+                    ]
+                )
+                .order(
+                    'updated_at',
+                    {
+                        ascending: true
+                    }
+                )
+                .limit(500);
+
+            if (error) {
+                throw error;
+            }
+
+            const pendencias =
+                (
+                    Array.isArray(candidatas)
+                        ? candidatas
+                        : []
+                )
+                    .filter(
+                        item => {
+                            const status =
+                                String(
+                                    item?.status ||
+                                    ''
+                                ).trim();
+
+                            const tentativas =
+                                Number(
+                                    item?.tentativas ||
+                                    0
+                                );
+
+                            if (
+                                status ===
+                                    'erro_conector_local' &&
+                                tentativas >=
+                                    4
+                            ) {
+                                return false;
+                            }
+
+                            const proxima =
+                                item?.proxima_tentativa_em
+                                    ? new Date(
+                                        item.proxima_tentativa_em
+                                      ).getTime()
+                                    : 0;
+
+                            return (
+                                !proxima ||
+                                !Number.isFinite(
+                                    proxima
+                                ) ||
+                                proxima <=
+                                    agora
+                            );
+                        }
+                    );
+
+            if (!pendencias.length) {
+                return res.json({
+                    success: true,
+                    lote: null
+                });
+            }
+
+            const grupos =
+                new Map();
+
+            for (
+                const pendencia
+                of pendencias
+            ) {
+                const cnpj =
+                    await obterCnpjCompletoConectorLocalEsocial(
+                        pendencia
+                    );
+
+                if (
+                    cnpj.length !==
+                        14
+                ) {
+                    await atualizarPendenciaMatricula(
+                        pendencia.id,
+                        {
+                            status:
+                                'erro_conector_local',
+                            motivo:
+                                'CNPJ_COMPLETO_NAO_LOCALIZADO',
+                            ultimo_erro:
+                                'Não foi possível localizar o CNPJ completo para acesso ao portal.',
+                            proxima_tentativa_em:
+                                null
+                        }
+                    );
+
+                    continue;
+                }
+
+                if (
+                    !grupos.has(
+                        cnpj
+                    )
+                ) {
+                    grupos.set(
+                        cnpj,
+                        []
+                    );
+                }
+
+                grupos
+                    .get(
+                        cnpj
+                    )
+                    .push(
+                        pendencia
+                    );
+            }
+
+            if (!grupos.size) {
+                return res.json({
+                    success: true,
+                    lote: null
+                });
+            }
+
+            const gruposOrdenados =
+                Array.from(
+                    grupos.entries()
+                )
+                    .sort(
+                        (
+                            a,
+                            b
+                        ) =>
+                            b[1].length -
+                            a[1].length
+                    );
+
+            const [
+                cnpjEscolhido,
+                grupoEscolhido
+            ] =
+                gruposOrdenados[0];
+
+            const tarefas =
+                [];
+
+            for (
+                const pendencia
+                of grupoEscolhido.slice(
+                    0,
+                    100
+                )
+            ) {
+                const {
+                    data: claimed,
+                    error: erroClaim
+                } = await getSupabase()
+                    .from(
+                        'esocial_matriculas_pendentes'
+                    )
+                    .update({
+                        status:
+                            'processando_conector_local',
+                        motivo:
+                            'PROCESSANDO_CONECTOR_LOCAL',
+                        ultimo_erro:
+                            null,
+                        tentativas:
+                            Number(
+                                pendencia.tentativas ||
+                                0
+                            ) + 1,
+                        updated_at:
+                            new Date().toISOString()
+                    })
+                    .eq(
+                        'id',
+                        pendencia.id
+                    )
+                    .in(
+                        'status',
+                        [
+                            'aguardando_conector_local',
+                            'erro_conector_local'
+                        ]
+                    )
+                    .select('*')
+                    .maybeSingle();
+
+                if (erroClaim) {
+                    throw erroClaim;
+                }
+
+                if (!claimed) {
+                    continue;
+                }
+
+                tarefas.push({
+                    id:
+                        claimed.id,
+                    cnpj:
+                        cnpjEscolhido,
+                    cpf:
+                        normalizarCpfEsocial(
+                            claimed.cpf ||
+                            ''
+                        ),
+                    codigoEmpresa:
+                        claimed.codigo_empresa ||
+                        null,
+                    eventoId:
+                        claimed.evento_exemplo_id ||
+                        null,
+                    dataAdmissao:
+                        claimed.data_admissao ||
+                        null,
+                    tentativa:
+                        Number(
+                            claimed.tentativas ||
+                            0
+                        )
+                });
+            }
+
+            if (!tarefas.length) {
+                return res.json({
+                    success: true,
+                    lote: null
+                });
+            }
+
+            return res.json({
+                success: true,
+                lote: {
+                    cnpj:
+                        cnpjEscolhido,
+                    total:
+                        tarefas.length,
+                    tarefas
+                }
+            });
+
+        } catch (
+            error
+        ) {
+            return res
+                .status(500)
+                .json({
+                    success:
+                        false,
+                    error:
+                        error?.message ||
+                        String(
+                            error
+                        )
+                });
+        }
+    }
+);
+
+
 router.get(
     '/conector-local/proxima-tarefa',
     async (req, res) => {
@@ -52629,15 +52934,45 @@ router.post(
             if (
                 erroConector
             ) {
+                const reprocessavel =
+                    req.body?.reprocessavel ===
+                        true;
+
+                const tentativas =
+                    Number(
+                        pendencia.tentativas ||
+                        0
+                    );
+
+                const podeReprocessar =
+                    reprocessavel &&
+                    tentativas <
+                        4;
+
+                const proximaTentativa =
+                    podeReprocessar
+                        ? new Date(
+                            Date.now() +
+                            60 *
+                            1000
+                          ).toISOString()
+                        : null;
+
                 await atualizarPendenciaMatricula(
                     pendencia.id,
                     {
                         status:
-                            'erro_conector_local',
+                            podeReprocessar
+                                ? 'aguardando_conector_local'
+                                : 'erro_conector_local',
                         motivo:
-                            'ERRO_CONECTOR_LOCAL',
+                            podeReprocessar
+                                ? 'ERRO_CONECTOR_LOCAL_REPROCESSAVEL'
+                                : 'ERRO_CONECTOR_LOCAL',
                         ultimo_erro:
-                            erroConector
+                            erroConector,
+                        proxima_tentativa_em:
+                            proximaTentativa
                     }
                 );
 
@@ -52645,7 +52980,11 @@ router.post(
                     success:
                         true,
                     erroRegistrado:
-                        true
+                        true,
+                    reprocessavel:
+                        podeReprocessar,
+                    proximaTentativaEm:
+                        proximaTentativa
                 });
             }
 
