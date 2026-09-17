@@ -6,7 +6,7 @@
 (() => {
     'use strict';
 
-    window.ESOCIAL_FRONTEND_VERSION = 'ROBO_V3_20260916_0815';
+    window.ESOCIAL_FRONTEND_VERSION = 'CONECTOR_LOCAL_V3_20260917';
     console.log('eSocial frontend:', window.ESOCIAL_FRONTEND_VERSION);
 
     // ============================================================
@@ -3428,9 +3428,9 @@ const resumoColaborador =
                 type="button"
                 class="btn btn-outline-danger btn-verificar-vinculo-esocial"
                 data-id="${escaparHtml(evento.id)}"
-                title="Consulta excepcional no BX. Consome a cota diária do empregador; prefira atualizar o Relatório Gerencial."
+                title="Consultar vínculo e matrícula pelo Conector eSocial deste computador."
             >
-                <i class="fas fa-satellite-dish"></i>
+                <i class="fas fa-desktop"></i>
             </button>
         `
         : ''
@@ -7984,38 +7984,10 @@ async function initESocial() {
 
 
         // ========================================================
-        // 5b. BASE eSOCIAL POR RELATÓRIO GERENCIAL
-        //
-        // O botão principal agora dispara o robô no backend.
-        // A importação manual continua disponível como contingência.
+        // 5b. CONECTOR LOCAL eSOCIAL
         // ========================================================
 
-        const btnResolverMatriculasHolding =
-            document.getElementById(
-                'btnResolverMatriculasHolding'
-            );
-
-        if (btnResolverMatriculasHolding) {
-
-            btnResolverMatriculasHolding.className =
-                'btn btn-success btn-sm';
-
-            btnResolverMatriculasHolding.title =
-                'Percorrer automaticamente todos os CNPJs autorizados, baixar o Relatório Gerencial e atualizar a base local.';
-
-            btnResolverMatriculasHolding.innerHTML =
-                '<i class="fas fa-robot me-1"></i> Atualizar todas as empresas';
-
-            btnResolverMatriculasHolding.onclick =
-                function (event) {
-
-                    event.preventDefault();
-
-                    iniciarAtualizacaoAutomaticaRelatoriosEsocial();
-                };
-        }
-
-        garantirControlesRoboRelatoriosEsocial();
+        instalarConectorLocalEsocial();
 
 
         // ========================================================
@@ -8888,103 +8860,248 @@ async function verificarEventoNoESocial(
 // ETAPA 1 - VERIFICAR SE O CPF ESTÁ VINCULADO AO EMPREGADOR
 // ============================================================
 
+async function aguardarResultadoConectorLocalESocial(
+    id,
+    {
+        timeoutMs = 120000,
+        intervaloMs = 2000
+    } = {}
+) {
+    const inicio =
+        Date.now();
+
+    while (
+        Date.now() - inicio <
+        timeoutMs
+    ) {
+        const token =
+            await obterTokenESocial();
+
+        const response =
+            await fetch(
+                apiUrl(
+                    `/api/soc/conector-local/status-evento/${encodeURIComponent(id)}`
+                ),
+                {
+                    headers:
+                        criarHeaders(
+                            token
+                        )
+                }
+            );
+
+        const resultado =
+            await lerRespostaJson(
+                response
+            );
+
+        if (
+            resultado.concluida ===
+                true
+        ) {
+            return resultado;
+        }
+
+        if (
+            resultado.status ===
+                'erro_conector_local'
+        ) {
+            throw new Error(
+                resultado.erro ||
+                'O Conector eSocial encontrou um erro ao processar esta consulta.'
+            );
+        }
+
+        await new Promise(
+            resolve =>
+                setTimeout(
+                    resolve,
+                    intervaloMs
+                )
+        );
+    }
+
+    return {
+        success:
+            true,
+        concluida:
+            false,
+        status:
+            'aguardando_conector_local'
+    };
+}
+
+
+// ============================================================
+// ETAPA 1 - CONSULTAR VÍNCULO + MATRÍCULA PELO CONECTOR LOCAL
+// ============================================================
+
 async function verificarVinculoESocial(
     id,
     botao = null
 ) {
-    const evento = encontrarEvento(id);
+    const evento =
+        encontrarEvento(
+            id
+        );
 
     if (!evento) {
-        mostrarAlertaESocial('Evento não encontrado na tela.', 'warning');
+        mostrarAlertaESocial(
+            'Evento não encontrado na tela.',
+            'warning'
+        );
+
         return;
     }
 
-    const htmlOriginal = botao?.innerHTML || '';
+    const htmlOriginal =
+        botao?.innerHTML ||
+        '';
 
     if (botao) {
-        botao.disabled = true;
-        botao.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        botao.disabled =
+            true;
+
+        botao.innerHTML =
+            '<i class="fas fa-spinner fa-spin"></i>';
     }
 
     try {
-        const token = await obterTokenESocial();
-        const response = await fetch(
-            apiUrl(`/api/soc/verificar-vinculo-esocial/${encodeURIComponent(id)}`),
-            {
-                method: 'POST',
-                headers: criarHeaders(token, true),
-                body: JSON.stringify({})
-            }
-        );
+        const statusConector =
+            await requisicaoJson(
+                '/api/soc/conector-local/status'
+            );
 
-        const texto = await response.text();
-        let resultado = {};
-
-        try {
-            resultado = texto ? JSON.parse(texto) : {};
-        } catch (_) {
-            resultado = {
-                success: false,
-                error: texto || 'Resposta inválida do servidor.'
-            };
+        if (
+            statusConector.online !==
+                true
+        ) {
+            throw new Error(
+                'O Conector eSocial não está online neste computador. Abra o INICIAR-CONECTOR.bat e deixe a janela aberta.'
+            );
         }
 
-        if (!response.ok || resultado.success === false) {
-            throw new Error(resultado.error || `Erro HTTP ${response.status}`);
-        }
+        const token =
+            await obterTokenESocial();
 
-        if (resultado.vinculado === true) {
+        const response =
+            await fetch(
+                apiUrl(
+                    `/api/soc/conector-local/enfileirar-evento/${encodeURIComponent(id)}`
+                ),
+                {
+                    method:
+                        'POST',
+                    headers:
+                        criarHeaders(
+                            token,
+                            true
+                        ),
+                    body:
+                        JSON.stringify({})
+                }
+            );
+
+        const resultado =
+            await lerRespostaJson(
+                response
+            );
+
+        if (
+            resultado.imediato ===
+                true &&
+            resultado.matricula
+        ) {
             mostrarAlertaESocial(
-                'CPF vinculado a este empregador no eSocial. Agora use o botão de matrícula para importar a matrícula oficial.',
+                `Matrícula oficial já disponível: ${resultado.matricula}.`,
                 'success'
             );
-        } else if (resultado.vinculado === false) {
-            // Compatibilidade defensiva: a API nova não deve mais
-            // concluir "não vinculado" apenas porque o BX não retornou
-            // identificadores.
-            mostrarAlertaESocial(
-                resultado.mensagem ||
-                'O vínculo não foi confirmado nesta consulta. Isso não significa que o CPF não esteja vinculado.',
-                'warning'
+
+            await recarregarEventosESocial();
+            return;
+        }
+
+        mostrarAlertaESocial(
+            'Consulta enviada ao Conector eSocial. O Chrome local fará a verificação automaticamente.',
+            'info'
+        );
+
+        const final =
+            await aguardarResultadoConectorLocalESocial(
+                id
             );
+
+        if (
+            final.concluida !==
+                true
+        ) {
+            mostrarAlertaESocial(
+                'A consulta continua na fila do Conector eSocial. Você pode continuar usando o sistema; o resultado será salvo automaticamente.',
+                'info'
+            );
+
+            return;
+        }
+
+        if (
+            final.encontrado ===
+                true
+        ) {
+            mostrarAlertaESocial(
+                `Colaborador localizado no eSocial. Matrícula oficial: ${final.matricula || 'localizada'}.`,
+                'success'
+            );
+
         } else {
             mostrarAlertaESocial(
-                resultado.mensagem ||
-                'O vínculo não foi localizado no BX nesta consulta. Isso não confirma ausência de vínculo; tente novamente mais tarde.',
+                'Não foi localizado empregado com este CPF no módulo SST para o CNPJ consultado.',
                 'warning'
             );
         }
 
         await recarregarEventosESocial();
 
-    } catch (error) {
-        console.error('❌ Erro ao verificar vínculo eSocial:', error);
+    } catch (
+        error
+    ) {
+        console.error(
+            '❌ Erro no Conector eSocial:',
+            error
+        );
+
         mostrarAlertaESocial(
-            'Não foi possível verificar o vínculo no eSocial: ' + error.message,
+            'Não foi possível consultar pelo Conector eSocial: ' +
+            error.message,
             'warning'
         );
+
     } finally {
         if (botao) {
-            botao.disabled = false;
-            botao.innerHTML = htmlOriginal;
+            botao.disabled =
+                false;
+
+            botao.innerHTML =
+                htmlOriginal;
         }
     }
 }
 
+
 function handleVerificarVinculoESocial() {
-    const id = String(this.dataset.id || '').trim();
+    const id =
+        String(
+            this.dataset.id ||
+            ''
+        ).trim();
 
-    if (!id) return;
+    if (!id) {
+        return;
+    }
 
-    const confirmou = window.confirm(
-        'Esta é uma consulta EXCEPCIONAL ao BX do eSocial e consome a cota diária do empregador.\n\n' +
-        'Use preferencialmente o botão "Importar base eSocial" com o Relatório Gerencial.\n\n' +
-        'Deseja consultar o BX mesmo assim?'
+    verificarVinculoESocial(
+        id,
+        this
     );
-
-    if (!confirmou) return;
-
-    verificarVinculoESocial(id, this);
 }
 
 
@@ -9484,6 +9601,402 @@ function instalarExtrasEventosESocial() {
 
 let timerStatusRoboRelatoriosEsocial =
     null;
+
+
+
+let timerStatusConectorLocalEsocial =
+    null;
+
+let ultimaAssinaturaStatusConectorLocalEsocial =
+    '';
+
+
+function garantirBadgeConectorLocalEsocial() {
+    let badge =
+        document.getElementById(
+            'badgeConectorLocalEsocial'
+        );
+
+    if (badge) {
+        return badge;
+    }
+
+    const botao =
+        document.getElementById(
+            'btnResolverMatriculasHolding'
+        );
+
+    if (
+        !botao?.parentElement
+    ) {
+        return null;
+    }
+
+    badge =
+        document.createElement(
+            'span'
+        );
+
+    badge.id =
+        'badgeConectorLocalEsocial';
+
+    badge.className =
+        'badge bg-secondary ms-2';
+
+    badge.textContent =
+        'Conector: verificando...';
+
+    botao.insertAdjacentElement(
+        'afterend',
+        badge
+    );
+
+    return badge;
+}
+
+
+async function atualizarStatusConectorLocalEsocial() {
+    const badge =
+        garantirBadgeConectorLocalEsocial();
+
+    if (!badge) {
+        return;
+    }
+
+    try {
+        const status =
+            await requisicaoJson(
+                '/api/soc/conector-local/status'
+            );
+
+        const fila =
+            Number(
+                status.aguardando ||
+                0
+            ) +
+            Number(
+                status.processando ||
+                0
+            );
+
+        if (
+            status.online ===
+                true
+        ) {
+            badge.className =
+                'badge bg-success ms-2';
+
+            badge.textContent =
+                fila
+                    ? `Conector online • ${fila} na fila`
+                    : 'Conector online';
+
+        } else {
+            badge.className =
+                'badge bg-secondary ms-2';
+
+            badge.textContent =
+                'Conector offline';
+        }
+
+        const assinatura =
+            [
+                status.online
+                    ? '1'
+                    : '0',
+                status.aguardando ||
+                0,
+                status.processando ||
+                0
+            ].join(
+                '|'
+            );
+
+        if (
+            ultimaAssinaturaStatusConectorLocalEsocial &&
+            assinatura !==
+                ultimaAssinaturaStatusConectorLocalEsocial
+        ) {
+            recarregarEventosESocial()
+                .catch(
+                    () => null
+                );
+        }
+
+        ultimaAssinaturaStatusConectorLocalEsocial =
+            assinatura;
+
+    } catch (
+        error
+    ) {
+        badge.className =
+            'badge bg-danger ms-2';
+
+        badge.textContent =
+            'Conector indisponível';
+    }
+}
+
+
+function eventosPendentesParaConectorLocalEsocial() {
+    const origem =
+        (
+            Array.isArray(
+                eventosESocialHistorico
+            ) &&
+            eventosESocialHistorico.length
+        )
+            ? eventosESocialHistorico
+            : eventosESocial;
+
+    return Array.from(
+        new Map(
+            (
+                Array.isArray(
+                    origem
+                )
+                    ? origem
+                    : []
+            )
+                .filter(
+                    evento => {
+                        const tipo =
+                            String(
+                                evento?.tipo_evento ||
+                                ''
+                            )
+                                .trim()
+                                .toUpperCase();
+
+                        if (
+                            ![
+                                'S-2220',
+                                'S-2240'
+                            ].includes(
+                                tipo
+                            )
+                        ) {
+                            return false;
+                        }
+
+                        if (
+                            evento?.emitido_esocial ===
+                                true ||
+                            evento?.ja_emitido ===
+                                true
+                        ) {
+                            return false;
+                        }
+
+                        const resumo =
+                            obterResumoColaboradorESocial(
+                                evento
+                            );
+
+                        return (
+                            resumo.vinculoStatus !==
+                                'vinculado' ||
+                            !resumo.matriculaOficial
+                        );
+                    }
+                )
+                .map(
+                    evento => [
+                        String(
+                            evento.id
+                        ),
+                        evento
+                    ]
+                )
+        ).values()
+    );
+}
+
+
+async function enfileirarEventosConectorLocalEsocial() {
+    const status =
+        await requisicaoJson(
+            '/api/soc/conector-local/status'
+        );
+
+    if (
+        status.online !==
+            true
+    ) {
+        mostrarAlertaESocial(
+            'O Conector eSocial está offline. Abra o INICIAR-CONECTOR.bat neste computador e faça o login no eSocial.',
+            'warning'
+        );
+
+        return;
+    }
+
+    const eventos =
+        eventosPendentesParaConectorLocalEsocial();
+
+    if (
+        !eventos.length
+    ) {
+        mostrarAlertaESocial(
+            'Não há vínculos/matrículas pendentes para consultar.',
+            'info'
+        );
+
+        return;
+    }
+
+    const confirmou =
+        window.confirm(
+            `Enviar ${eventos.length} consulta(s) de vínculo/matrícula para o Conector eSocial deste computador?`
+        );
+
+    if (!confirmou) {
+        return;
+    }
+
+    const botao =
+        document.getElementById(
+            'btnResolverMatriculasHolding'
+        );
+
+    const htmlOriginal =
+        botao?.innerHTML ||
+        '';
+
+    if (botao) {
+        botao.disabled =
+            true;
+
+        botao.innerHTML =
+            '<i class="fas fa-spinner fa-spin me-1"></i> Enfileirando...';
+    }
+
+    try {
+        const token =
+            await obterTokenESocial();
+
+        const response =
+            await fetch(
+                apiUrl(
+                    '/api/soc/conector-local/enfileirar-lote'
+                ),
+                {
+                    method:
+                        'POST',
+                    headers:
+                        criarHeaders(
+                            token,
+                            true
+                        ),
+                    body:
+                        JSON.stringify({
+                            ids:
+                                eventos.map(
+                                    item =>
+                                        item.id
+                                )
+                        })
+                }
+            );
+
+        const resultado =
+            await lerRespostaJson(
+                response
+            );
+
+        mostrarAlertaESocial(
+            `${resultado.enfileirados || 0} consulta(s) enviada(s) ao conector` +
+            (
+                resultado.resolvidosDoCache
+                    ? `; ${resultado.resolvidosDoCache} já resolvida(s) pela base local.`
+                    : '.'
+            ),
+            'success'
+        );
+
+        await atualizarStatusConectorLocalEsocial();
+
+    } catch (
+        error
+    ) {
+        mostrarAlertaESocial(
+            'Não foi possível enfileirar as consultas: ' +
+            error.message,
+            'danger'
+        );
+
+    } finally {
+        if (botao) {
+            botao.disabled =
+                false;
+
+            botao.innerHTML =
+                htmlOriginal;
+        }
+    }
+}
+
+
+function instalarConectorLocalEsocial() {
+    const botao =
+        document.getElementById(
+            'btnResolverMatriculasHolding'
+        );
+
+    if (botao) {
+        botao.className =
+            'btn btn-success btn-sm';
+
+        botao.title =
+            'Enviar vínculos/matrículas pendentes para o Conector eSocial instalado neste computador.';
+
+        botao.innerHTML =
+            '<i class="fas fa-desktop me-1"></i> Consultar pelo PC';
+
+        botao.onclick =
+            function (event) {
+                event.preventDefault();
+
+                enfileirarEventosConectorLocalEsocial();
+            };
+    }
+
+    const diagnostico =
+        document.getElementById(
+            'btnDiagnosticarRoboEsocial'
+        );
+
+    if (diagnostico) {
+        diagnostico.classList.add(
+            'd-none'
+        );
+    }
+
+    const cancelar =
+        document.getElementById(
+            'btnCancelarRoboEsocial'
+        );
+
+    if (cancelar) {
+        cancelar.classList.add(
+            'd-none'
+        );
+    }
+
+    garantirBadgeConectorLocalEsocial();
+
+    clearInterval(
+        timerStatusConectorLocalEsocial
+    );
+
+    timerStatusConectorLocalEsocial =
+        setInterval(
+            atualizarStatusConectorLocalEsocial,
+            10000
+        );
+
+    atualizarStatusConectorLocalEsocial();
+}
 
 
 function garantirControlesRoboRelatoriosEsocial() {
@@ -10850,43 +11363,12 @@ function instalarRelatorioGerencialEsocial() {
     }
 
 
-    // Botão principal = automação do portal.
-    // Importação manual permanece em botão secundário.
-    const botao =
-        document.getElementById(
-            'btnResolverMatriculasHolding'
-        );
+    // Botão principal = Conector local no PC.
+    // Importação manual permanece disponível como contingência.
+    instalarConectorLocalEsocial();
 
-
-    if (
-        botao
-    ) {
-
-        botao.className =
-            'btn btn-success btn-sm';
-
-
-        botao.title =
-            'Atualizar automaticamente a base eSocial de todos os empregadores autorizados.';
-
-
-        botao.innerHTML =
-            '<i class="fas fa-robot me-1"></i> Atualizar todas as empresas';
-
-
-        botao.onclick =
-            function (event) {
-
-                event.preventDefault();
-
-                iniciarAtualizacaoAutomaticaRelatoriosEsocial();
-            };
-    }
-
-
-    garantirControlesRoboRelatoriosEsocial();
     atualizarStatusBaseRelatorioEsocial();
-    atualizarStatusRoboRelatoriosEsocial();
+
 }
 
 

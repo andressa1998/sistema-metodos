@@ -22410,7 +22410,8 @@ const ESOCIAL_MATRICULA_ORIGENS_OFICIAIS =
     new Set([
         'bx',
         'cache_esocial',
-        'relatorio_gerencial'
+        'relatorio_gerencial',
+        'portal_sst'
     ]);
 
 
@@ -23561,7 +23562,9 @@ async function aplicarVinculoOficialNoEvento(
                 ? 'bx'
                 : origem === 'relatorio_gerencial'
                     ? 'relatorio_gerencial'
-                    : 'cache_esocial',
+                    : origem === 'portal_sst'
+                        ? 'portal_sst'
+                        : 'cache_esocial',
 
         matricula_oficial_atualizada_em:
             agora,
@@ -24023,7 +24026,26 @@ async function salvarVinculoOficialEsocial(
             dataAdmissao ||
             null,
         fonte:
-            'bx',
+            (
+                [
+                    'bx',
+                    'relatorio_gerencial',
+                    'portal_sst'
+                ].includes(
+                    String(
+                        vinculo?.fonte ||
+                        ''
+                    )
+                        .trim()
+                        .toLowerCase()
+                )
+            )
+                ? String(
+                    vinculo.fonte
+                )
+                    .trim()
+                    .toLowerCase()
+                : 'bx',
         atualizado_em:
             agora,
         updated_at:
@@ -24078,7 +24100,8 @@ async function salvarVinculoOficialEsocial(
     ) {
 
         await resolverEventosLocaisComVinculoEsocial(
-            salvo
+            salvo,
+            registro.fonte
         );
 
     } else {
@@ -45410,7 +45433,10 @@ function enriquecerEventoParaFrontendEsocial(
             // Compatibilidade com registros gravados pela versão
             // anterior. Eles NÃO devem continuar aparecendo como
             // "CPF não vinculado", porque a conclusão era indevida.
-            'VINCULO_NAO_LOCALIZADO_ESOCIAL'
+            'VINCULO_NAO_LOCALIZADO_ESOCIAL',
+
+            // Consulta direta no módulo SST pelo conector local.
+            'VINCULO_NAO_LOCALIZADO_PORTAL_SST'
         ].includes(
             motivoPendenciaMatricula
         )
@@ -45436,8 +45462,16 @@ function enriquecerEventoParaFrontendEsocial(
             ? 'CPF vinculado ao empregador no eSocial.'
             : vinculoEsocialStatus === 'nao_localizado'
                 ? (
-                    'Vínculo ainda não localizado no eSocial BX. ' +
-                    'Este resultado não confirma ausência de vínculo.'
+                    motivoPendenciaMatricula ===
+                        'VINCULO_NAO_LOCALIZADO_PORTAL_SST'
+                        ? (
+                            'Não foi localizado empregado com este CPF no módulo SST ' +
+                            'para o CNPJ consultado.'
+                          )
+                        : (
+                            'Vínculo ainda não localizado no eSocial BX. ' +
+                            'Este resultado não confirma ausência de vínculo.'
+                          )
                   )
                 : null;
 
@@ -51836,6 +51870,902 @@ router.post(
     }
 );
 
+
+
+// ============================================================
+// CONECTOR LOCAL eSOCIAL - V3
+// Chrome normal do Windows + certificado instalado no PC.
+// ============================================================
+
+let ultimoHeartbeatConectorLocalEsocial = null;
+let ultimoConectorLocalEsocial = null;
+
+function chaveConectorLocalEsocialConfigurada() {
+    return String(
+        process.env.ESOCIAL_CONECTOR_LOCAL_CHAVE || ''
+    ).trim();
+}
+
+function validarChaveConectorLocalEsocial(req, res) {
+    const esperada = chaveConectorLocalEsocialConfigurada();
+
+    if (!esperada) {
+        res.status(503).json({
+            success: false,
+            code: 'CONECTOR_LOCAL_CHAVE_NAO_CONFIGURADA',
+            error: 'Defina ESOCIAL_CONECTOR_LOCAL_CHAVE no Render.'
+        });
+        return false;
+    }
+
+    const recebida = String(
+        req.get('X-ESOCIAL-CONNECTOR-KEY') || ''
+    ).trim();
+
+    if (!recebida || recebida !== esperada) {
+        res.status(401).json({
+            success: false,
+            code: 'CONECTOR_LOCAL_NAO_AUTORIZADO',
+            error: 'Chave do conector local inválida.'
+        });
+        return false;
+    }
+
+    return true;
+}
+
+async function carregarEventoConectorLocalEsocial(id) {
+    const eventoId = String(id || '').trim();
+    if (!eventoId) return null;
+
+    const { data, error } = await getSupabase()
+        .from('esocial_eventos')
+        .select('*')
+        .eq('id', eventoId)
+        .limit(1)
+        .maybeSingle();
+
+    if (error) throw error;
+    return data || null;
+}
+
+async function enfileirarEventoConectorLocalEsocial(evento) {
+    if (!evento || typeof evento !== 'object') {
+        throw new Error('Evento local inválido.');
+    }
+
+    const tipoEvento = String(
+        evento.tipo_evento || ''
+    ).trim().toUpperCase();
+
+    if (!['S-2220', 'S-2240'].includes(tipoEvento)) {
+        throw new Error(
+            'Somente S-2220/S-2240 usam a consulta de vínculo/matrícula.'
+        );
+    }
+
+    const cache = await buscarVinculoOficialCacheEsocial(evento);
+
+    if (
+        cache &&
+        String(
+            cache.matricula_esocial ||
+            cache.matricula ||
+            ''
+        ).trim()
+    ) {
+        await resolverEventosLocaisComVinculoEsocial(
+            cache,
+            cache.fonte || 'cache_esocial'
+        );
+
+        return {
+            success: true,
+            imediato: true,
+            encontrado: true,
+            matricula: String(
+                cache.matricula_esocial ||
+                cache.matricula ||
+                ''
+            ).trim(),
+            mensagem:
+                'A matrícula oficial já estava disponível na base local.'
+        };
+    }
+
+    const pendencia =
+        await criarOuAtualizarPendenciaMatriculaEsocial(
+            evento,
+            'AGUARDANDO_CONECTOR_LOCAL'
+        );
+
+    if (!pendencia?.id) {
+        throw new Error(
+            'Não foi possível criar a tarefa do conector local.'
+        );
+    }
+
+    await atualizarPendenciaMatricula(
+        pendencia.id,
+        {
+            status: 'aguardando_conector_local',
+            motivo: 'AGUARDANDO_CONECTOR_LOCAL',
+            ultimo_erro: null,
+            proxima_tentativa_em: null
+        }
+    );
+
+    return {
+        success: true,
+        imediato: false,
+        tarefaId: pendencia.id,
+        status: 'aguardando_conector_local',
+        mensagem:
+            'Consulta enviada ao Conector eSocial deste computador.'
+    };
+}
+
+async function obterCnpjCompletoConectorLocalEsocial(pendencia) {
+    const tpInsc = String(
+        pendencia?.tp_insc_empregador || ''
+    ).trim();
+
+    const nrInsc =
+        normalizarNrInscEmpregadorEsocial(
+            tpInsc,
+            pendencia?.nr_insc_empregador || ''
+        );
+
+    const empregadores =
+        await listarEmpregadoresRoboRelatoriosEsocial();
+
+    const grupo = (
+        Array.isArray(empregadores)
+            ? empregadores
+            : []
+    ).find(
+        item =>
+            String(item?.tpInsc || '').trim() === tpInsc &&
+            nrInscEmpregadorEquivalenteEsocial(
+                tpInsc,
+                item?.nrInsc || '',
+                nrInsc
+            )
+    );
+
+    let cnpj = normalizarCnpj(
+        grupo?.cnpjAcesso || ''
+    );
+
+    if (
+        cnpj.length !==
+            14
+    ) {
+        const empresas =
+            await buscarEmpresasSupabase();
+
+        const codigoEmpresa =
+            String(
+                pendencia?.codigo_empresa ||
+                ''
+            ).trim();
+
+        const candidatas =
+            (
+                Array.isArray(
+                    empresas
+                )
+                    ? empresas
+                    : []
+            )
+                .map(
+                    empresa => ({
+                        empresa,
+                        cnpj:
+                            normalizarCnpj(
+                                empresa?.cnpj ||
+                                ''
+                            )
+                    })
+                )
+                .filter(
+                    item =>
+                        item.cnpj.length ===
+                        14
+                );
+
+        const exata =
+            candidatas.find(
+                item =>
+                    codigoEmpresa &&
+                    String(
+                        item.empresa?.id ??
+                        item.empresa?.codigo_soc ??
+                        ''
+                    ).trim() ===
+                        codigoEmpresa
+            );
+
+        const mesmaRaiz =
+            candidatas.filter(
+                item =>
+                    normalizarNrInscEmpregadorEsocial(
+                        tpInsc,
+                        item.cnpj
+                    ) ===
+                        nrInsc
+            );
+
+        cnpj =
+            exata?.cnpj ||
+            mesmaRaiz.find(
+                item =>
+                    item.cnpj.slice(
+                        8,
+                        12
+                    ) ===
+                        '0001'
+            )?.cnpj ||
+            mesmaRaiz[0]?.cnpj ||
+            '';
+    }
+
+    return cnpj.length === 14
+        ? cnpj
+        : '';
+}
+
+router.get(
+    '/conector-local/status',
+    async (req, res) => {
+        try {
+            const heartbeatMs =
+                ultimoHeartbeatConectorLocalEsocial
+                    ? new Date(
+                        ultimoHeartbeatConectorLocalEsocial
+                      ).getTime()
+                    : 0;
+
+            const online = Boolean(
+                heartbeatMs &&
+                Date.now() - heartbeatMs <= 60000
+            );
+
+            const { data, error } = await getSupabase()
+                .from('esocial_matriculas_pendentes')
+                .select('status,motivo,updated_at')
+                .in(
+                    'status',
+                    [
+                        'aguardando_conector_local',
+                        'processando_conector_local'
+                    ]
+                )
+                .limit(1000);
+
+            if (error) throw error;
+
+            const tarefas =
+                Array.isArray(data) ? data : [];
+
+            return res.json({
+                success: true,
+                online,
+                ultimoHeartbeat:
+                    ultimoHeartbeatConectorLocalEsocial,
+                conector:
+                    ultimoConectorLocalEsocial,
+                aguardando:
+                    tarefas.filter(
+                        item =>
+                            item.status ===
+                            'aguardando_conector_local'
+                    ).length,
+                processando:
+                    tarefas.filter(
+                        item =>
+                            item.status ===
+                            'processando_conector_local'
+                    ).length
+            });
+        } catch (error) {
+            return res.status(500).json({
+                success: false,
+                error:
+                    error?.message ||
+                    String(error)
+            });
+        }
+    }
+);
+
+router.post(
+    '/conector-local/enfileirar-evento/:id',
+    async (req, res) => {
+        try {
+            const evento =
+                await carregarEventoConectorLocalEsocial(
+                    req.params.id
+                );
+
+            if (!evento) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Evento não encontrado.'
+                });
+            }
+
+            return res.json(
+                await enfileirarEventoConectorLocalEsocial(
+                    evento
+                )
+            );
+        } catch (error) {
+            return res.status(500).json({
+                success: false,
+                error:
+                    error?.message ||
+                    String(error)
+            });
+        }
+    }
+);
+
+router.post(
+    '/conector-local/enfileirar-lote',
+    async (req, res) => {
+        try {
+            const ids = Array.from(
+                new Set(
+                    (
+                        Array.isArray(req.body?.ids)
+                            ? req.body.ids
+                            : []
+                    )
+                        .map(
+                            item =>
+                                String(item || '').trim()
+                        )
+                        .filter(Boolean)
+                )
+            ).slice(0, 1000);
+
+            if (!ids.length) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Nenhum evento informado.'
+                });
+            }
+
+            const { data, error } = await getSupabase()
+                .from('esocial_eventos')
+                .select('*')
+                .in('id', ids);
+
+            if (error) throw error;
+
+            let enfileirados = 0;
+            let imediatos = 0;
+            const erros = [];
+
+            for (
+                const evento
+                of (
+                    Array.isArray(data)
+                        ? data
+                        : []
+                )
+            ) {
+                try {
+                    const resultado =
+                        await enfileirarEventoConectorLocalEsocial(
+                            evento
+                        );
+
+                    if (resultado.imediato) {
+                        imediatos++;
+                    } else {
+                        enfileirados++;
+                    }
+                } catch (errorItem) {
+                    erros.push({
+                        id: evento?.id || null,
+                        error:
+                            errorItem?.message ||
+                            String(errorItem)
+                    });
+                }
+            }
+
+            return res.json({
+                success: true,
+                solicitados: ids.length,
+                enfileirados,
+                resolvidosDoCache: imediatos,
+                erros
+            });
+        } catch (error) {
+            return res.status(500).json({
+                success: false,
+                error:
+                    error?.message ||
+                    String(error)
+            });
+        }
+    }
+);
+
+router.get(
+    '/conector-local/status-evento/:id',
+    async (req, res) => {
+        try {
+            const evento =
+                await carregarEventoConectorLocalEsocial(
+                    req.params.id
+                );
+
+            if (!evento) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Evento não encontrado.'
+                });
+            }
+
+            const cache =
+                await buscarVinculoOficialCacheEsocial(
+                    evento
+                );
+
+            if (
+                cache &&
+                String(
+                    cache.matricula_esocial ||
+                    cache.matricula ||
+                    ''
+                ).trim()
+            ) {
+                return res.json({
+                    success: true,
+                    concluida: true,
+                    encontrado: true,
+                    status: 'resolvido',
+                    matricula: String(
+                        cache.matricula_esocial ||
+                        cache.matricula ||
+                        ''
+                    ).trim(),
+                    fonte:
+                        cache.fonte || null
+                });
+            }
+
+            const chave =
+                dadosChaveVinculoMatricula(evento);
+
+            const {
+                data: pendencias,
+                error: erroPendencia
+            } = await getSupabase()
+                .from('esocial_matriculas_pendentes')
+                .select('*')
+                .eq('chave_vinculo', chave.chave)
+                .order(
+                    'updated_at',
+                    { ascending: false }
+                )
+                .limit(1);
+
+            if (erroPendencia) {
+                throw erroPendencia;
+            }
+
+            const pendencia =
+                Array.isArray(pendencias)
+                    ? pendencias[0] || null
+                    : null;
+
+            if (!pendencia) {
+                return res.json({
+                    success: true,
+                    concluida: false,
+                    encontrado: null,
+                    status: 'nao_iniciada'
+                });
+            }
+
+            const status = String(
+                pendencia.status || ''
+            ).trim();
+
+            const motivo = String(
+                pendencia.motivo || ''
+            ).trim();
+
+            const naoLocalizado =
+                motivo ===
+                    'VINCULO_NAO_LOCALIZADO_PORTAL_SST' ||
+                status ===
+                    'nao_localizado_conector_local';
+
+            return res.json({
+                success: true,
+                concluida: naoLocalizado,
+                encontrado:
+                    naoLocalizado
+                        ? false
+                        : null,
+                status:
+                    status || 'nao_iniciada',
+                motivo:
+                    motivo || null,
+                erro:
+                    pendencia.ultimo_erro || null,
+                updatedAt:
+                    pendencia.updated_at || null
+            });
+        } catch (error) {
+            return res.status(500).json({
+                success: false,
+                error:
+                    error?.message ||
+                    String(error)
+            });
+        }
+    }
+);
+
+router.post(
+    '/conector-local/heartbeat',
+    async (req, res) => {
+        if (
+            !validarChaveConectorLocalEsocial(
+                req,
+                res
+            )
+        ) {
+            return;
+        }
+
+        ultimoHeartbeatConectorLocalEsocial =
+            new Date().toISOString();
+
+        ultimoConectorLocalEsocial = {
+            id:
+                String(
+                    req.body?.id || ''
+                ).trim() || null,
+            nome:
+                String(
+                    req.body?.nome || ''
+                ).trim() || null,
+            versao:
+                String(
+                    req.body?.versao || ''
+                ).trim() || null
+        };
+
+        return res.json({
+            success: true,
+            serverTime:
+                new Date().toISOString()
+        });
+    }
+);
+
+router.get(
+    '/conector-local/proxima-tarefa',
+    async (req, res) => {
+        if (
+            !validarChaveConectorLocalEsocial(
+                req,
+                res
+            )
+        ) {
+            return;
+        }
+
+        try {
+            ultimoHeartbeatConectorLocalEsocial =
+                new Date().toISOString();
+
+            const {
+                data: pendencias,
+                error
+            } = await getSupabase()
+                .from('esocial_matriculas_pendentes')
+                .select('*')
+                .eq(
+                    'status',
+                    'aguardando_conector_local'
+                )
+                .order(
+                    'updated_at',
+                    { ascending: true }
+                )
+                .limit(10);
+
+            if (error) throw error;
+
+            for (
+                const pendencia
+                of (
+                    Array.isArray(pendencias)
+                        ? pendencias
+                        : []
+                )
+            ) {
+                const cnpj =
+                    await obterCnpjCompletoConectorLocalEsocial(
+                        pendencia
+                    );
+
+                if (cnpj.length !== 14) {
+                    await atualizarPendenciaMatricula(
+                        pendencia.id,
+                        {
+                            status:
+                                'erro_conector_local',
+                            motivo:
+                                'CNPJ_COMPLETO_NAO_LOCALIZADO',
+                            ultimo_erro:
+                                'Não foi possível localizar o CNPJ completo para acesso ao portal.'
+                        }
+                    );
+                    continue;
+                }
+
+                const {
+                    data: claimed,
+                    error: erroClaim
+                } = await getSupabase()
+                    .from('esocial_matriculas_pendentes')
+                    .update({
+                        status:
+                            'processando_conector_local',
+                        motivo:
+                            'PROCESSANDO_CONECTOR_LOCAL',
+                        ultimo_erro:
+                            null,
+                        tentativas:
+                            Number(
+                                pendencia.tentativas || 0
+                            ) + 1,
+                        updated_at:
+                            new Date().toISOString()
+                    })
+                    .eq('id', pendencia.id)
+                    .eq(
+                        'status',
+                        'aguardando_conector_local'
+                    )
+                    .select('*')
+                    .maybeSingle();
+
+                if (erroClaim) {
+                    throw erroClaim;
+                }
+
+                if (!claimed) {
+                    continue;
+                }
+
+                return res.json({
+                    success: true,
+                    tarefa: {
+                        id: claimed.id,
+                        cnpj,
+                        cpf:
+                            normalizarCpfEsocial(
+                                claimed.cpf || ''
+                            ),
+                        codigoEmpresa:
+                            claimed.codigo_empresa || null,
+                        eventoId:
+                            claimed.evento_exemplo_id || null,
+                        dataAdmissao:
+                            claimed.data_admissao || null
+                    }
+                });
+            }
+
+            return res.json({
+                success: true,
+                tarefa: null
+            });
+        } catch (error) {
+            return res.status(500).json({
+                success: false,
+                error:
+                    error?.message ||
+                    String(error)
+            });
+        }
+    }
+);
+
+router.post(
+    '/conector-local/resultado/:id',
+    async (req, res) => {
+        if (
+            !validarChaveConectorLocalEsocial(
+                req,
+                res
+            )
+        ) {
+            return;
+        }
+
+        try {
+            const tarefaId = String(
+                req.params.id || ''
+            ).trim();
+
+            const {
+                data: pendencia,
+                error
+            } = await getSupabase()
+                .from('esocial_matriculas_pendentes')
+                .select('*')
+                .eq('id', tarefaId)
+                .limit(1)
+                .maybeSingle();
+
+            if (error) throw error;
+
+            if (!pendencia) {
+                return res.status(404).json({
+                    success: false,
+                    error:
+                        'Tarefa do conector não encontrada.'
+                });
+            }
+
+            const erroConector =
+                String(
+                    req.body?.erro ||
+                    ''
+                ).trim();
+
+            if (
+                erroConector
+            ) {
+                await atualizarPendenciaMatricula(
+                    pendencia.id,
+                    {
+                        status:
+                            'erro_conector_local',
+                        motivo:
+                            'ERRO_CONECTOR_LOCAL',
+                        ultimo_erro:
+                            erroConector
+                    }
+                );
+
+                return res.json({
+                    success:
+                        true,
+                    erroRegistrado:
+                        true
+                });
+            }
+
+            const encontrado =
+                req.body?.encontrado === true;
+
+            if (!encontrado) {
+                await atualizarPendenciaMatricula(
+                    pendencia.id,
+                    {
+                        status:
+                            'nao_localizado_conector_local',
+                        motivo:
+                            'VINCULO_NAO_LOCALIZADO_PORTAL_SST',
+                        ultimo_erro: null,
+                        proxima_tentativa_em: null
+                    }
+                );
+
+                return res.json({
+                    success: true,
+                    encontrado: false,
+                    mensagem:
+                        'O módulo SST não localizou empregado com este CPF no CNPJ consultado.'
+                });
+            }
+
+            const matricula = String(
+                req.body?.matricula || ''
+            ).trim();
+
+            if (!matricula) {
+                throw new Error(
+                    'O conector marcou o trabalhador como encontrado, mas não retornou a matrícula.'
+                );
+            }
+
+            const dataAdmissao =
+                normalizarDataAdmissaoEsocial(
+                    req.body?.dataAdmissao ||
+                    pendencia.data_admissao ||
+                    ''
+                );
+
+            const vinculo =
+                await salvarVinculoOficialEsocial({
+                    tipoEvento: 'S-2200',
+                    tpInscEmpregador:
+                        pendencia.tp_insc_empregador,
+                    nrInscEmpregador:
+                        pendencia.nr_insc_empregador,
+                    cpf:
+                        pendencia.cpf,
+                    matricula,
+                    data_admissao:
+                        dataAdmissao || null,
+                    fonte:
+                        'portal_sst'
+                });
+
+            if (!vinculo) {
+                throw new Error(
+                    'Não foi possível gravar o vínculo oficial retornado pelo portal SST.'
+                );
+            }
+
+            await atualizarPendenciaMatricula(
+                pendencia.id,
+                {
+                    status: 'resolvido',
+                    motivo:
+                        'VINCULO_CONFIRMADO_PORTAL_SST',
+                    ultimo_erro: null,
+                    proxima_tentativa_em: null,
+                    data_admissao:
+                        dataAdmissao ||
+                        pendencia.data_admissao ||
+                        null
+                }
+            );
+
+            return res.json({
+                success: true,
+                encontrado: true,
+                matricula:
+                    vinculo.matricula_esocial ||
+                    matricula,
+                fonte: 'portal_sst'
+            });
+        } catch (error) {
+            const tarefaId = String(
+                req.params.id || ''
+            ).trim();
+
+            if (tarefaId) {
+                try {
+                    await atualizarPendenciaMatricula(
+                        tarefaId,
+                        {
+                            status:
+                                'erro_conector_local',
+                            motivo:
+                                'ERRO_CONECTOR_LOCAL',
+                            ultimo_erro:
+                                error?.message ||
+                                String(error)
+                        }
+                    );
+                } catch (_) {}
+            }
+
+            return res.status(500).json({
+                success: false,
+                error:
+                    error?.message ||
+                    String(error)
+            });
+        }
+    }
+);
 
 // ============================================================
 // INICIAR WORKER AUTOMÁTICO DE MATRÍCULAS
