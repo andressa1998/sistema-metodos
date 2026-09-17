@@ -2158,14 +2158,63 @@ let fimAcompanhamentoPreparacaoEsocial = 0;
     // ============================================================
 
     function normalizarChaveVinculoESocial(evento) {
-        const cpf = String(evento?.cpf || '').replace(/\D/g, '');
-        const empregador = String(
-            evento?.nr_insc_empregador ||
-            evento?.nrInscEmpregador ||
-            ''
-        ).replace(/\D/g, '');
+        const cpf =
+            String(
+                evento?.cpf ||
+                ''
+            ).replace(
+                /\D/g,
+                ''
+            );
 
-        return `${empregador}|${cpf}`;
+        const empregador =
+            String(
+                evento?.nr_insc_empregador ||
+                evento?.nrInscEmpregador ||
+                ''
+            ).replace(
+                /\D/g,
+                ''
+            );
+
+        const cnpjUnidade =
+            String(
+                evento?.cnpj_unidade ||
+                evento?.cnpjUnidade ||
+                evento?.cnpj ||
+                ''
+            ).replace(
+                /\D/g,
+                ''
+            );
+
+        const codigoEmpresa =
+            String(
+                evento?.codigo_empresa ||
+                evento?.codigoEmpresa ||
+                ''
+            ).trim();
+
+        const unidade =
+            String(
+                evento?.unidade ||
+                evento?.nome_unidade ||
+                ''
+            )
+                .trim()
+                .toLowerCase();
+
+        const identidadeUnidade =
+            cnpjUnidade.length ===
+                14
+                ? `CNPJ:${cnpjUnidade}`
+                : codigoEmpresa
+                    ? `EMP:${codigoEmpresa}`
+                    : `UNIDADE:${unidade}`;
+
+        return (
+            `${empregador}|${identidadeUnidade}|${cpf}`
+        );
     }
 
     function matriculaPareceOficialESocial(evento) {

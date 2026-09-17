@@ -51870,7 +51870,7 @@ router.post(
 
 
 // ============================================================
-// CONECTOR LOCAL eSOCIAL - V4.0
+// CONECTOR LOCAL eSOCIAL - V4.1
 // Chrome normal do Windows + certificado instalado no PC.
 // ============================================================
 
@@ -51925,6 +51925,253 @@ async function carregarEventoConectorLocalEsocial(id) {
     if (error) throw error;
     return data || null;
 }
+
+
+async function criarOuAtualizarPendenciaConectorLocalExata(
+    evento,
+    empresaId,
+    motivo = 'AGUARDANDO_CONECTOR_LOCAL'
+) {
+    const chave =
+        dadosChaveVinculoMatricula(
+            evento
+        );
+
+    const empresaIdNormalizado =
+        String(
+            empresaId ||
+            ''
+        ).trim();
+
+    const cpf =
+        normalizarCpfEsocial(
+            evento?.cpf ||
+            ''
+        );
+
+    if (
+        !empresaIdNormalizado ||
+        !chave.tpInsc ||
+        !chave.nrInsc ||
+        cpf.length !==
+            11
+    ) {
+        return null;
+    }
+
+    const dataAdmissao =
+        chave.dataAdmissao ||
+        normalizarDataAdmissaoEsocial(
+            evento?.data_admissao ||
+            ''
+        ) ||
+        null;
+
+    let query =
+        getSupabase()
+            .from(
+                'esocial_matriculas_pendentes'
+            )
+            .select('*')
+            .eq(
+                'codigo_empresa',
+                empresaIdNormalizado
+            )
+            .eq(
+                'cpf',
+                cpf
+            )
+            .order(
+                'updated_at',
+                {
+                    ascending:
+                        false
+                }
+            )
+            .limit(20);
+
+    const {
+        data:
+            existentes,
+        error:
+            erroBusca
+    } =
+        await query;
+
+    if (
+        erroBusca
+    ) {
+        throw erroBusca;
+    }
+
+    let existente =
+        null;
+
+    const lista =
+        Array.isArray(
+            existentes
+        )
+            ? existentes
+            : [];
+
+    if (
+        dataAdmissao
+    ) {
+        existente =
+            lista.find(
+                item =>
+                    normalizarDataAdmissaoEsocial(
+                        item?.data_admissao ||
+                        ''
+                    ) ===
+                        dataAdmissao
+            ) ||
+            null;
+    }
+
+    if (
+        !existente
+    ) {
+        existente =
+            lista.find(
+                item =>
+                    !item?.data_admissao
+            ) ||
+            lista[0] ||
+            null;
+    }
+
+    const eventoId =
+        String(
+            evento?.id ||
+            ''
+        ).trim();
+
+    const chaveLocal =
+        `${chave.tpInsc}|${chave.nrInsc}|${cpf}|${dataAdmissao || 'SEM_DATA'}|EMPRESA:${empresaIdNormalizado}`;
+
+    const agora =
+        new Date().toISOString();
+
+    const dados =
+        {
+            chave_vinculo:
+                chaveLocal,
+            evento_exemplo_id:
+                eventoId ||
+                existente?.evento_exemplo_id ||
+                null,
+            codigo_empresa:
+                empresaIdNormalizado,
+            codigo_funcionario:
+                String(
+                    evento?.codigo_funcionario ||
+                    evento?.codigoFuncionario ||
+                    existente?.codigo_funcionario ||
+                    ''
+                ).trim() ||
+                null,
+            tp_insc_empregador:
+                chave.tpInsc,
+            nr_insc_empregador:
+                chave.nrInsc,
+            cpf,
+            data_admissao:
+                dataAdmissao ||
+                existente?.data_admissao ||
+                null,
+            data_evento:
+                normalizarData(
+                    evento?.data_exame ||
+                    evento?.dataExame ||
+                    evento?.data_emissao_aso ||
+                    ''
+                ) ||
+                existente?.data_evento ||
+                null,
+            status:
+                existente?.status ||
+                'pendente',
+            motivo:
+                existente?.motivo ||
+                motivo,
+            ultimo_erro:
+                existente?.ultimo_erro ||
+                null,
+            janela_indice:
+                Number(
+                    existente?.janela_indice ||
+                    0
+                ),
+            tentativas:
+                Number(
+                    existente?.tentativas ||
+                    0
+                ),
+            proxima_tentativa_em:
+                existente?.proxima_tentativa_em ||
+                null,
+            updated_at:
+                agora
+        };
+
+    if (
+        existente
+    ) {
+        const {
+            data,
+            error
+        } =
+            await getSupabase()
+                .from(
+                    'esocial_matriculas_pendentes'
+                )
+                .update(
+                    dados
+                )
+                .eq(
+                    'id',
+                    existente.id
+                )
+                .select('*')
+                .single();
+
+        if (
+            error
+        ) {
+            throw error;
+        }
+
+        return data;
+    }
+
+    const {
+        data,
+        error
+    } =
+        await getSupabase()
+            .from(
+                'esocial_matriculas_pendentes'
+            )
+            .insert([
+                {
+                    ...dados,
+                    created_at:
+                        agora
+                }
+            ])
+            .select('*')
+            .single();
+
+    if (
+        error
+    ) {
+        throw error;
+    }
+
+    return data;
+}
+
 
 async function enfileirarEventoConectorLocalEsocial(evento, contexto = {}) {
     if (!evento || typeof evento !== 'object') {
@@ -52016,10 +52263,16 @@ async function enfileirarEventoConectorLocalEsocial(evento, contexto = {}) {
     }
 
     const pendencia =
-        await criarOuAtualizarPendenciaMatriculaEsocial(
-            eventoFila,
-            'AGUARDANDO_CONECTOR_LOCAL'
-        );
+        empresaIdContexto
+            ? await criarOuAtualizarPendenciaConectorLocalExata(
+                eventoFila,
+                empresaIdContexto,
+                'AGUARDANDO_CONECTOR_LOCAL'
+              )
+            : await criarOuAtualizarPendenciaMatriculaEsocial(
+                eventoFila,
+                'AGUARDANDO_CONECTOR_LOCAL'
+              );
 
     if (
         pendencia?.status ===
@@ -52458,7 +52711,7 @@ router.get(
 
             try {
                 eventosConciliados =
-                    await reconciliarResultadosPortalSstV40();
+                    await reconciliarResultadosPortalSstV41();
             } catch (
                 erroConciliacao
             ) {
@@ -53311,7 +53564,7 @@ async function recuperarPendenciasConectorLocalV34() {
             'ERRO_PREPARAR_CNPJ_V33_FINAL',
             'ERRO_CONECTOR_LOCAL_V33_FINAL',
             'ERRO_PREPARAR_CNPJ_V35_FINAL',
-            'ERRO_CONECTOR_LOCAL_V35_FINAL'
+            'ERRO_CONECTOR_LOCAL_V41_FINAL'
         ];
 
     let errosReabertos =
@@ -54378,7 +54631,7 @@ async function aplicarVinculoPortalSstNaEmpresaExata(
     pendencia,
     vinculo
 ) {
-    const empresaId =
+    const empresaIdInterno =
         String(
             pendencia?.codigo_empresa ||
             ''
@@ -54391,7 +54644,6 @@ async function aplicarVinculoPortalSstNaEmpresaExata(
         );
 
     if (
-        !empresaId ||
         cpf.length !==
             11 ||
         !vinculo
@@ -54404,21 +54656,79 @@ async function aplicarVinculoPortalSstNaEmpresaExata(
         };
     }
 
-    const {
-        data:
-            eventos,
-        error:
-            erroEventos
-    } =
-        await getSupabase()
+    // O evento que originou a tarefa é a referência mais segura para
+    // descobrir como esta unidade está gravada em esocial_eventos.
+    let eventoOrigem =
+        null;
+
+    const eventoExemploId =
+        String(
+            pendencia?.evento_exemplo_id ||
+            ''
+        ).trim();
+
+    if (
+        eventoExemploId
+    ) {
+        const {
+            data,
+            error
+        } =
+            await getSupabase()
+                .from(
+                    'esocial_eventos'
+                )
+                .select('*')
+                .eq(
+                    'id',
+                    eventoExemploId
+                )
+                .limit(1)
+                .maybeSingle();
+
+        if (
+            error
+        ) {
+            throw error;
+        }
+
+        eventoOrigem =
+            data ||
+            null;
+    }
+
+    const codigoEmpresaEvento =
+        String(
+            eventoOrigem?.codigo_empresa ||
+            ''
+        ).trim();
+
+    const cnpjUnidadeOrigem =
+        normalizarCnpj(
+            eventoOrigem?.cnpj_unidade ||
+            eventoOrigem?.cnpj ||
+            ''
+        );
+
+    const unidadeOrigem =
+        String(
+            eventoOrigem?.unidade ||
+            eventoOrigem?.nome_unidade ||
+            ''
+        ).trim();
+
+    const holdingOrigem =
+        String(
+            eventoOrigem?.holding ||
+            ''
+        ).trim();
+
+    let query =
+        getSupabase()
             .from(
                 'esocial_eventos'
             )
             .select('*')
-            .eq(
-                'codigo_empresa',
-                empresaId
-            )
             .eq(
                 'cpf',
                 cpf
@@ -54432,17 +54742,100 @@ async function aplicarVinculoPortalSstNaEmpresaExata(
             );
 
     if (
+        codigoEmpresaEvento
+    ) {
+        query =
+            query.eq(
+                'codigo_empresa',
+                codigoEmpresaEvento
+            );
+    }
+
+    const {
+        data:
+            eventos,
+        error:
+            erroEventos
+    } =
+        await query;
+
+    if (
         erroEventos
     ) {
         throw erroEventos;
     }
 
-    const listaEventos =
+    let listaEventos =
         Array.isArray(
             eventos
         )
             ? eventos
             : [];
+
+    // Segunda camada de segurança: mesma unidade/CNPJ do evento origem.
+    if (
+        cnpjUnidadeOrigem.length ===
+            14
+    ) {
+        const porCnpj =
+            listaEventos.filter(
+                evento =>
+                    normalizarCnpj(
+                        evento?.cnpj_unidade ||
+                        evento?.cnpj ||
+                        ''
+                    ) ===
+                        cnpjUnidadeOrigem
+            );
+
+        if (
+            porCnpj.length
+        ) {
+            listaEventos =
+                porCnpj;
+        }
+    } else if (
+        unidadeOrigem
+    ) {
+        const porUnidade =
+            listaEventos.filter(
+                evento =>
+                    String(
+                        evento?.unidade ||
+                        evento?.nome_unidade ||
+                        ''
+                    ).trim() ===
+                        unidadeOrigem &&
+                    (
+                        !holdingOrigem ||
+                        String(
+                            evento?.holding ||
+                            ''
+                        ).trim() ===
+                            holdingOrigem
+                    )
+            );
+
+        if (
+            porUnidade.length
+        ) {
+            listaEventos =
+                porUnidade;
+        }
+    }
+
+    // Se nada foi encontrado pelo agrupamento, ainda atualizamos o
+    // evento de origem exato. Isso evita o caso "resultado recebido,
+    // mas tela continua aguardando".
+    if (
+        !listaEventos.length &&
+        eventoOrigem
+    ) {
+        listaEventos =
+            [
+                eventoOrigem
+            ];
+    }
 
     const dataAdmissaoPendencia =
         normalizarDataAdmissaoEsocial(
@@ -54473,40 +54866,41 @@ async function aplicarVinculoPortalSstNaEmpresaExata(
             candidatos =
                 mesmaAdmissao;
         }
-    } else {
-        const datas =
-            new Set(
-                listaEventos
-                    .map(
-                        evento =>
-                            normalizarDataAdmissaoEsocial(
-                                evento?.data_admissao ||
-                                ''
-                            )
-                    )
-                    .filter(Boolean)
-            );
-
-        // Se houver recontratações e não soubermos qual vínculo é,
-        // atualiza apenas o evento que originou a tarefa.
-        if (
-            datas.size >
-                1
-        ) {
-            candidatos =
-                listaEventos.filter(
-                    evento =>
-                        String(
-                            evento?.id ||
-                            ''
-                        ) ===
-                        String(
-                            pendencia?.evento_exemplo_id ||
-                            ''
-                        )
-                );
-        }
     }
+
+    // Garante que o evento que criou a tarefa participe da atualização.
+    if (
+        eventoOrigem &&
+        !candidatos.some(
+            evento =>
+                String(
+                    evento?.id ||
+                    ''
+                ) ===
+                    String(
+                        eventoOrigem.id
+                    )
+        )
+    ) {
+        candidatos.push(
+            eventoOrigem
+        );
+    }
+
+    // Evita duplicidade por id.
+    candidatos =
+        Array.from(
+            new Map(
+                candidatos.map(
+                    evento => [
+                        String(
+                            evento.id
+                        ),
+                        evento
+                    ]
+                )
+            ).values()
+        );
 
     let eventosAtualizados =
         0;
@@ -54529,15 +54923,9 @@ async function aplicarVinculoPortalSstNaEmpresaExata(
         }
     }
 
-    // Resolve TODAS as pendências do mesmo vínculo dentro da
-    // unidade exata. Isso evita novo lote da mesma unidade.
-    const {
-        data:
-            pendenciasMesmaEmpresa,
-        error:
-            erroPendencias
-    } =
-        await getSupabase()
+    // Resolve todas as tarefas locais desta UNIDADE exata + CPF.
+    let queryPendencias =
+        getSupabase()
             .from(
                 'esocial_matriculas_pendentes'
             )
@@ -54545,13 +54933,27 @@ async function aplicarVinculoPortalSstNaEmpresaExata(
                 'id,data_admissao,status'
             )
             .eq(
-                'codigo_empresa',
-                empresaId
-            )
-            .eq(
                 'cpf',
                 cpf
             );
+
+    if (
+        empresaIdInterno
+    ) {
+        queryPendencias =
+            queryPendencias.eq(
+                'codigo_empresa',
+                empresaIdInterno
+            );
+    }
+
+    const {
+        data:
+            pendenciasMesmaEmpresa,
+        error:
+            erroPendencias
+    } =
+        await queryPendencias;
 
     if (
         erroPendencias
@@ -54659,30 +55061,44 @@ async function aplicarVinculoPortalSstNaEmpresaExata(
                 : 0;
     }
 
+    console.log(
+        '✅ Portal SST aplicado nos eventos:',
+        {
+            cpf,
+            empresaIdInterno,
+            eventoExemploId,
+            codigoEmpresaEvento,
+            cnpjUnidadeOrigem:
+                cnpjUnidadeOrigem ||
+                null,
+            eventosAtualizados,
+            pendenciasResolvidas
+        }
+    );
+
     return {
         eventosAtualizados,
         pendenciasResolvidas
     };
 }
 
-
-let ultimaConciliacaoPortalSstV40 =
+let ultimaConciliacaoPortalSstV41 =
     0;
 
 
-async function reconciliarResultadosPortalSstV40() {
+async function reconciliarResultadosPortalSstV41() {
     const agora =
         Date.now();
 
     if (
         agora -
-        ultimaConciliacaoPortalSstV40 <
-            30000
+        ultimaConciliacaoPortalSstV41 <
+            10000
     ) {
         return 0;
     }
 
-    ultimaConciliacaoPortalSstV40 =
+    ultimaConciliacaoPortalSstV41 =
         agora;
 
     const {
@@ -54838,8 +55254,8 @@ router.post(
                                 : 'erro_conector_local',
                         motivo:
                             podeReprocessar
-                                ? 'ERRO_CONECTOR_LOCAL_REPROCESSAVEL_V35'
-                                : 'ERRO_CONECTOR_LOCAL_V35_FINAL',
+                                ? 'ERRO_CONECTOR_LOCAL_REPROCESSAVEL_V41'
+                                : 'ERRO_CONECTOR_LOCAL_V41_FINAL',
                         ultimo_erro:
                             erroConector,
                         proxima_tentativa_em:
@@ -54960,7 +55376,7 @@ router.post(
                             status:
                                 'erro_conector_local',
                             motivo:
-                                'ERRO_CONECTOR_LOCAL_V35_FINAL',
+                                'ERRO_CONECTOR_LOCAL_V41_FINAL',
                             ultimo_erro:
                                 error?.message ||
                                 String(error)
