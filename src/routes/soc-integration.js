@@ -51873,7 +51873,7 @@ router.post(
 
 
 // ============================================================
-// CONECTOR LOCAL eSOCIAL - V3.1
+// CONECTOR LOCAL eSOCIAL - V3.2
 // Chrome normal do Windows + certificado instalado no PC.
 // ============================================================
 
@@ -52460,6 +52460,52 @@ router.post(
 );
 
 
+
+async function reabrirErrosLegadosConectorLocalV3() {
+    const agora =
+        new Date().toISOString();
+
+    const {
+        data,
+        error
+    } = await getSupabase()
+        .from(
+            'esocial_matriculas_pendentes'
+        )
+        .update({
+            status:
+                'aguardando_conector_local',
+            motivo:
+                'REPROCESSAMENTO_V3_2_LIBERADO',
+            tentativas:
+                0,
+            proxima_tentativa_em:
+                null,
+            updated_at:
+                agora
+        })
+        .eq(
+            'status',
+            'erro_conector_local'
+        )
+        .eq(
+            'motivo',
+            'ERRO_CONECTOR_LOCAL'
+        )
+        .select(
+            'id'
+        );
+
+    if (error) {
+        throw error;
+    }
+
+    return Array.isArray(data)
+        ? data.length
+        : 0;
+}
+
+
 router.get(
     '/conector-local/proximo-lote',
     async (req, res) => {
@@ -52475,6 +52521,18 @@ router.get(
         try {
             ultimoHeartbeatConectorLocalEsocial =
                 new Date().toISOString();
+
+            const reabertosLegados =
+                await reabrirErrosLegadosConectorLocalV3();
+
+            if (
+                reabertosLegados >
+                    0
+            ) {
+                console.log(
+                    `♻️ Conector V3.2: ${reabertosLegados} erro(s) legado(s) da V3 liberado(s) para reprocessamento.`
+                );
+            }
 
             const agora =
                 Date.now();
@@ -52967,8 +53025,8 @@ router.post(
                                 : 'erro_conector_local',
                         motivo:
                             podeReprocessar
-                                ? 'ERRO_CONECTOR_LOCAL_REPROCESSAVEL'
-                                : 'ERRO_CONECTOR_LOCAL',
+                                ? 'ERRO_CONECTOR_LOCAL_REPROCESSAVEL_V32'
+                                : 'ERRO_CONECTOR_LOCAL_V32_FINAL',
                         ultimo_erro:
                             erroConector,
                         proxima_tentativa_em:
@@ -53087,7 +53145,7 @@ router.post(
                             status:
                                 'erro_conector_local',
                             motivo:
-                                'ERRO_CONECTOR_LOCAL',
+                                'ERRO_CONECTOR_LOCAL_V32_FINAL',
                             ultimo_erro:
                                 error?.message ||
                                 String(error)
