@@ -51873,7 +51873,7 @@ router.post(
 
 
 // ============================================================
-// CONECTOR LOCAL eSOCIAL - V3.4
+// CONECTOR LOCAL eSOCIAL - V3.5
 // Chrome normal do Windows + certificado instalado no PC.
 // ============================================================
 
@@ -51970,6 +51970,30 @@ async function enfileirarEventoConectorLocalEsocial(evento) {
             ).trim(),
             mensagem:
                 'A matrícula oficial já estava disponível na base local.'
+        };
+    }
+
+    const semAutorizacao =
+        await buscarPendenciaSemAutorizacaoConectorLocalEsocial(
+            evento
+        );
+
+    if (
+        semAutorizacao
+    ) {
+        return {
+            success:
+                true,
+            imediato:
+                false,
+            enfileirado:
+                false,
+            semAutorizacao:
+                true,
+            status:
+                'sem_autorizacao_conector_local',
+            mensagem:
+                'Este CNPJ está marcado como sem autorização de acesso Web para o procurador.'
         };
     }
 
@@ -52115,6 +52139,181 @@ async function obterCnpjCompletoConectorLocalEsocial(pendencia) {
         : '';
 }
 
+
+async function buscarPendenciaSemAutorizacaoConectorLocalEsocial(
+    evento
+) {
+    const chave =
+        dadosChaveVinculoMatricula(
+            evento
+        );
+
+    if (
+        !chave.tpInsc ||
+        !chave.nrInsc
+    ) {
+        return null;
+    }
+
+    const {
+        data,
+        error
+    } = await getSupabase()
+        .from(
+            'esocial_matriculas_pendentes'
+        )
+        .select('*')
+        .eq(
+            'tp_insc_empregador',
+            chave.tpInsc
+        )
+        .eq(
+            'nr_insc_empregador',
+            chave.nrInsc
+        )
+        .eq(
+            'status',
+            'sem_autorizacao_conector_local'
+        )
+        .order(
+            'updated_at',
+            {
+                ascending:
+                    false
+            }
+        )
+        .limit(1)
+        .maybeSingle();
+
+    if (error) {
+        throw error;
+    }
+
+    return data ||
+        null;
+}
+
+
+async function listarCnpjsSemAutorizacaoConectorLocalEsocial() {
+    const {
+        data,
+        error
+    } = await getSupabase()
+        .from(
+            'esocial_matriculas_pendentes'
+        )
+        .select(
+            'id,tp_insc_empregador,nr_insc_empregador,codigo_empresa,status,motivo,ultimo_erro,updated_at'
+        )
+        .eq(
+            'status',
+            'sem_autorizacao_conector_local'
+        )
+        .order(
+            'updated_at',
+            {
+                ascending:
+                    false
+            }
+        )
+        .limit(1000);
+
+    if (error) {
+        throw error;
+    }
+
+    const registros =
+        Array.isArray(data)
+            ? data
+            : [];
+
+    const mapa =
+        new Map();
+
+    for (
+        const item
+        of registros
+    ) {
+        const chave =
+            [
+                String(
+                    item?.tp_insc_empregador ||
+                    ''
+                ).trim(),
+                String(
+                    item?.nr_insc_empregador ||
+                    ''
+                ).trim()
+            ].join('|');
+
+        if (
+            mapa.has(
+                chave
+            )
+        ) {
+            continue;
+        }
+
+        const cnpj =
+            await obterCnpjCompletoConectorLocalEsocial(
+                item
+            );
+
+        mapa.set(
+            chave,
+            {
+                cnpj:
+                    cnpj ||
+                    String(
+                        item?.nr_insc_empregador ||
+                        ''
+                    ).trim(),
+                tpInsc:
+                    String(
+                        item?.tp_insc_empregador ||
+                        ''
+                    ).trim() ||
+                    null,
+                nrInsc:
+                    String(
+                        item?.nr_insc_empregador ||
+                        ''
+                    ).trim() ||
+                    null,
+                mensagem:
+                    String(
+                        item?.ultimo_erro ||
+                        'O procurador não possui perfil com autorização de acesso à Web.'
+                    ).trim(),
+                atualizadoEm:
+                    item?.updated_at ||
+                    null
+            }
+        );
+    }
+
+    return Array.from(
+        mapa.values()
+    )
+        .sort(
+            (
+                a,
+                b
+            ) =>
+                String(
+                    a.cnpj ||
+                    ''
+                ).localeCompare(
+                    String(
+                        b.cnpj ||
+                        ''
+                    ),
+                    'pt-BR'
+                )
+        );
+}
+
+
 router.get(
     '/conector-local/status',
     async (req, res) => {
@@ -52149,6 +52348,9 @@ router.get(
             const tarefas =
                 Array.isArray(data) ? data : [];
 
+            const cnpjsSemAutorizacao =
+                await listarCnpjsSemAutorizacaoConectorLocalEsocial();
+
             return res.json({
                 success: true,
                 online,
@@ -52173,7 +52375,10 @@ router.get(
                         item =>
                             item.status ===
                             'erro_conector_local'
-                    ).length
+                    ).length,
+                semAutorizacao:
+                    cnpjsSemAutorizacao.length,
+                cnpjsSemAutorizacao
             });
         } catch (error) {
             return res.status(500).json({
@@ -52253,6 +52458,7 @@ router.post(
 
             let enfileirados = 0;
             let imediatos = 0;
+            let semAutorizacao = 0;
             const erros = [];
 
             for (
@@ -52269,8 +52475,16 @@ router.post(
                             evento
                         );
 
-                    if (resultado.imediato) {
+                    if (
+                        resultado.semAutorizacao
+                    ) {
+                        semAutorizacao++;
+
+                    } else if (
+                        resultado.imediato
+                    ) {
                         imediatos++;
+
                     } else {
                         enfileirados++;
                     }
@@ -52289,6 +52503,7 @@ router.post(
                 solicitados: ids.length,
                 enfileirados,
                 resolvidosDoCache: imediatos,
+                semAutorizacao,
                 erros
             });
         } catch (error) {
@@ -52394,13 +52609,22 @@ router.get(
                 status ===
                     'nao_localizado_conector_local';
 
+            const semAutorizacao =
+                motivo ===
+                    'PROCURADOR_SEM_AUTORIZACAO_WEB' ||
+                status ===
+                    'sem_autorizacao_conector_local';
+
             return res.json({
                 success: true,
-                concluida: naoLocalizado,
+                concluida:
+                    naoLocalizado ||
+                    semAutorizacao,
                 encontrado:
                     naoLocalizado
                         ? false
                         : null,
+                semAutorizacao,
                 status:
                     status || 'nao_iniciada',
                 motivo:
@@ -52480,8 +52704,10 @@ async function recuperarPendenciasConectorLocalV34() {
         [
             'ERRO_CONECTOR_LOCAL',
             'ERRO_CONECTOR_LOCAL_V32_FINAL',
-            'ERRO_PREPARAR_CNPJ_V34_FINAL',
-            'ERRO_CONECTOR_LOCAL_V34_FINAL'
+            'ERRO_PREPARAR_CNPJ_V33_FINAL',
+            'ERRO_CONECTOR_LOCAL_V33_FINAL',
+            'ERRO_PREPARAR_CNPJ_V35_FINAL',
+            'ERRO_CONECTOR_LOCAL_V35_FINAL'
         ];
 
     let errosReabertos =
@@ -52619,7 +52845,7 @@ router.get(
                     0
             ) {
                 console.log(
-                    `♻️ Conector V3.4: ${recuperacaoV34.errosReabertos} erro(s) legado(s) reaberto(s) e ` +
+                    `♻️ Conector V3.5: ${recuperacaoV34.errosReabertos} erro(s) legado(s) reaberto(s) e ` +
                     `${recuperacaoV34.processamentosRecuperados} processamento(s) interrompido(s) recuperado(s).`
                 );
             }
@@ -53037,6 +53263,197 @@ router.get(
 );
 
 
+
+router.post(
+    '/conector-local/sem-autorizacao-lote',
+    async (req, res) => {
+        if (
+            !validarChaveConectorLocalEsocial(
+                req,
+                res
+            )
+        ) {
+            return;
+        }
+
+        try {
+            const ids =
+                (
+                    Array.isArray(
+                        req.body?.ids
+                    )
+                        ? req.body.ids
+                        : []
+                )
+                    .map(
+                        id =>
+                            String(
+                                id ||
+                                ''
+                            ).trim()
+                    )
+                    .filter(Boolean);
+
+            if (!ids.length) {
+                return res
+                    .status(400)
+                    .json({
+                        success:
+                            false,
+                        error:
+                            'Nenhuma tarefa foi informada.'
+                    });
+            }
+
+            const cnpj =
+                normalizarCnpj(
+                    req.body?.cnpj ||
+                    ''
+                );
+
+            const mensagem =
+                String(
+                    req.body?.erro ||
+                    'O procurador não possui perfil com autorização de acesso à Web.'
+                ).trim();
+
+            const agora =
+                new Date().toISOString();
+
+            const {
+                data:
+                    tarefas,
+                error:
+                    erroBusca
+            } =
+                await getSupabase()
+                    .from(
+                        'esocial_matriculas_pendentes'
+                    )
+                    .select(
+                        'id,tp_insc_empregador,nr_insc_empregador'
+                    )
+                    .in(
+                        'id',
+                        ids
+                    );
+
+            if (
+                erroBusca
+            ) {
+                throw erroBusca;
+            }
+
+            const primeira =
+                (
+                    Array.isArray(
+                        tarefas
+                    )
+                        ? tarefas
+                        : []
+                )[0] ||
+                null;
+
+            if (
+                !primeira
+            ) {
+                return res
+                    .status(404)
+                    .json({
+                        success:
+                            false,
+                        error:
+                            'Tarefas do lote não encontradas.'
+                    });
+            }
+
+            // Marca todas as tarefas atuais do mesmo empregador,
+            // evitando que outro CPF desse CNPJ seja tentado depois.
+            const {
+                data:
+                    atualizadas,
+                error:
+                    erroUpdate
+            } =
+                await getSupabase()
+                    .from(
+                        'esocial_matriculas_pendentes'
+                    )
+                    .update({
+                        status:
+                            'sem_autorizacao_conector_local',
+                        motivo:
+                            'PROCURADOR_SEM_AUTORIZACAO_WEB',
+                        ultimo_erro:
+                            mensagem,
+                        proxima_tentativa_em:
+                            null,
+                        updated_at:
+                            agora
+                    })
+                    .eq(
+                        'tp_insc_empregador',
+                        primeira.tp_insc_empregador
+                    )
+                    .eq(
+                        'nr_insc_empregador',
+                        primeira.nr_insc_empregador
+                    )
+                    .in(
+                        'status',
+                        [
+                            'aguardando_conector_local',
+                            'processando_conector_local',
+                            'erro_conector_local'
+                        ]
+                    )
+                    .select(
+                        'id'
+                    );
+
+            if (
+                erroUpdate
+            ) {
+                throw erroUpdate;
+            }
+
+            return res.json({
+                success:
+                    true,
+                cnpj:
+                    cnpj ||
+                    null,
+                totalMarcado:
+                    Array.isArray(
+                        atualizadas
+                    )
+                        ? atualizadas.length
+                        : 0,
+                status:
+                    'sem_autorizacao_conector_local',
+                motivo:
+                    'PROCURADOR_SEM_AUTORIZACAO_WEB'
+            });
+
+        } catch (
+            error
+        ) {
+            return res
+                .status(500)
+                .json({
+                    success:
+                        false,
+                    error:
+                        error?.message ||
+                        String(
+                            error
+                        )
+                });
+        }
+    }
+);
+
+
 router.post(
     '/conector-local/erro-lote',
     async (req, res) => {
@@ -53169,7 +53586,7 @@ router.post(
                         status:
                             'aguardando_conector_local',
                         motivo:
-                            'ERRO_PREPARAR_CNPJ_REPROCESSAVEL_V34',
+                            'ERRO_PREPARAR_CNPJ_REPROCESSAVEL_V35',
                         ultimo_erro:
                             mensagem,
                         proxima_tentativa_em:
@@ -53203,7 +53620,7 @@ router.post(
                         status:
                             'erro_conector_local',
                         motivo:
-                            'ERRO_PREPARAR_CNPJ_V34_FINAL',
+                            'ERRO_PREPARAR_CNPJ_V35_FINAL',
                         ultimo_erro:
                             mensagem,
                         proxima_tentativa_em:
@@ -53337,8 +53754,8 @@ router.post(
                                 : 'erro_conector_local',
                         motivo:
                             podeReprocessar
-                                ? 'ERRO_CONECTOR_LOCAL_REPROCESSAVEL_V34'
-                                : 'ERRO_CONECTOR_LOCAL_V34_FINAL',
+                                ? 'ERRO_CONECTOR_LOCAL_REPROCESSAVEL_V35'
+                                : 'ERRO_CONECTOR_LOCAL_V35_FINAL',
                         ultimo_erro:
                             erroConector,
                         proxima_tentativa_em:
@@ -53457,7 +53874,7 @@ router.post(
                             status:
                                 'erro_conector_local',
                             motivo:
-                                'ERRO_CONECTOR_LOCAL_V34_FINAL',
+                                'ERRO_CONECTOR_LOCAL_V35_FINAL',
                             ultimo_erro:
                                 error?.message ||
                                 String(error)

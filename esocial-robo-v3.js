@@ -9655,6 +9655,171 @@ function garantirBadgeConectorLocalEsocial() {
 }
 
 
+
+function formatarCnpjConectorLocalEsocial(
+    valor
+) {
+    const cnpj =
+        String(
+            valor ||
+            ''
+        ).replace(
+            /\D/g,
+            ''
+        );
+
+    if (
+        cnpj.length !==
+            14
+    ) {
+        return String(
+            valor ||
+            '—'
+        );
+    }
+
+    return cnpj.replace(
+        /^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,
+        '$1.$2.$3/$4-$5'
+    );
+}
+
+
+function garantirPainelCnpjsSemAutorizacaoEsocial() {
+    let painel =
+        document.getElementById(
+            'painelCnpjsSemAutorizacaoEsocial'
+        );
+
+    if (
+        painel
+    ) {
+        return painel;
+    }
+
+    const botao =
+        document.getElementById(
+            'btnResolverMatriculasHolding'
+        );
+
+    const container =
+        botao?.parentElement ||
+        null;
+
+    if (
+        !container
+    ) {
+        return null;
+    }
+
+    painel =
+        document.createElement(
+            'div'
+        );
+
+    painel.id =
+        'painelCnpjsSemAutorizacaoEsocial';
+
+    painel.className =
+        'alert alert-warning mt-3 mb-3 d-none';
+
+    painel.style.maxWidth =
+        '900px';
+
+    painel.innerHTML =
+        '';
+
+    container.insertAdjacentElement(
+        'afterend',
+        painel
+    );
+
+    return painel;
+}
+
+
+function renderizarCnpjsSemAutorizacaoEsocial(
+    lista
+) {
+    const painel =
+        garantirPainelCnpjsSemAutorizacaoEsocial();
+
+    if (
+        !painel
+    ) {
+        return;
+    }
+
+    const itens =
+        Array.isArray(
+            lista
+        )
+            ? lista
+            : [];
+
+    if (
+        !itens.length
+    ) {
+        painel.classList.add(
+            'd-none'
+        );
+
+        painel.innerHTML =
+            '';
+
+        return;
+    }
+
+    painel.classList.remove(
+        'd-none'
+    );
+
+    const linhas =
+        itens
+            .map(
+                item => {
+                    const cnpj =
+                        formatarCnpjConectorLocalEsocial(
+                            item?.cnpj ||
+                            item?.nrInsc ||
+                            ''
+                        );
+
+                    return `
+                        <span
+                            class="badge bg-warning text-dark me-2 mb-2"
+                            style="font-size: .82rem;"
+                        >
+                            ${escaparHtml(cnpj)}
+                        </span>
+                    `;
+                }
+            )
+            .join('');
+
+    painel.innerHTML = `
+        <div class="d-flex align-items-start gap-2">
+            <i class="fas fa-triangle-exclamation mt-1"></i>
+
+            <div>
+                <strong>
+                    CNPJs sem autorização de acesso no eSocial
+                </strong>
+
+                <div class="small mt-1 mb-2">
+                    O procurador não possui perfil com autorização de acesso à Web.
+                    Estes CNPJs não serão tentados novamente pelo conector.
+                </div>
+
+                <div>
+                    ${linhas}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+
 async function atualizarStatusConectorLocalEsocial() {
     const badge =
         garantirBadgeConectorLocalEsocial();
@@ -9679,6 +9844,11 @@ async function atualizarStatusConectorLocalEsocial() {
                 0
             );
 
+        renderizarCnpjsSemAutorizacaoEsocial(
+            status.cnpjsSemAutorizacao ||
+            []
+        );
+
         if (
             status.online ===
                 true
@@ -9686,10 +9856,27 @@ async function atualizarStatusConectorLocalEsocial() {
             badge.className =
                 'badge bg-success ms-2';
 
+            const semAutorizacao =
+                Number(
+                    status.semAutorizacao ||
+                    0
+                );
+
             badge.textContent =
                 fila
-                    ? `Conector online • ${fila} na fila`
-                    : 'Conector online';
+                    ? (
+                        `Conector online • ${fila} na fila` +
+                        (
+                            semAutorizacao
+                                ? ` • ${semAutorizacao} CNPJ(s) sem autorização`
+                                : ''
+                        )
+                    )
+                    : (
+                        semAutorizacao
+                            ? `Conector online • ${semAutorizacao} CNPJ(s) sem autorização`
+                            : 'Conector online'
+                    );
 
         } else {
             badge.className =
@@ -9707,7 +9894,18 @@ async function atualizarStatusConectorLocalEsocial() {
                 status.aguardando ||
                 0,
                 status.processando ||
-                0
+                0,
+                (
+                    status.cnpjsSemAutorizacao ||
+                    []
+                )
+                    .map(
+                        item =>
+                            item?.cnpj ||
+                            item?.nrInsc ||
+                            ''
+                    )
+                    .join(',')
             ].join(
                 '|'
             );
@@ -9908,9 +10106,15 @@ async function enfileirarEventosConectorLocalEsocial() {
             `${resultado.enfileirados || 0} consulta(s) enviada(s) ao conector` +
             (
                 resultado.resolvidosDoCache
-                    ? `; ${resultado.resolvidosDoCache} já resolvida(s) pela base local.`
-                    : '.'
-            ),
+                    ? `; ${resultado.resolvidosDoCache} já resolvida(s) pela base local`
+                    : ''
+            ) +
+            (
+                resultado.semAutorizacao
+                    ? `; ${resultado.semAutorizacao} ignorada(s) por CNPJ sem autorização`
+                    : ''
+            ) +
+            '.',
             'success'
         );
 
@@ -9984,6 +10188,7 @@ function instalarConectorLocalEsocial() {
     }
 
     garantirBadgeConectorLocalEsocial();
+    garantirPainelCnpjsSemAutorizacaoEsocial();
 
     clearInterval(
         timerStatusConectorLocalEsocial
