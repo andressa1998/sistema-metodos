@@ -10364,7 +10364,8 @@ function eventosPendentesParaConectorLocalEsocial(
                         return (
                             resumo.vinculoStatus !==
                                 'vinculado' ||
-                            !resumo.matriculaOficial
+                            !resumo.matriculaOficial ||
+                            !resumo.eventosObrigatoriosVerificados
                         );
                     }
                 )
@@ -10433,7 +10434,7 @@ async function enfileirarEventosConectorLocalEsocial() {
 
     const confirmou =
         window.confirm(
-            `Enviar ${eventos.length} consulta(s) de vínculo/matrícula de ${escopoConsulta} para o Conector eSocial deste computador?`
+            `Enviar ${eventos.length} consulta(s) de vínculo/matrícula/eventos de ${escopoConsulta} para o Conector eSocial deste computador?`
         );
 
     if (

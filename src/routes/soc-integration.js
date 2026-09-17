@@ -51870,7 +51870,7 @@ router.post(
 
 
 // ============================================================
-// CONECTOR LOCAL eSOCIAL - V4.1
+// CONECTOR LOCAL eSOCIAL - V4.2
 // Chrome normal do Windows + certificado instalado no PC.
 // ============================================================
 
@@ -52297,21 +52297,65 @@ async function enfileirarEventoConectorLocalEsocial(evento, contexto = {}) {
                     vinculoExistente
                 );
 
+            const verificacaoEventos =
+                await eventosSstPendentesDaPendencia(
+                    pendencia
+                );
+
+            if (
+                !verificacaoEventos.precisaVerificar
+            ) {
+                return {
+                    success:
+                        true,
+                    imediato:
+                        true,
+                    encontrado:
+                        true,
+                    matricula:
+                        vinculoExistente.matricula_esocial ||
+                        vinculoExistente.matricula ||
+                        null,
+                    eventosAtualizados:
+                        aplicacao.eventosAtualizados,
+                    mensagem:
+                        'Vínculo e eventos SST já estão verificados. Nenhuma nova consulta foi criada.'
+                };
+            }
+
+            await atualizarPendenciaMatricula(
+                pendencia.id,
+                {
+                    status:
+                        'aguardando_conector_local',
+                    motivo:
+                        'AGUARDANDO_EVENTOS_PORTAL_SST',
+                    ultimo_erro:
+                        null,
+                    proxima_tentativa_em:
+                        null
+                }
+            );
+
             return {
                 success:
                     true,
                 imediato:
-                    true,
+                    false,
+                tarefaId:
+                    pendencia.id,
+                status:
+                    'aguardando_conector_local',
                 encontrado:
                     true,
                 matricula:
                     vinculoExistente.matricula_esocial ||
                     vinculoExistente.matricula ||
                     null,
-                eventosAtualizados:
-                    aplicacao.eventosAtualizados,
+                eventosPendentes:
+                    verificacaoEventos.tiposPendentes,
                 mensagem:
-                    'Este vínculo já havia sido resolvido pelo Portal SST. Nenhuma nova consulta foi criada.'
+                    'A matrícula já está resolvida; o conector foi chamado apenas para verificar S-2220/S-2240.'
             };
         }
     }
@@ -55175,6 +55219,480 @@ async function reconciliarResultadosPortalSstV41() {
 }
 
 
+
+async function buscarEventosDaMesmaUnidadeDaPendencia(
+    pendencia
+) {
+    const cpf =
+        normalizarCpfEsocial(
+            pendencia?.cpf ||
+            ''
+        );
+
+    if (
+        cpf.length !==
+            11
+    ) {
+        return [];
+    }
+
+    let eventoOrigem =
+        null;
+
+    const eventoExemploId =
+        String(
+            pendencia?.evento_exemplo_id ||
+            ''
+        ).trim();
+
+    if (
+        eventoExemploId
+    ) {
+        const {
+            data,
+            error
+        } =
+            await getSupabase()
+                .from(
+                    'esocial_eventos'
+                )
+                .select('*')
+                .eq(
+                    'id',
+                    eventoExemploId
+                )
+                .limit(1)
+                .maybeSingle();
+
+        if (
+            error
+        ) {
+            throw error;
+        }
+
+        eventoOrigem =
+            data ||
+            null;
+    }
+
+    let query =
+        getSupabase()
+            .from(
+                'esocial_eventos'
+            )
+            .select('*')
+            .eq(
+                'cpf',
+                cpf
+            )
+            .in(
+                'tipo_evento',
+                [
+                    'S-2220',
+                    'S-2240'
+                ]
+            );
+
+    const codigoEmpresaEvento =
+        String(
+            eventoOrigem?.codigo_empresa ||
+            ''
+        ).trim();
+
+    if (
+        codigoEmpresaEvento
+    ) {
+        query =
+            query.eq(
+                'codigo_empresa',
+                codigoEmpresaEvento
+            );
+    }
+
+    const {
+        data,
+        error
+    } =
+        await query;
+
+    if (
+        error
+    ) {
+        throw error;
+    }
+
+    let lista =
+        Array.isArray(data)
+            ? data
+            : [];
+
+    const cnpjOrigem =
+        normalizarCnpj(
+            eventoOrigem?.cnpj_unidade ||
+            eventoOrigem?.cnpj ||
+            ''
+        );
+
+    const unidadeOrigem =
+        String(
+            eventoOrigem?.unidade ||
+            eventoOrigem?.nome_unidade ||
+            ''
+        ).trim();
+
+    const holdingOrigem =
+        String(
+            eventoOrigem?.holding ||
+            ''
+        ).trim();
+
+    if (
+        cnpjOrigem.length ===
+            14
+    ) {
+        const filtrados =
+            lista.filter(
+                evento =>
+                    normalizarCnpj(
+                        evento?.cnpj_unidade ||
+                        evento?.cnpj ||
+                        ''
+                    ) ===
+                        cnpjOrigem
+            );
+
+        if (
+            filtrados.length
+        ) {
+            lista =
+                filtrados;
+        }
+
+    } else if (
+        unidadeOrigem
+    ) {
+        const filtrados =
+            lista.filter(
+                evento =>
+                    String(
+                        evento?.unidade ||
+                        evento?.nome_unidade ||
+                        ''
+                    ).trim() ===
+                        unidadeOrigem &&
+                    (
+                        !holdingOrigem ||
+                        String(
+                            evento?.holding ||
+                            ''
+                        ).trim() ===
+                            holdingOrigem
+                    )
+            );
+
+        if (
+            filtrados.length
+        ) {
+            lista =
+                filtrados;
+        }
+    }
+
+    if (
+        eventoOrigem &&
+        !lista.some(
+            evento =>
+                String(
+                    evento?.id ||
+                    ''
+                ) ===
+                    String(
+                        eventoOrigem.id
+                    )
+        )
+    ) {
+        lista.push(
+            eventoOrigem
+        );
+    }
+
+    return Array.from(
+        new Map(
+            lista.map(
+                evento => [
+                    String(
+                        evento.id
+                    ),
+                    evento
+                ]
+            )
+        ).values()
+    );
+}
+
+
+function eventoSstJaVerificadoLocalmente(
+    evento
+) {
+    return (
+        evento?.existe_no_esocial ===
+            true ||
+        evento?.verificacao_esocial_completa ===
+            true ||
+        evento?.emitido_esocial ===
+            true ||
+        evento?.ja_emitido ===
+            true ||
+        Boolean(
+            String(
+                evento?.numero_recibo ||
+                evento?.numero_recibo_existente ||
+                ''
+            ).trim()
+        )
+    );
+}
+
+
+async function eventosSstPendentesDaPendencia(
+    pendencia
+) {
+    const eventos =
+        await buscarEventosDaMesmaUnidadeDaPendencia(
+            pendencia
+        );
+
+    const tipos =
+        new Map();
+
+    for (
+        const evento
+        of eventos
+    ) {
+        const tipo =
+            String(
+                evento?.tipo_evento ||
+                ''
+            )
+                .trim()
+                .toUpperCase();
+
+        if (
+            ![
+                'S-2220',
+                'S-2240'
+            ].includes(
+                tipo
+            )
+        ) {
+            continue;
+        }
+
+        if (
+            !tipos.has(
+                tipo
+            )
+        ) {
+            tipos.set(
+                tipo,
+                []
+            );
+        }
+
+        tipos.get(
+            tipo
+        ).push(
+            evento
+        );
+    }
+
+    const pendentes =
+        [];
+
+    for (
+        const [
+            tipo,
+            registros
+        ]
+        of tipos.entries()
+    ) {
+        const verificado =
+            registros.some(
+                evento =>
+                    eventoSstJaVerificadoLocalmente(
+                        evento
+                    )
+            );
+
+        if (
+            !verificado
+        ) {
+            pendentes.push(
+                tipo
+            );
+        }
+    }
+
+    return {
+        eventos,
+        tiposPendentes:
+            pendentes,
+        precisaVerificar:
+            pendentes.length >
+            0
+    };
+}
+
+
+async function aplicarStatusEventosSstPortalNaPendencia(
+    pendencia,
+    eventosSst
+) {
+    const eventos =
+        await buscarEventosDaMesmaUnidadeDaPendencia(
+            pendencia
+        );
+
+    const agora =
+        new Date().toISOString();
+
+    const resultado =
+        {
+            s2220: {
+                verificado:
+                    false,
+                existe:
+                    null,
+                atualizados:
+                    0
+            },
+            s2240: {
+                verificado:
+                    false,
+                existe:
+                    null,
+                atualizados:
+                    0
+            }
+        };
+
+    const configs =
+        [
+            {
+                codigo:
+                    'S-2220',
+                chave:
+                    's2220'
+            },
+            {
+                codigo:
+                    'S-2240',
+                chave:
+                    's2240'
+            }
+        ];
+
+    for (
+        const config
+        of configs
+    ) {
+        const status =
+            eventosSst?.[
+                config.chave
+            ] ||
+            null;
+
+        if (
+            !status ||
+            status.verificado !==
+                true ||
+            typeof status.existe !==
+                'boolean'
+        ) {
+            continue;
+        }
+
+        const candidatos =
+            eventos.filter(
+                evento =>
+                    String(
+                        evento?.tipo_evento ||
+                        ''
+                    )
+                        .trim()
+                        .toUpperCase() ===
+                    config.codigo
+            );
+
+        let atualizados =
+            0;
+
+        for (
+            const evento
+            of candidatos
+        ) {
+            const atualizacao =
+                {
+                    existe_no_esocial:
+                        status.existe,
+                    verificacao_esocial_completa:
+                        true,
+                    verificado_esocial_em:
+                        agora,
+                    updated_at:
+                        agora
+                };
+
+            // Se encontramos o evento existente, não inventamos recibo.
+            // O frontend já considera existe_no_esocial=true como confirmado.
+            if (
+                status.existe ===
+                    false
+            ) {
+                atualizacao.numero_recibo_existente =
+                    null;
+            }
+
+            const {
+                error
+            } =
+                await getSupabase()
+                    .from(
+                        'esocial_eventos'
+                    )
+                    .update(
+                        atualizacao
+                    )
+                    .eq(
+                        'id',
+                        evento.id
+                    );
+
+            if (
+                error
+            ) {
+                throw error;
+            }
+
+            atualizados++;
+        }
+
+        resultado[
+            config.chave
+        ] =
+            {
+                verificado:
+                    true,
+                existe:
+                    status.existe,
+                atualizados
+            };
+    }
+
+    return resultado;
+}
+
+
 router.post(
     '/conector-local/resultado/:id',
     async (req, res) => {
@@ -55338,16 +55856,26 @@ router.post(
                 );
             }
 
+            const pendenciaAtualizada =
+                {
+                    ...pendencia,
+                    data_admissao:
+                        dataAdmissao ||
+                        pendencia.data_admissao ||
+                        null
+                };
+
             const aplicacao =
                 await aplicarVinculoPortalSstNaEmpresaExata(
-                    {
-                        ...pendencia,
-                        data_admissao:
-                            dataAdmissao ||
-                            pendencia.data_admissao ||
-                            null
-                    },
+                    pendenciaAtualizada,
                     vinculo
+                );
+
+            const statusEventosSst =
+                await aplicarStatusEventosSstPortalNaPendencia(
+                    pendenciaAtualizada,
+                    req.body?.eventosSst ||
+                    null
                 );
 
             return res.json({
@@ -55361,7 +55889,9 @@ router.post(
                 eventosAtualizados:
                     aplicacao.eventosAtualizados,
                 pendenciasResolvidas:
-                    aplicacao.pendenciasResolvidas
+                    aplicacao.pendenciasResolvidas,
+                eventosSst:
+                    statusEventosSst
             });
         } catch (error) {
             const tarefaId = String(
