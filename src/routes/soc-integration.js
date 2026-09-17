@@ -51873,7 +51873,7 @@ router.post(
 
 
 // ============================================================
-// CONECTOR LOCAL eSOCIAL - V3.2
+// CONECTOR LOCAL eSOCIAL - V3.3
 // Chrome normal do Windows + certificado instalado no PC.
 // ============================================================
 
@@ -52530,7 +52530,7 @@ router.get(
                     0
             ) {
                 console.log(
-                    `♻️ Conector V3.2: ${reabertosLegados} erro(s) legado(s) da V3 liberado(s) para reprocessamento.`
+                    `♻️ Conector V3.3: ${reabertosLegados} erro(s) legado(s) da V3 liberado(s) para reprocessamento.`
                 );
             }
 
@@ -52946,6 +52946,228 @@ router.get(
     }
 );
 
+
+router.post(
+    '/conector-local/erro-lote',
+    async (req, res) => {
+        if (
+            !validarChaveConectorLocalEsocial(
+                req,
+                res
+            )
+        ) {
+            return;
+        }
+
+        try {
+            const ids =
+                (
+                    Array.isArray(
+                        req.body?.ids
+                    )
+                        ? req.body.ids
+                        : []
+                )
+                    .map(
+                        id =>
+                            String(
+                                id ||
+                                ''
+                            ).trim()
+                    )
+                    .filter(Boolean);
+
+            if (!ids.length) {
+                return res
+                    .status(400)
+                    .json({
+                        success:
+                            false,
+                        error:
+                            'Nenhuma tarefa foi informada para o lote.'
+                    });
+            }
+
+            const mensagem =
+                String(
+                    req.body?.erro ||
+                    'Falha ao preparar CNPJ no portal eSocial.'
+                ).trim();
+
+            const etapa =
+                String(
+                    req.body?.etapa ||
+                    'preparar_cnpj'
+                ).trim();
+
+            const {
+                data: registros,
+                error: erroBusca
+            } = await getSupabase()
+                .from(
+                    'esocial_matriculas_pendentes'
+                )
+                .select(
+                    'id,tentativas'
+                )
+                .in(
+                    'id',
+                    ids
+                );
+
+            if (erroBusca) {
+                throw erroBusca;
+            }
+
+            const reprocessarIds =
+                [];
+
+            const finalizarIds =
+                [];
+
+            for (
+                const item
+                of (
+                    Array.isArray(
+                        registros
+                    )
+                        ? registros
+                        : []
+                )
+            ) {
+                const tentativas =
+                    Number(
+                        item?.tentativas ||
+                        0
+                    );
+
+                if (
+                    tentativas <
+                        4
+                ) {
+                    reprocessarIds.push(
+                        item.id
+                    );
+                } else {
+                    finalizarIds.push(
+                        item.id
+                    );
+                }
+            }
+
+            // CNPJ indisponível / sem SST não deve bloquear o restante da fila.
+            // Damos 10 minutos antes de tentar este CNPJ novamente.
+            const proximaTentativa =
+                new Date(
+                    Date.now() +
+                    10 *
+                    60 *
+                    1000
+                ).toISOString();
+
+            if (
+                reprocessarIds.length
+            ) {
+                const {
+                    error:
+                        erroReprocessar
+                } = await getSupabase()
+                    .from(
+                        'esocial_matriculas_pendentes'
+                    )
+                    .update({
+                        status:
+                            'aguardando_conector_local',
+                        motivo:
+                            'ERRO_PREPARAR_CNPJ_REPROCESSAVEL_V33',
+                        ultimo_erro:
+                            mensagem,
+                        proxima_tentativa_em:
+                            proximaTentativa,
+                        updated_at:
+                            new Date().toISOString()
+                    })
+                    .in(
+                        'id',
+                        reprocessarIds
+                    );
+
+                if (
+                    erroReprocessar
+                ) {
+                    throw erroReprocessar;
+                }
+            }
+
+            if (
+                finalizarIds.length
+            ) {
+                const {
+                    error:
+                        erroFinalizar
+                } = await getSupabase()
+                    .from(
+                        'esocial_matriculas_pendentes'
+                    )
+                    .update({
+                        status:
+                            'erro_conector_local',
+                        motivo:
+                            'ERRO_PREPARAR_CNPJ_V33_FINAL',
+                        ultimo_erro:
+                            mensagem,
+                        proxima_tentativa_em:
+                            null,
+                        updated_at:
+                            new Date().toISOString()
+                    })
+                    .in(
+                        'id',
+                        finalizarIds
+                    );
+
+                if (
+                    erroFinalizar
+                ) {
+                    throw erroFinalizar;
+                }
+            }
+
+            return res.json({
+                success:
+                    true,
+                etapa,
+                total:
+                    ids.length,
+                reprocessaveis:
+                    reprocessarIds.length,
+                finalizados:
+                    finalizarIds.length,
+                proximaTentativaEm:
+                    reprocessarIds.length
+                        ? proximaTentativa
+                        : null
+            });
+
+        } catch (
+            error
+        ) {
+            return res
+                .status(500)
+                .json({
+                    success:
+                        false,
+                    error:
+                        error?.message ||
+                        String(
+                            error
+                        )
+                });
+        }
+    }
+);
+
+
 router.post(
     '/conector-local/resultado/:id',
     async (req, res) => {
@@ -53025,8 +53247,8 @@ router.post(
                                 : 'erro_conector_local',
                         motivo:
                             podeReprocessar
-                                ? 'ERRO_CONECTOR_LOCAL_REPROCESSAVEL_V32'
-                                : 'ERRO_CONECTOR_LOCAL_V32_FINAL',
+                                ? 'ERRO_CONECTOR_LOCAL_REPROCESSAVEL_V33'
+                                : 'ERRO_CONECTOR_LOCAL_V33_FINAL',
                         ultimo_erro:
                             erroConector,
                         proxima_tentativa_em:
@@ -53145,7 +53367,7 @@ router.post(
                             status:
                                 'erro_conector_local',
                             motivo:
-                                'ERRO_CONECTOR_LOCAL_V32_FINAL',
+                                'ERRO_CONECTOR_LOCAL_V33_FINAL',
                             ultimo_erro:
                                 error?.message ||
                                 String(error)
