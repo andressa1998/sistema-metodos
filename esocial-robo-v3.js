@@ -188,6 +188,33 @@ let fimAcompanhamentoPreparacaoEsocial = 0;
         return div.innerHTML;
     }
 
+    function formatarCnpjFiltroEsocial(cnpj) {
+        const clean =
+            String(
+                cnpj ||
+                ''
+            ).replace(
+                /\D/g,
+                ''
+            );
+
+        if (
+            clean.length ===
+                14
+        ) {
+            return clean.replace(
+                /^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,
+                '$1.$2.$3/$4-$5'
+            );
+        }
+
+        return String(
+            cnpj ||
+            ''
+        );
+    }
+
+
     function formatarCpf(cpf) {
         if (!cpf) {
             return '—';
@@ -491,7 +518,7 @@ let fimAcompanhamentoPreparacaoEsocial = 0;
                 await supabaseClient
                     .from('precos')
                     .select(
-                        'id, unidade, holding'
+                        'id, unidade, holding, cnpj'
                     )
                     .order('unidade');
 
@@ -641,9 +668,22 @@ let fimAcompanhamentoPreparacaoEsocial = 0;
             option.value =
                 empresa.id;
 
+            const cnpjFormatado =
+                formatarCnpjFiltroEsocial(
+                    empresa.cnpj ||
+                    ''
+                );
+
             option.textContent =
-                empresa.unidade ||
-                `Empresa ${empresa.id}`;
+                (
+                    empresa.unidade ||
+                    `Empresa ${empresa.id}`
+                ) +
+                (
+                    cnpjFormatado
+                        ? ` — ${cnpjFormatado}`
+                        : ''
+                );
 
             selectEmpresa
                 .appendChild(option);
@@ -9947,6 +9987,38 @@ function eventosPendentesParaConectorLocalEsocial() {
             ? eventosESocialHistorico
             : eventosESocial;
 
+    const holdingSelecionada =
+        document.getElementById(
+            'socHolding'
+        )?.value ||
+        '';
+
+    const empresaSelecionada =
+        document.getElementById(
+            'socEmpresa'
+        )?.value ||
+        '';
+
+    const aplicarFiltroEmpresa =
+        Boolean(
+            holdingSelecionada ||
+            empresaSelecionada
+        );
+
+    const codigosPermitidos =
+        aplicarFiltroEmpresa
+            ? new Set(
+                empresasPermitidasPeloFiltro()
+                    .map(
+                        empresa =>
+                            String(
+                                empresa.id ??
+                                ''
+                            ).trim()
+                    )
+              )
+            : null;
+
     return Array.from(
         new Map(
             (
@@ -9958,6 +10030,32 @@ function eventosPendentesParaConectorLocalEsocial() {
             )
                 .filter(
                     evento => {
+                        if (
+                            aplicarFiltroEmpresa
+                        ) {
+                            const codigoEmpresaEvento =
+                                String(
+                                    evento?.codigo_empresa ??
+                                    evento?.codigoEmpresa ??
+                                    primeiroCampo(
+                                        evento,
+                                        [
+                                            'CODIGOEMPRESA',
+                                            'codigo_empresa',
+                                            'codigoEmpresa'
+                                        ],
+                                        ''
+                                    )
+                                ).trim();
+
+                            if (
+                                !codigosPermitidos.has(
+                                    codigoEmpresaEvento
+                                )
+                            ) {
+                                return false;
+                            }
+                        }
                         const tipo =
                             String(
                                 evento?.tipo_evento ||
@@ -10035,17 +10133,76 @@ async function enfileirarEventosConectorLocalEsocial() {
     if (
         !eventos.length
     ) {
+        const empresaSelecionada =
+            document.getElementById(
+                'socEmpresa'
+            )?.value ||
+            '';
+
+        const holdingSelecionada =
+            document.getElementById(
+                'socHolding'
+            )?.value ||
+            '';
+
         mostrarAlertaESocial(
-            'Não há vínculos/matrículas pendentes para consultar.',
+            (
+                empresaSelecionada ||
+                holdingSelecionada
+            )
+                ? 'Não há vínculos/matrículas pendentes dentro do filtro selecionado.'
+                : 'Não há vínculos/matrículas pendentes para consultar.',
             'info'
         );
 
         return;
     }
 
+    const empresaSelecionada =
+        document.getElementById(
+            'socEmpresa'
+        )?.value ||
+        '';
+
+    const holdingSelecionada =
+        document.getElementById(
+            'socHolding'
+        )?.value ||
+        '';
+
+    const empresaFiltro =
+        empresaSelecionada
+            ? empresasSocCache.find(
+                item =>
+                    String(
+                        item.id ??
+                        ''
+                    ) ===
+                    String(
+                        empresaSelecionada
+                    )
+              )
+            : null;
+
+    const escopoConsulta =
+        empresaFiltro
+            ? (
+                `${empresaFiltro.unidade || 'Empresa'} ` +
+                (
+                    empresaFiltro.cnpj
+                        ? `(${formatarCnpjFiltroEsocial(empresaFiltro.cnpj)})`
+                        : ''
+                )
+              ).trim()
+            : (
+                holdingSelecionada
+                    ? `holding "${holdingSelecionada}"`
+                    : 'todas as empresas'
+              );
+
     const confirmou =
         window.confirm(
-            `Enviar ${eventos.length} consulta(s) de vínculo/matrícula para o Conector eSocial deste computador?`
+            `Enviar ${eventos.length} consulta(s) de vínculo/matrícula de ${escopoConsulta} para o Conector eSocial deste computador?`
         );
 
     if (!confirmou) {
