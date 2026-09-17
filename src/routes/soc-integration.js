@@ -51873,7 +51873,7 @@ router.post(
 
 
 // ============================================================
-// CONECTOR LOCAL eSOCIAL - V3.3
+// CONECTOR LOCAL eSOCIAL - V3.4
 // Chrome normal do Windows + certificado instalado no PC.
 // ============================================================
 
@@ -52461,50 +52461,139 @@ router.post(
 
 
 
-async function reabrirErrosLegadosConectorLocalV3() {
+async function recuperarPendenciasConectorLocalV34() {
     const agora =
-        new Date().toISOString();
+        new Date();
 
+    const limiteTravado =
+        new Date(
+            agora.getTime() -
+            5 *
+            60 *
+            1000
+        ).toISOString();
+
+    const agoraIso =
+        agora.toISOString();
+
+    const motivosLegados =
+        [
+            'ERRO_CONECTOR_LOCAL',
+            'ERRO_CONECTOR_LOCAL_V32_FINAL',
+            'ERRO_PREPARAR_CNPJ_V34_FINAL',
+            'ERRO_CONECTOR_LOCAL_V34_FINAL'
+        ];
+
+    let errosReabertos =
+        0;
+
+    let processamentosRecuperados =
+        0;
+
+    // 1) Reabre somente erros finais de versões anteriores.
+    // Depois eles recebem motivo V3.4, então não entram em loop.
     const {
-        data,
-        error
-    } = await getSupabase()
-        .from(
-            'esocial_matriculas_pendentes'
-        )
-        .update({
-            status:
-                'aguardando_conector_local',
-            motivo:
-                'REPROCESSAMENTO_V3_2_LIBERADO',
-            tentativas:
-                0,
-            proxima_tentativa_em:
-                null,
-            updated_at:
-                agora
-        })
-        .eq(
-            'status',
-            'erro_conector_local'
-        )
-        .eq(
-            'motivo',
-            'ERRO_CONECTOR_LOCAL'
-        )
-        .select(
-            'id'
-        );
+        data:
+            errosAntigos,
+        error:
+            erroErrosAntigos
+    } =
+        await getSupabase()
+            .from(
+                'esocial_matriculas_pendentes'
+            )
+            .update({
+                status:
+                    'aguardando_conector_local',
+                motivo:
+                    'REPROCESSAMENTO_V3_4_LIBERADO',
+                tentativas:
+                    0,
+                proxima_tentativa_em:
+                    null,
+                updated_at:
+                    agoraIso
+            })
+            .eq(
+                'status',
+                'erro_conector_local'
+            )
+            .in(
+                'motivo',
+                motivosLegados
+            )
+            .select(
+                'id'
+            );
 
-    if (error) {
-        throw error;
+    if (
+        erroErrosAntigos
+    ) {
+        throw erroErrosAntigos;
     }
 
-    return Array.isArray(data)
-        ? data.length
-        : 0;
-}
+    errosReabertos =
+        Array.isArray(
+            errosAntigos
+        )
+            ? errosAntigos.length
+            : 0;
 
+    // 2) Se o conector foi fechado/reiniciado no meio de uma tarefa,
+    // "processando_conector_local" pode ficar preso para sempre.
+    const {
+        data:
+            travadas,
+        error:
+            erroTravadas
+    } =
+        await getSupabase()
+            .from(
+                'esocial_matriculas_pendentes'
+            )
+            .update({
+                status:
+                    'aguardando_conector_local',
+                motivo:
+                    'RECUPERADO_PROCESSAMENTO_INTERROMPIDO_V34',
+                proxima_tentativa_em:
+                    null,
+                updated_at:
+                    agoraIso
+            })
+            .eq(
+                'status',
+                'processando_conector_local'
+            )
+            .lt(
+                'updated_at',
+                limiteTravado
+            )
+            .select(
+                'id'
+            );
+
+    if (
+        erroTravadas
+    ) {
+        throw erroTravadas;
+    }
+
+    processamentosRecuperados =
+        Array.isArray(
+            travadas
+        )
+            ? travadas.length
+            : 0;
+
+    return {
+        errosReabertos,
+        processamentosRecuperados,
+        total:
+            errosReabertos +
+            processamentosRecuperados
+    };
+}
 
 router.get(
     '/conector-local/proximo-lote',
@@ -52522,15 +52611,16 @@ router.get(
             ultimoHeartbeatConectorLocalEsocial =
                 new Date().toISOString();
 
-            const reabertosLegados =
-                await reabrirErrosLegadosConectorLocalV3();
+            const recuperacaoV34 =
+                await recuperarPendenciasConectorLocalV34();
 
             if (
-                reabertosLegados >
+                recuperacaoV34.total >
                     0
             ) {
                 console.log(
-                    `♻️ Conector V3.3: ${reabertosLegados} erro(s) legado(s) da V3 liberado(s) para reprocessamento.`
+                    `♻️ Conector V3.4: ${recuperacaoV34.errosReabertos} erro(s) legado(s) reaberto(s) e ` +
+                    `${recuperacaoV34.processamentosRecuperados} processamento(s) interrompido(s) recuperado(s).`
                 );
             }
 
@@ -53079,7 +53169,7 @@ router.post(
                         status:
                             'aguardando_conector_local',
                         motivo:
-                            'ERRO_PREPARAR_CNPJ_REPROCESSAVEL_V33',
+                            'ERRO_PREPARAR_CNPJ_REPROCESSAVEL_V34',
                         ultimo_erro:
                             mensagem,
                         proxima_tentativa_em:
@@ -53113,7 +53203,7 @@ router.post(
                         status:
                             'erro_conector_local',
                         motivo:
-                            'ERRO_PREPARAR_CNPJ_V33_FINAL',
+                            'ERRO_PREPARAR_CNPJ_V34_FINAL',
                         ultimo_erro:
                             mensagem,
                         proxima_tentativa_em:
@@ -53247,8 +53337,8 @@ router.post(
                                 : 'erro_conector_local',
                         motivo:
                             podeReprocessar
-                                ? 'ERRO_CONECTOR_LOCAL_REPROCESSAVEL_V33'
-                                : 'ERRO_CONECTOR_LOCAL_V33_FINAL',
+                                ? 'ERRO_CONECTOR_LOCAL_REPROCESSAVEL_V34'
+                                : 'ERRO_CONECTOR_LOCAL_V34_FINAL',
                         ultimo_erro:
                             erroConector,
                         proxima_tentativa_em:
@@ -53367,7 +53457,7 @@ router.post(
                             status:
                                 'erro_conector_local',
                             motivo:
-                                'ERRO_CONECTOR_LOCAL_V33_FINAL',
+                                'ERRO_CONECTOR_LOCAL_V34_FINAL',
                             ultimo_erro:
                                 error?.message ||
                                 String(error)
