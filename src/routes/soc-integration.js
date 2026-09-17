@@ -32799,6 +32799,26 @@ erro_consulta_responsaveis_ambientais:
     ),
 
                 // ------------------------------------------------
+                // PRONTIDÃO RECALCULADA
+                // ------------------------------------------------
+
+                s2240_pronto_para_emissao:
+                    novoS2240
+                        .s2240ProntoParaEmissao ===
+                    true,
+
+                bloqueio_emissao_s2240:
+                    novoS2240
+                        .s2240ProntoParaEmissao ===
+                    true
+                        ? null
+                        : (
+                            novoS2240
+                                .bloqueioEmissaoS2240 ||
+                            'Dados incompletos para emissão.'
+                          ),
+
+                // ------------------------------------------------
                 // CONTROLE
                 // ------------------------------------------------
 
@@ -38850,6 +38870,458 @@ router.post(
     }
 );
 
+// ============================================================
+// EMISSÃO S-2240 - REPROCESSAMENTO AMBIENTAL IMEDIATO V4.6
+// Antes de gerar o XML, atualiza novamente riscos/GHE/EPC/EPI/
+// responsável ambiental usando as fontes SOC já existentes.
+// ============================================================
+
+
+async function reprocessarS2240ImediatamenteAntesDoEnvio(
+    evento
+) {
+    const tipoEvento =
+        String(
+            evento?.tipo_evento ||
+            evento?.tipoEvento ||
+            ''
+        )
+            .trim()
+            .toUpperCase();
+
+    if (
+        tipoEvento !==
+        'S-2240'
+    ) {
+        return {
+            eventoAtualizado:
+                evento,
+            pronto:
+                true,
+            bloqueio:
+                null,
+            diagnostico:
+                null
+        };
+    }
+
+
+    console.log(
+        '🔄 S-2240: atualizando dados ambientais imediatamente antes do XML...',
+        {
+            eventoId:
+                evento?.id ||
+                null,
+            colaborador:
+                evento?.colaborador ||
+                null,
+            cpf:
+                evento?.cpf ||
+                null,
+            cargo:
+                evento?.cargo_colaborador ||
+                evento?.cargoColaborador ||
+                null
+        }
+    );
+
+
+    /*
+     * Reutiliza EXATAMENTE a regra ambiental já existente:
+     *
+     * 219968 -> posição/cargo/matrícula SOC/admissão
+     * 1875   -> riscos do funcionário
+     * 11573  -> GHEs aplicáveis
+     * 7541   -> características do risco
+     * 219605 -> EPC/EPI/CA/dados técnicos
+     * responsáveis ambientais -> respReg
+     *
+     * Nenhum risco é inventado pelo cargo.
+     * A lista de cargos com risco serve apenas para exigir que
+     * os dados ambientais reais sejam encontrados.
+     */
+    const reprocessados =
+        await aplicarRegraEventosEsocial(
+            [
+                {
+                    ...evento
+                }
+            ]
+        );
+
+
+    const novoS2240 =
+        (
+            Array.isArray(
+                reprocessados
+            )
+                ? reprocessados
+                : []
+        ).find(
+            item =>
+                String(
+                    item?.tipoEvento ||
+                    item?.tipo_evento ||
+                    ''
+                )
+                    .trim()
+                    .toUpperCase() ===
+                'S-2240'
+        );
+
+
+    if (
+        !novoS2240
+    ) {
+        const erro =
+            new Error(
+                'A regra ambiental não gerou um candidato S-2240 atualizado. ' +
+                'Nenhum XML foi criado e nenhum evento foi transmitido.'
+            );
+
+        erro.code =
+            'S2240_REPROCESSAMENTO_SEM_CANDIDATO';
+
+        throw erro;
+    }
+
+
+    const agentesDetalhados =
+        Array.isArray(
+            novoS2240
+                .agentesNocivosEsocialDetalhados
+        )
+            ? novoS2240
+                .agentesNocivosEsocialDetalhados
+            : [];
+
+
+    const riscosFuncionario =
+        Array.isArray(
+            novoS2240
+                .riscosFuncionarioSoc
+        )
+            ? novoS2240
+                .riscosFuncionarioSoc
+            : [];
+
+
+    const ghes =
+        Array.isArray(
+            novoS2240
+                .ghesAplicaveisSoc
+        )
+            ? novoS2240
+                .ghesAplicaveisSoc
+            : [];
+
+
+    const responsaveis =
+        Array.isArray(
+            novoS2240
+                .responsaveisAmbientaisSoc
+        )
+            ? novoS2240
+                .responsaveisAmbientaisSoc
+            : [];
+
+
+    const pronto =
+        novoS2240
+            .s2240ProntoParaEmissao ===
+        true;
+
+
+    const bloqueio =
+        String(
+            novoS2240
+                .bloqueioEmissaoS2240 ||
+            ''
+        ).trim() ||
+        null;
+
+
+    const dadosAtualizacao = {
+
+        /*
+         * Matrícula do SOC continua separada da matrícula oficial
+         * do eSocial. NUNCA sobrescrevemos evento.matricula aqui.
+         */
+        matricula_soc:
+            novoS2240.matricula ||
+            evento.matricula_soc ||
+            (
+                !matriculaEventoEhOficial(
+                    evento
+                )
+                    ? evento.matricula
+                    : null
+            ) ||
+            null,
+
+        data_inicio_condicao:
+            novoS2240.dataInicioCondicao ||
+            novoS2240.data_inicio_condicao ||
+            evento.data_inicio_condicao ||
+            null,
+
+
+        // 1875
+        riscos_funcionario_soc:
+            riscosFuncionario,
+
+        agentes_nocivos_esocial:
+            Array.isArray(
+                novoS2240
+                    .agentesNocivosEsocial
+            )
+                ? novoS2240
+                    .agentesNocivosEsocial
+                : [],
+
+        agentes_nocivos_esocial_detalhados:
+            agentesDetalhados,
+
+        consulta_riscos_funcionario_ok:
+            novoS2240
+                .consultaRiscosFuncionarioOk ===
+            true,
+
+        erro_consulta_riscos_funcionario:
+            String(
+                novoS2240
+                    .erroConsultaRiscosFuncionario ||
+                ''
+            ),
+
+
+        // 11573
+        ghes_aplicaveis_soc:
+            ghes,
+
+        consulta_hierarquias_ghe_ok:
+            novoS2240
+                .consultaHierarquiasGheOk ===
+            true,
+
+        erro_consulta_hierarquias_ghe:
+            String(
+                novoS2240
+                    .erroConsultaHierarquiasGhe ||
+                ''
+            ),
+
+
+        // 7541
+        caracteristicas_riscos_ghe_soc:
+            Array.isArray(
+                novoS2240
+                    .caracteristicasRiscosGheSoc
+            )
+                ? novoS2240
+                    .caracteristicasRiscosGheSoc
+                : [],
+
+        riscos_sem_caracteristica_ghe_soc:
+            Array.isArray(
+                novoS2240
+                    .riscosSemCaracteristicaGheSoc
+            )
+                ? novoS2240
+                    .riscosSemCaracteristicaGheSoc
+                : [],
+
+        consulta_caracteristicas_ghe_ok:
+            novoS2240
+                .consultaCaracteristicasGheOk ===
+            true,
+
+        erro_consulta_caracteristicas_ghe:
+            String(
+                novoS2240
+                    .erroConsultaCaracteristicasGhe ||
+                ''
+            ),
+
+        divergencias_codigo_agente_soc:
+            Array.isArray(
+                novoS2240
+                    .divergenciasCodigoAgenteSoc
+            )
+                ? novoS2240
+                    .divergenciasCodigoAgenteSoc
+                : [],
+
+
+        // 219605
+        consulta_caracteristicas_219605_ok:
+            novoS2240
+                .consultaCaracteristicas219605Ok ===
+            true,
+
+        erro_consulta_caracteristicas_219605:
+            String(
+                novoS2240
+                    .erroConsultaCaracteristicas219605 ||
+                ''
+            ),
+
+
+        // Responsável ambiental
+        responsaveis_ambientais_soc:
+            responsaveis,
+
+        consulta_responsaveis_ambientais_ok:
+            novoS2240
+                .consultaResponsaveisAmbientaisOk ===
+            true,
+
+        erro_consulta_responsaveis_ambientais:
+            String(
+                novoS2240
+                    .erroConsultaResponsaveisAmbientais ||
+                ''
+            ),
+
+
+        // Prontidão recalculada NESTE momento.
+        s2240_pronto_para_emissao:
+            pronto,
+
+        bloqueio_emissao_s2240:
+            pronto
+                ? null
+                : (
+                    bloqueio ||
+                    'Dados ambientais incompletos após reprocessamento.'
+                ),
+
+        updated_at:
+            new Date()
+                .toISOString()
+    };
+
+
+    const {
+        error:
+            erroUpdate
+    } =
+        await getSupabase()
+            .from(
+                'esocial_eventos'
+            )
+            .update(
+                dadosAtualizacao
+            )
+            .eq(
+                'id',
+                evento.id
+            );
+
+
+    if (
+        erroUpdate
+    ) {
+        throw erroUpdate;
+    }
+
+
+    /*
+     * Usa os dados recém-obtidos na MESMA requisição.
+     * Assim o XML não depende de um reload posterior do Supabase.
+     */
+    const eventoAtualizado = {
+        ...evento,
+        ...dadosAtualizacao
+    };
+
+
+    const diagnostico = {
+        cargo:
+            novoS2240.cargoColaborador ||
+            evento.cargo_colaborador ||
+            evento.cargoColaborador ||
+            null,
+
+        cargoComRisco:
+            cargoTemRiscoConhecidoEsocial(
+                novoS2240.cargoColaborador ||
+                evento.cargo_colaborador ||
+                evento.cargoColaborador ||
+                ''
+            ),
+
+        riscosEncontrados:
+            riscosFuncionario.length,
+
+        ghesEncontrados:
+            ghes.length,
+
+        agentesEsocial:
+            agentesDetalhados
+                .map(
+                    agente =>
+                        String(
+                            agente?.codAgNoc ||
+                            agente?.codigoAgenteNocivo ||
+                            ''
+                        ).trim()
+                )
+                .filter(Boolean),
+
+        responsaveisAmbientais:
+            responsaveis.length,
+
+        consultaRiscosOk:
+            novoS2240
+                .consultaRiscosFuncionarioOk ===
+            true,
+
+        consultaGheOk:
+            novoS2240
+                .consultaHierarquiasGheOk ===
+            true,
+
+        consultaCaracteristicasOk:
+            novoS2240
+                .consultaCaracteristicasGheOk ===
+            true,
+
+        consulta219605Ok:
+            novoS2240
+                .consultaCaracteristicas219605Ok ===
+            true,
+
+        consultaResponsavelOk:
+            novoS2240
+                .consultaResponsaveisAmbientaisOk ===
+            true
+    };
+
+
+    console.log(
+        pronto
+            ? '✅ S-2240: dados ambientais atualizados e liberados para gerar XML.'
+            : '⛔ S-2240: dados ambientais atualizados, mas emissão continua bloqueada.',
+        {
+            eventoId:
+                evento.id,
+            bloqueio,
+            ...diagnostico
+        }
+    );
+
+
+    return {
+        eventoAtualizado,
+        novoS2240,
+        pronto,
+        bloqueio,
+        diagnostico
+    };
+}
+
+
 router.post(
     '/enviar-evento-esocial/:id',
 
@@ -39638,9 +40110,124 @@ if (
 
 
             // ====================================================
+            // S-2240: ATUALIZAR DADOS AMBIENTAIS AGORA
+            //
+            // Esta etapa acontece DEPOIS das travas de duplicidade/
+            // ambiente e IMEDIATAMENTE ANTES da geração do XML.
+            //
+            // Se riscos/GHE/EPC/EPI/responsável estiverem incompletos,
+            // NENHUM XML é criado e NENHUM lote é transmitido.
+            // ====================================================
+
+            let eventoParaEnvio =
+                evento;
+
+
+            if (
+                tipoEvento ===
+                'S-2240'
+            ) {
+
+                const reprocessamentoS2240 =
+                    await reprocessarS2240ImediatamenteAntesDoEnvio(
+                        evento
+                    );
+
+
+                eventoParaEnvio =
+                    reprocessamentoS2240
+                        .eventoAtualizado;
+
+
+                if (
+                    reprocessamentoS2240
+                        .pronto !==
+                    true
+                ) {
+
+                    return res
+                        .status(422)
+                        .json({
+
+                            success:
+                                false,
+
+                            bloqueado:
+                                true,
+
+                            podeEnviar:
+                                false,
+
+                            motivo:
+                                'DADOS_S2240_INCOMPLETOS_APOS_REPROCESSAMENTO',
+
+                            error:
+                                reprocessamentoS2240
+                                    .bloqueio ||
+                                'O S-2240 ainda possui dados ambientais incompletos. Nenhum XML foi criado.',
+
+                            diagnostico:
+                                reprocessamentoS2240
+                                    .diagnostico
+                        });
+                }
+
+
+                /*
+                 * Defesa adicional:
+                 * a regra pode dizer que está pronta, mas o XML exige
+                 * pelo menos um agente eSocial real ou 09.01.001 vindo
+                 * da própria fonte. Nunca inventamos ausência.
+                 */
+                const agentesAtualizados =
+                    Array.isArray(
+                        eventoParaEnvio
+                            .agentes_nocivos_esocial_detalhados
+                    )
+                        ? eventoParaEnvio
+                            .agentes_nocivos_esocial_detalhados
+                        : [];
+
+
+                if (
+                    agentesAtualizados.length ===
+                        0
+                ) {
+
+                    return res
+                        .status(422)
+                        .json({
+
+                            success:
+                                false,
+
+                            bloqueado:
+                                true,
+
+                            podeEnviar:
+                                false,
+
+                            motivo:
+                                'S2240_SEM_AGENTE_ESOCIAL',
+
+                            error:
+                                'O reprocessamento terminou, mas nenhum agente eSocial foi encontrado. ' +
+                                'O sistema não inventará o código 09.01.001. Verifique os dados ambientais no SOC.',
+
+                            diagnostico:
+                                reprocessamentoS2240
+                                    .diagnostico
+                        });
+                }
+            }
+
+
+            // ====================================================
             // GERAR XML NOVO
             //
             // Não reutiliza xml_gerado/xml_assinado antigo.
+            // Para S-2240 usa eventoParaEnvio, que contém os dados
+            // ambientais atualizados nesta mesma requisição.
             // ====================================================
 
             const gerarXmlEvento =
@@ -39657,7 +40244,7 @@ if (
 
             const resultadoXml =
                 gerarXmlEvento(
-                    evento,
+                    eventoParaEnvio,
                     {
                         ambiente
                     }
@@ -39738,7 +40325,7 @@ if (
 
             const eventoPreparado = {
 
-                ...evento,
+                ...eventoParaEnvio,
 
                 id_evento_esocial:
                     resultadoXml.idEvento,
