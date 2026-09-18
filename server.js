@@ -210,6 +210,19 @@ app.use(
 // ============================================================
 // RATE LIMIT
 // ============================================================
+//
+// O limite geral continua protegendo toda a API, porém as rotas
+// internas do Conector eSocial local ficam fora deste contador.
+//
+// Motivo:
+// o conector mantém heartbeat e consulta de comandos em segundo
+// plano. Essas chamadas contínuas são esperadas e, se entrarem no
+// mesmo limite das requisições normais do sistema, podem consumir
+// as 300 requisições da janela e causar HTTP 429.
+//
+// As rotas do conector continuam protegidas pela chave própria
+// ESOCIAL_CONECTOR_LOCAL_CHAVE dentro de soc-integration.js.
+// ============================================================
 
 const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
@@ -217,6 +230,18 @@ const apiLimiter = rateLimit({
 
     standardHeaders: 'draft-7',
     legacyHeaders: false,
+
+    skip: (req) => {
+        const url = String(
+            req.originalUrl ||
+            req.url ||
+            ''
+        );
+
+        return url.startsWith(
+            '/api/soc/conector-local/'
+        );
+    },
 
     message: {
         success: false,
