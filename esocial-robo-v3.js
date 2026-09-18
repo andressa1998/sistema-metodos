@@ -10608,6 +10608,48 @@ async function conectarCertificadoConectorLocalEsocial() {
 // ESCOPO HOLDING / UNIDADE
 // ============================================================
 
+function normalizarTextoEscopoConectorLocalEsocial(
+    valor
+) {
+    return String(
+        valor ||
+        ''
+    )
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toUpperCase()
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+
+function obterFonteEventosEscopoConectorLocalEsocial() {
+    if (
+        Array.isArray(
+            eventosESocialHistorico
+        ) &&
+        eventosESocialHistorico.length
+    ) {
+        return eventosESocialHistorico;
+    }
+
+    if (
+        Array.isArray(
+            eventosESocialBase
+        ) &&
+        eventosESocialBase.length
+    ) {
+        return eventosESocialBase;
+    }
+
+    return Array.isArray(
+        eventosESocial
+    )
+        ? eventosESocial
+        : [];
+}
+
+
 function obterEscopoSelecionadoConectorLocalEsocial() {
     const holding =
         String(
@@ -10637,6 +10679,115 @@ function obterEscopoSelecionadoConectorLocalEsocial() {
         };
     }
 
+    const holdingNormalizada =
+        normalizarTextoEscopoConectorLocalEsocial(
+            holding
+        );
+
+    const unidadeNormalizada =
+        normalizarTextoEscopoConectorLocalEsocial(
+            unidade
+        );
+
+    const fonteEventos =
+        obterFonteEventosEscopoConectorLocalEsocial();
+
+    const eventosDoFiltro =
+        fonteEventos.filter(
+            evento => {
+                const holdingEvento =
+                    normalizarTextoEscopoConectorLocalEsocial(
+                        evento?.holding ||
+                        ''
+                    );
+
+                const unidadeEvento =
+                    normalizarTextoEscopoConectorLocalEsocial(
+                        evento?.unidade ||
+                        evento?.nome_unidade ||
+                        ''
+                    );
+
+                if (
+                    holdingNormalizada &&
+                    holdingEvento !==
+                        holdingNormalizada
+                ) {
+                    return false;
+                }
+
+                if (
+                    unidadeNormalizada &&
+                    unidadeEvento !==
+                        unidadeNormalizada
+                ) {
+                    return false;
+                }
+
+                return true;
+            }
+        );
+
+    const cnpjsEventosPorUnidade =
+        new Map();
+
+    for (
+        const evento
+        of eventosDoFiltro
+    ) {
+        const holdingEvento =
+            normalizarTextoEscopoConectorLocalEsocial(
+                evento?.holding ||
+                ''
+            );
+
+        const unidadeEvento =
+            normalizarTextoEscopoConectorLocalEsocial(
+                evento?.unidade ||
+                evento?.nome_unidade ||
+                ''
+            );
+
+        const chave =
+            `${holdingEvento}|${unidadeEvento}`;
+
+        const cnpjEvento =
+            String(
+                evento?.cnpj_unidade ||
+                evento?.cnpj ||
+                ''
+            ).replace(
+                /\D/g,
+                ''
+            );
+
+        if (
+            cnpjEvento.length !==
+                14
+        ) {
+            continue;
+        }
+
+        if (
+            !cnpjsEventosPorUnidade.has(
+                chave
+            )
+        ) {
+            cnpjsEventosPorUnidade.set(
+                chave,
+                new Set()
+            );
+        }
+
+        cnpjsEventosPorUnidade
+            .get(
+                chave
+            )
+            .add(
+                cnpjEvento
+            );
+    }
+
     let candidatas =
         (
             Array.isArray(
@@ -10648,29 +10799,29 @@ function obterEscopoSelecionadoConectorLocalEsocial() {
             .filter(
                 empresa => {
                     const holdingEmpresa =
-                        String(
+                        normalizarTextoEscopoConectorLocalEsocial(
                             empresa?.holding ||
                             ''
-                        ).trim();
+                        );
 
                     const unidadeEmpresa =
-                        String(
+                        normalizarTextoEscopoConectorLocalEsocial(
                             empresa?.unidade ||
                             ''
-                        ).trim();
+                        );
 
                     if (
-                        holding &&
+                        holdingNormalizada &&
                         holdingEmpresa !==
-                            holding
+                            holdingNormalizada
                     ) {
                         return false;
                     }
 
                     if (
-                        unidade &&
+                        unidadeNormalizada &&
                         unidadeEmpresa !==
-                            unidade
+                            unidadeNormalizada
                     ) {
                         return false;
                     }
@@ -10679,29 +10830,175 @@ function obterEscopoSelecionadoConectorLocalEsocial() {
                 }
             )
             .map(
-                empresa => ({
-                    ...empresa,
-                    empresaId:
-                        String(
-                            empresa?.id ??
+                empresa => {
+                    const holdingEmpresa =
+                        normalizarTextoEscopoConectorLocalEsocial(
+                            empresa?.holding ||
                             ''
-                        ).trim(),
-                    cnpjLimpo:
+                        );
+
+                    const unidadeEmpresa =
+                        normalizarTextoEscopoConectorLocalEsocial(
+                            empresa?.unidade ||
+                            ''
+                        );
+
+                    const chave =
+                        `${holdingEmpresa}|${unidadeEmpresa}`;
+
+                    let cnpjLimpo =
                         String(
                             empresa?.cnpj ||
                             ''
                         ).replace(
                             /\D/g,
                             ''
-                        )
-                })
+                        );
+
+                    /*
+                     * Alguns cadastros antigos da tabela precos não
+                     * possuem CNPJ preenchido. Se os eventos dessa
+                     * unidade tiverem UM único CNPJ completo, usamos
+                     * esse CNPJ como fonte segura para a consulta.
+                     */
+                    if (
+                        cnpjLimpo.length !==
+                            14
+                    ) {
+                        const cnpjsEventos =
+                            Array.from(
+                                cnpjsEventosPorUnidade.get(
+                                    chave
+                                ) ||
+                                []
+                            );
+
+                        if (
+                            cnpjsEventos.length ===
+                                1
+                        ) {
+                            cnpjLimpo =
+                                cnpjsEventos[0];
+                        }
+                    }
+
+                    return {
+                        ...empresa,
+                        empresaId:
+                            String(
+                                empresa?.id ??
+                                ''
+                            ).trim(),
+                        cnpjLimpo
+                    };
+                }
             )
             .filter(
                 empresa =>
-                    empresa.empresaId &&
                     empresa.cnpjLimpo.length ===
                         14
             );
+
+    /*
+     * Fallback: se a unidade existe nos eventos, mas não foi localizada
+     * por nome na tabela precos, tenta resolver pelo CNPJ exato do evento.
+     */
+    if (
+        !candidatas.length &&
+        eventosDoFiltro.length
+    ) {
+        const gruposEvento =
+            new Map();
+
+        for (
+            const evento
+            of eventosDoFiltro
+        ) {
+            const cnpjLimpo =
+                String(
+                    evento?.cnpj_unidade ||
+                    evento?.cnpj ||
+                    ''
+                ).replace(
+                    /\D/g,
+                    ''
+                );
+
+            if (
+                cnpjLimpo.length !==
+                    14
+            ) {
+                continue;
+            }
+
+            if (
+                gruposEvento.has(
+                    cnpjLimpo
+                )
+            ) {
+                continue;
+            }
+
+            const holdingEvento =
+                String(
+                    evento?.holding ||
+                    holding ||
+                    ''
+                ).trim();
+
+            const unidadeEvento =
+                String(
+                    evento?.unidade ||
+                    evento?.nome_unidade ||
+                    unidade ||
+                    ''
+                ).trim();
+
+            const empresaPorCnpj =
+                (
+                    Array.isArray(
+                        empresasSocCache
+                    )
+                        ? empresasSocCache
+                        : []
+                ).find(
+                    empresa =>
+                        String(
+                            empresa?.cnpj ||
+                            ''
+                        ).replace(
+                            /\D/g,
+                            ''
+                        ) ===
+                        cnpjLimpo
+                ) ||
+                null;
+
+            gruposEvento.set(
+                cnpjLimpo,
+                {
+                    ...(empresaPorCnpj || {}),
+                    empresaId:
+                        String(
+                            empresaPorCnpj?.id ??
+                            ''
+                        ).trim(),
+                    holding:
+                        empresaPorCnpj?.holding ||
+                        holdingEvento,
+                    unidade:
+                        empresaPorCnpj?.unidade ||
+                        unidadeEvento,
+                    cnpjLimpo
+                }
+            );
+        }
+
+        candidatas =
+            Array.from(
+                gruposEvento.values()
+            );
+    }
 
     /*
      * Uma unidade sem holding pode ter nome repetido.
@@ -10748,11 +11045,22 @@ function obterEscopoSelecionadoConectorLocalEsocial() {
     if (
         !candidatas.length
     ) {
+        if (
+            eventosDoFiltro.length
+        ) {
+            return {
+                ok:
+                    false,
+                erro:
+                    'A unidade foi encontrada na tela, mas não há um CNPJ completo de 14 dígitos disponível para ela. Verifique o CNPJ cadastrado da unidade.'
+            };
+        }
+
         return {
             ok:
                 false,
             erro:
-                'Nenhuma unidade com CNPJ válido foi encontrada para o filtro selecionado.'
+                'Nenhuma unidade correspondente ao filtro selecionado foi encontrada.'
         };
     }
 
@@ -10765,7 +11073,6 @@ function obterEscopoSelecionadoConectorLocalEsocial() {
             candidatas
     };
 }
-
 
 function eventosPendentesParaEmpresaConectorLocalEsocial(
     empresa
@@ -10838,17 +11145,21 @@ function eventosPendentesParaEmpresaConectorLocalEsocial(
                                     cnpj
                                   )
                                 : (
-                                    String(
+                                    normalizarTextoEscopoConectorLocalEsocial(
                                         evento?.holding ||
                                         ''
-                                    ).trim() ===
-                                        holding &&
-                                    String(
+                                    ) ===
+                                        normalizarTextoEscopoConectorLocalEsocial(
+                                            holding
+                                        ) &&
+                                    normalizarTextoEscopoConectorLocalEsocial(
                                         evento?.unidade ||
                                         evento?.nome_unidade ||
                                         ''
-                                    ).trim() ===
-                                        unidade
+                                    ) ===
+                                        normalizarTextoEscopoConectorLocalEsocial(
+                                            unidade
+                                        )
                                   );
 
                         if (
@@ -11454,7 +11765,15 @@ async function enfileirarEventosConectorLocalEsocial() {
                                 empresaId:
                                     empresa.empresaId,
                                 cnpjSelecionado:
-                                    empresa.cnpjLimpo
+                                    empresa.cnpjLimpo,
+                                holdingSelecionada:
+                                    empresa.holding ||
+                                    escopo.holding ||
+                                    '',
+                                unidadeSelecionada:
+                                    empresa.unidade ||
+                                    escopo.unidade ||
+                                    ''
                             })
                     }
                 );

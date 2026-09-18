@@ -53849,82 +53849,29 @@ router.post(
                     });
             }
 
-            const empresaId =
+            let empresaId =
                 String(
                     req.body?.empresaId ||
                     ''
                 ).trim();
 
-            const cnpjSelecionado =
+            let cnpjSelecionado =
                 normalizarCnpj(
                     req.body?.cnpjSelecionado ||
                     ''
                 );
 
-            if (!empresaId) {
-                return res
-                    .status(400)
-                    .json({
-                        success: false,
-                        error:
-                            'Selecione uma Unidade/CNPJ específico antes de consultar pelo PC.'
-                    });
-            }
-
-            const empresasSelecionadas =
-                await buscarEmpresasSupabase({
-                    empresaId
-                });
-
-            const empresaSelecionada =
-                (
-                    Array.isArray(
-                        empresasSelecionadas
-                    )
-                        ? empresasSelecionadas
-                        : []
-                )[0] ||
-                null;
-
-            if (!empresaSelecionada) {
-                return res
-                    .status(400)
-                    .json({
-                        success: false,
-                        error:
-                            'A unidade selecionada não foi encontrada.'
-                    });
-            }
-
-            const cnpjEmpresa =
-                normalizarCnpj(
-                    empresaSelecionada?.cnpj ||
+            const holdingSelecionadaTela =
+                String(
+                    req.body?.holdingSelecionada ||
                     ''
-                );
+                ).trim();
 
-            if (cnpjEmpresa.length !== 14) {
-                return res
-                    .status(400)
-                    .json({
-                        success: false,
-                        error:
-                            'A unidade selecionada não possui CNPJ válido cadastrado.'
-                    });
-            }
-
-            if (
-                cnpjSelecionado &&
-                cnpjSelecionado !==
-                    cnpjEmpresa
-            ) {
-                return res
-                    .status(409)
-                    .json({
-                        success: false,
-                        error:
-                            'O CNPJ enviado pela tela não corresponde ao cadastro da unidade.'
-                    });
-            }
+            const unidadeSelecionadaTela =
+                String(
+                    req.body?.unidadeSelecionada ||
+                    ''
+                ).trim();
 
             const ids = Array.from(
                 new Set(
@@ -53955,6 +53902,273 @@ router.post(
 
             if (error) throw error;
 
+            const eventos =
+                Array.isArray(data)
+                    ? data
+                    : [];
+
+            const cnpjsDosEventos =
+                Array.from(
+                    new Set(
+                        eventos
+                            .map(
+                                evento =>
+                                    normalizarCnpj(
+                                        evento?.cnpj_unidade ||
+                                        evento?.cnpj ||
+                                        ''
+                                    )
+                            )
+                            .filter(
+                                cnpj =>
+                                    cnpj.length ===
+                                        14
+                            )
+                    )
+                );
+
+            if (
+                cnpjsDosEventos.length >
+                    1
+            ) {
+                return res
+                    .status(409)
+                    .json({
+                        success:
+                            false,
+                        error:
+                            'Os eventos enviados pertencem a mais de um CNPJ. A consulta foi bloqueada para evitar mistura entre unidades.'
+                    });
+            }
+
+            if (
+                cnpjSelecionado.length !==
+                    14 &&
+                cnpjsDosEventos.length ===
+                    1
+            ) {
+                cnpjSelecionado =
+                    cnpjsDosEventos[0];
+            }
+
+            let empresaSelecionada =
+                null;
+
+            if (
+                empresaId
+            ) {
+                const empresasPorId =
+                    await buscarEmpresasSupabase({
+                        empresaId
+                    });
+
+                empresaSelecionada =
+                    (
+                        Array.isArray(
+                            empresasPorId
+                        )
+                            ? empresasPorId
+                            : []
+                    )[0] ||
+                    null;
+            }
+
+            /*
+             * Fallback seguro para cadastros antigos:
+             * resolve primeiro por CNPJ exato. Se a tabela precos não
+             * tiver CNPJ, aceita holding+unidade apenas quando o resultado
+             * for único. Nunca escolhe filial pela raiz do CNPJ.
+             */
+            if (
+                !empresaSelecionada ||
+                normalizarCnpj(
+                    empresaSelecionada?.cnpj ||
+                    ''
+                ).length !==
+                    14
+            ) {
+                const todasEmpresas =
+                    await buscarEmpresasSupabase({});
+
+                if (
+                    cnpjSelecionado.length ===
+                        14
+                ) {
+                    const porCnpj =
+                        todasEmpresas.filter(
+                            empresa =>
+                                normalizarCnpj(
+                                    empresa?.cnpj ||
+                                    ''
+                                ) ===
+                                cnpjSelecionado
+                        );
+
+                    if (
+                        porCnpj.length ===
+                            1
+                    ) {
+                        empresaSelecionada =
+                            porCnpj[0];
+                    }
+                }
+
+                if (
+                    !empresaSelecionada ||
+                    normalizarCnpj(
+                        empresaSelecionada?.cnpj ||
+                        ''
+                    ).length !==
+                        14
+                ) {
+                    const holdingReferencia =
+                        normalizarTextoComparacaoSoc(
+                            holdingSelecionadaTela ||
+                            eventos[0]?.holding ||
+                            empresaSelecionada?.holding ||
+                            ''
+                        );
+
+                    const unidadeReferencia =
+                        normalizarTextoComparacaoSoc(
+                            unidadeSelecionadaTela ||
+                            eventos[0]?.unidade ||
+                            eventos[0]?.nome_unidade ||
+                            empresaSelecionada?.unidade ||
+                            ''
+                        );
+
+                    const porNome =
+                        todasEmpresas.filter(
+                            empresa => {
+                                const holdingEmpresa =
+                                    normalizarTextoComparacaoSoc(
+                                        empresa?.holding ||
+                                        ''
+                                    );
+
+                                const unidadeEmpresa =
+                                    normalizarTextoComparacaoSoc(
+                                        empresa?.unidade ||
+                                        ''
+                                    );
+
+                                if (
+                                    holdingReferencia &&
+                                    holdingEmpresa !==
+                                        holdingReferencia
+                                ) {
+                                    return false;
+                                }
+
+                                if (
+                                    unidadeReferencia &&
+                                    unidadeEmpresa !==
+                                        unidadeReferencia
+                                ) {
+                                    return false;
+                                }
+
+                                return Boolean(
+                                    holdingReferencia ||
+                                    unidadeReferencia
+                                );
+                            }
+                        );
+
+                    if (
+                        porNome.length ===
+                            1
+                    ) {
+                        empresaSelecionada =
+                            porNome[0];
+                    }
+                }
+            }
+
+            if (!empresaSelecionada) {
+                return res
+                    .status(400)
+                    .json({
+                        success: false,
+                        error:
+                            'Não foi possível vincular a unidade filtrada a um cadastro único de empresa. Nenhuma consulta foi iniciada.'
+                    });
+            }
+
+            empresaId =
+                String(
+                    empresaSelecionada?.id ||
+                    empresaId ||
+                    ''
+                ).trim();
+
+            const cnpjCadastro =
+                normalizarCnpj(
+                    empresaSelecionada?.cnpj ||
+                    ''
+                );
+
+            if (
+                cnpjCadastro.length ===
+                    14 &&
+                cnpjSelecionado.length ===
+                    14 &&
+                cnpjCadastro !==
+                    cnpjSelecionado
+            ) {
+                return res
+                    .status(409)
+                    .json({
+                        success: false,
+                        error:
+                            'O CNPJ encontrado para a unidade não corresponde ao CNPJ dos eventos selecionados. A consulta foi bloqueada.'
+                    });
+            }
+
+            const cnpjEmpresa =
+                cnpjCadastro.length ===
+                    14
+                    ? cnpjCadastro
+                    : (
+                        cnpjSelecionado.length ===
+                            14
+                            ? cnpjSelecionado
+                            : (
+                                cnpjsDosEventos.length ===
+                                    1
+                                    ? cnpjsDosEventos[0]
+                                    : ''
+                              )
+                      );
+
+            if (
+                cnpjEmpresa.length !==
+                    14
+            ) {
+                return res
+                    .status(400)
+                    .json({
+                        success: false,
+                        error:
+                            'A unidade foi encontrada, mas não há CNPJ completo de 14 dígitos disponível no cadastro nem nos eventos. Nenhuma consulta foi iniciada.'
+                    });
+            }
+
+            const unidadeSelecionada =
+                String(
+                    empresaSelecionada?.unidade ||
+                    unidadeSelecionadaTela ||
+                    ''
+                ).trim();
+
+            const holdingSelecionada =
+                String(
+                    empresaSelecionada?.holding ||
+                    holdingSelecionadaTela ||
+                    ''
+                ).trim();
+
             let enfileirados = 0;
             let imediatos = 0;
             let semAutorizacao = 0;
@@ -53977,11 +54191,7 @@ router.post(
 
             for (
                 const evento
-                of (
-                    Array.isArray(data)
-                        ? data
-                        : []
-                )
+                of eventos
             ) {
                 try {
                     const cnpjEvento =
@@ -54004,18 +54214,6 @@ router.post(
                             ''
                         ).trim();
 
-                    const unidadeSelecionada =
-                        String(
-                            empresaSelecionada?.unidade ||
-                            ''
-                        ).trim();
-
-                    const holdingSelecionada =
-                        String(
-                            empresaSelecionada?.holding ||
-                            ''
-                        ).trim();
-
                     if (
                         cnpjEvento.length ===
                             14 &&
@@ -54030,8 +54228,12 @@ router.post(
                     if (
                         unidadeEvento &&
                         unidadeSelecionada &&
-                        unidadeEvento !==
+                        normalizarTextoComparacaoSoc(
+                            unidadeEvento
+                        ) !==
+                        normalizarTextoComparacaoSoc(
                             unidadeSelecionada
+                        )
                     ) {
                         throw new Error(
                             `Evento ${evento?.id || ''} pertence à unidade "${unidadeEvento}", mas foi selecionada "${unidadeSelecionada}".`
@@ -54041,8 +54243,12 @@ router.post(
                     if (
                         holdingEvento &&
                         holdingSelecionada &&
-                        holdingEvento !==
+                        normalizarTextoComparacaoSoc(
+                            holdingEvento
+                        ) !==
+                        normalizarTextoComparacaoSoc(
                             holdingSelecionada
+                        )
                     ) {
                         throw new Error(
                             `Evento ${evento?.id || ''} pertence à holding "${holdingEvento}", mas foi selecionada "${holdingSelecionada}".`
