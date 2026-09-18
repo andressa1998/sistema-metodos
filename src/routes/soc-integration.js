@@ -52464,6 +52464,59 @@ router.post(
 let ultimoHeartbeatConectorLocalEsocial = null;
 let ultimoConectorLocalEsocial = null;
 
+// ============================================================
+// CONECTOR LOCAL eSOCIAL - CONTROLE INTERATIVO V5
+//
+// O conector permanece online em segundo plano, mas NÃO abre o
+// Chrome e NÃO consome a fila sozinho até o usuário:
+// 1) clicar em "Conectar certificado";
+// 2) autenticar no eSocial;
+// 3) escolher Holding/Unidade;
+// 4) clicar em "Consultar pelo PC".
+//
+// As tarefas liberadas ficam apenas em memória. Se o Render
+// reiniciar, nenhuma pendência antiga começa a rodar sozinha:
+// o usuário precisa clicar novamente em "Consultar pelo PC".
+// ============================================================
+
+const tarefasLiberadasConectorLocalEsocial =
+    new Set();
+
+let comandoConectorLocalEsocial =
+    null;
+
+function conectorLocalEsocialOnline() {
+    const heartbeatMs =
+        ultimoHeartbeatConectorLocalEsocial
+            ? new Date(
+                ultimoHeartbeatConectorLocalEsocial
+              ).getTime()
+            : 0;
+
+    return Boolean(
+        heartbeatMs &&
+        Date.now() - heartbeatMs <= 60000
+    );
+}
+
+function sessaoConectorLocalEsocialAtiva() {
+    return (
+        conectorLocalEsocialOnline() &&
+        ultimoConectorLocalEsocial?.sessaoAtiva ===
+            true
+    );
+}
+
+function criarIdComandoConectorLocalEsocial() {
+    return [
+        'cmd',
+        Date.now().toString(36),
+        Math.random()
+            .toString(36)
+            .slice(2, 10)
+    ].join('-');
+}
+
 function chaveConectorLocalEsocialConfigurada() {
     return String(
         process.env.ESOCIAL_CONECTOR_LOCAL_CHAVE || ''
@@ -53353,17 +53406,8 @@ router.get(
                 );
             }
 
-            const heartbeatMs =
-                ultimoHeartbeatConectorLocalEsocial
-                    ? new Date(
-                        ultimoHeartbeatConectorLocalEsocial
-                      ).getTime()
-                    : 0;
-
-            const online = Boolean(
-                heartbeatMs &&
-                Date.now() - heartbeatMs <= 60000
-            );
+            const online =
+                conectorLocalEsocialOnline();
 
             const { data, error } = await getSupabase()
                 .from('esocial_matriculas_pendentes')
@@ -53421,6 +53465,37 @@ router.get(
                     ultimoHeartbeatConectorLocalEsocial,
                 conector:
                     ultimoConectorLocalEsocial,
+                sessaoAtiva:
+                    ultimoConectorLocalEsocial?.sessaoAtiva ===
+                        true,
+                estadoConector:
+                    ultimoConectorLocalEsocial?.estado ||
+                    (
+                        online
+                            ? 'aguardando_comando'
+                            : 'offline'
+                    ),
+                comando:
+                    comandoConectorLocalEsocial
+                        ? {
+                            id:
+                                comandoConectorLocalEsocial.id,
+                            tipo:
+                                comandoConectorLocalEsocial.tipo,
+                            status:
+                                comandoConectorLocalEsocial.status,
+                            criadoEm:
+                                comandoConectorLocalEsocial.criadoEm,
+                            concluidoEm:
+                                comandoConectorLocalEsocial.concluidoEm ||
+                                null,
+                            erro:
+                                comandoConectorLocalEsocial.erro ||
+                                null
+                          }
+                        : null,
+                tarefasLiberadas:
+                    tarefasLiberadasConectorLocalEsocial.size,
                 eventosConciliados,
                 ultimaAtualizacaoFila,
                 aguardando:
@@ -53472,10 +53547,24 @@ router.post(
                 });
             }
 
-            return res.json(
+            const resultado =
                 await enfileirarEventoConectorLocalEsocial(
                     evento
-                )
+                );
+
+            if (
+                resultado?.tarefaId
+            ) {
+                tarefasLiberadasConectorLocalEsocial
+                    .add(
+                        String(
+                            resultado.tarefaId
+                        )
+                    );
+            }
+
+            return res.json(
+                resultado
             );
         } catch (error) {
             return res.status(500).json({
@@ -53730,6 +53819,36 @@ router.post(
     '/conector-local/enfileirar-lote',
     async (req, res) => {
         try {
+            if (
+                !conectorLocalEsocialOnline()
+            ) {
+                return res
+                    .status(409)
+                    .json({
+                        success:
+                            false,
+                        code:
+                            'CONECTOR_OFFLINE',
+                        error:
+                            'O Conector eSocial não está online neste computador.'
+                    });
+            }
+
+            if (
+                !sessaoConectorLocalEsocialAtiva()
+            ) {
+                return res
+                    .status(409)
+                    .json({
+                        success:
+                            false,
+                        code:
+                            'SESSAO_ESOCIAL_NAO_CONECTADA',
+                        error:
+                            'Conecte o certificado/eSocial antes de iniciar a consulta.'
+                    });
+            }
+
             const empresaId =
                 String(
                     req.body?.empresaId ||
@@ -53841,6 +53960,21 @@ router.post(
             let semAutorizacao = 0;
             const erros = [];
 
+            const tarefasIds =
+                new Set();
+
+            const colaboradoresEnfileirados =
+                new Set();
+
+            const colaboradoresImediatos =
+                new Set();
+
+            const colaboradoresSemAutorizacao =
+                new Set();
+
+            const colaboradoresSolicitados =
+                new Set();
+
             for (
                 const evento
                 of (
@@ -53915,6 +54049,20 @@ router.post(
                         );
                     }
 
+                    const cpfEvento =
+                        normalizarCpfEsocial(
+                            evento?.cpf ||
+                            ''
+                        );
+
+                    const chaveColaborador =
+                        `${cnpjEmpresa}|${cpfEvento || evento?.codigo_funcionario || evento?.id || ''}`;
+
+                    colaboradoresSolicitados
+                        .add(
+                            chaveColaborador
+                        );
+
                     const resultado =
                         await enfileirarEventoConectorLocalEsocial(
                             evento,
@@ -53926,14 +54074,48 @@ router.post(
                         );
 
                     if (
+                        resultado?.tarefaId
+                    ) {
+                        const tarefaId =
+                            String(
+                                resultado.tarefaId
+                            );
+
+                        tarefasIds
+                            .add(
+                                tarefaId
+                            );
+
+                        tarefasLiberadasConectorLocalEsocial
+                            .add(
+                                tarefaId
+                            );
+
+                        colaboradoresEnfileirados
+                            .add(
+                                chaveColaborador
+                            );
+                    }
+
+                    if (
                         resultado.semAutorizacao
                     ) {
                         semAutorizacao++;
+
+                        colaboradoresSemAutorizacao
+                            .add(
+                                chaveColaborador
+                            );
 
                     } else if (
                         resultado.imediato
                     ) {
                         imediatos++;
+
+                        colaboradoresImediatos
+                            .add(
+                                chaveColaborador
+                            );
 
                     } else {
                         enfileirados++;
@@ -53957,6 +54139,20 @@ router.post(
                 enfileirados,
                 resolvidosDoCache: imediatos,
                 semAutorizacao,
+                tarefasIds:
+                    Array.from(
+                        tarefasIds
+                    ),
+                colaboradores: {
+                    solicitados:
+                        colaboradoresSolicitados.size,
+                    enfileirados:
+                        colaboradoresEnfileirados.size,
+                    resolvidosDoCache:
+                        colaboradoresImediatos.size,
+                    semAutorizacao:
+                        colaboradoresSemAutorizacao.size
+                },
                 erros
             });
         } catch (error) {
@@ -54160,7 +54356,30 @@ router.post(
             versao:
                 String(
                     req.body?.versao || ''
-                ).trim() || null
+                ).trim() || null,
+            sessaoAtiva:
+                req.body?.sessaoAtiva ===
+                    true,
+            navegadorAberto:
+                req.body?.navegadorAberto ===
+                    true,
+            ocupado:
+                req.body?.ocupado ===
+                    true,
+            estado:
+                String(
+                    req.body?.estado ||
+                    ''
+                ).trim() ||
+                'aguardando_comando',
+            progresso:
+                req.body?.progresso &&
+                typeof req.body.progresso ===
+                    'object'
+                    ? req.body.progresso
+                    : null,
+            atualizadoEm:
+                ultimoHeartbeatConectorLocalEsocial
         };
 
         return res.json({
@@ -54170,6 +54389,751 @@ router.post(
         });
     }
 );
+
+
+// ============================================================
+// SOLICITAR ABERTURA DO LOGIN/CERTIFICADO
+// Chamado pela tela web.
+// ============================================================
+
+router.post(
+    '/conector-local/solicitar-conexao',
+    async (req, res) => {
+        try {
+            if (
+                !conectorLocalEsocialOnline()
+            ) {
+                return res
+                    .status(409)
+                    .json({
+                        success:
+                            false,
+                        code:
+                            'CONECTOR_OFFLINE',
+                        error:
+                            'O Conector eSocial não está online neste computador. Entre em contato com o suporte.'
+                    });
+            }
+
+            if (
+                sessaoConectorLocalEsocialAtiva()
+            ) {
+                return res.json({
+                    success:
+                        true,
+                    jaConectado:
+                        true,
+                    sessaoAtiva:
+                        true,
+                    message:
+                        'A sessão eSocial já está autenticada.'
+                });
+            }
+
+            const conectorId =
+                String(
+                    ultimoConectorLocalEsocial?.id ||
+                    ''
+                ).trim();
+
+            if (
+                !conectorId
+            ) {
+                return res
+                    .status(409)
+                    .json({
+                        success:
+                            false,
+                        code:
+                            'CONECTOR_SEM_ID',
+                        error:
+                            'O conector está online, mas ainda não informou sua identificação.'
+                    });
+            }
+
+            comandoConectorLocalEsocial = {
+                id:
+                    criarIdComandoConectorLocalEsocial(),
+                tipo:
+                    'conectar_esocial',
+                conectorId,
+                status:
+                    'pendente',
+                criadoEm:
+                    new Date()
+                        .toISOString(),
+                recebidoEm:
+                    null,
+                concluidoEm:
+                    null,
+                erro:
+                    null
+            };
+
+            return res.json({
+                success:
+                    true,
+                comandoId:
+                    comandoConectorLocalEsocial.id,
+                message:
+                    'Comando enviado ao conector. O Chrome será aberto para autenticação.'
+            });
+
+        } catch (
+            error
+        ) {
+            return res
+                .status(500)
+                .json({
+                    success:
+                        false,
+                    error:
+                        error?.message ||
+                        String(
+                            error
+                        )
+                });
+        }
+    }
+);
+
+
+// ============================================================
+// CONECTOR BUSCA COMANDO PENDENTE
+// ============================================================
+
+router.get(
+    '/conector-local/comando',
+    async (req, res) => {
+        if (
+            !validarChaveConectorLocalEsocial(
+                req,
+                res
+            )
+        ) {
+            return;
+        }
+
+        try {
+            ultimoHeartbeatConectorLocalEsocial =
+                new Date()
+                    .toISOString();
+
+            const conectorId =
+                String(
+                    req.query?.id ||
+                    req.get(
+                        'X-ESOCIAL-CONNECTOR-ID'
+                    ) ||
+                    ''
+                ).trim();
+
+            const comando =
+                comandoConectorLocalEsocial;
+
+            if (
+                !comando ||
+                comando.status ===
+                    'concluido' ||
+                comando.status ===
+                    'erro' ||
+                (
+                    comando.conectorId &&
+                    conectorId &&
+                    comando.conectorId !==
+                        conectorId
+                )
+            ) {
+                return res.json({
+                    success:
+                        true,
+                    comando:
+                        null
+                });
+            }
+
+            if (
+                comando.status ===
+                    'pendente'
+            ) {
+                comando.status =
+                    'entregue';
+
+                comando.recebidoEm =
+                    new Date()
+                        .toISOString();
+            }
+
+            return res.json({
+                success:
+                    true,
+                comando: {
+                    id:
+                        comando.id,
+                    tipo:
+                        comando.tipo,
+                    criadoEm:
+                        comando.criadoEm
+                }
+            });
+
+        } catch (
+            error
+        ) {
+            return res
+                .status(500)
+                .json({
+                    success:
+                        false,
+                    error:
+                        error?.message ||
+                        String(
+                            error
+                        )
+                });
+        }
+    }
+);
+
+
+// ============================================================
+// CONECTOR CONFIRMA RESULTADO DO COMANDO
+// ============================================================
+
+router.post(
+    '/conector-local/comando-concluido/:id',
+    async (req, res) => {
+        if (
+            !validarChaveConectorLocalEsocial(
+                req,
+                res
+            )
+        ) {
+            return;
+        }
+
+        try {
+            const id =
+                String(
+                    req.params.id ||
+                    ''
+                ).trim();
+
+            if (
+                comandoConectorLocalEsocial?.id ===
+                    id
+            ) {
+                const sucesso =
+                    req.body?.success ===
+                    true;
+
+                comandoConectorLocalEsocial = {
+                    ...comandoConectorLocalEsocial,
+                    status:
+                        sucesso
+                            ? 'concluido'
+                            : 'erro',
+                    concluidoEm:
+                        new Date()
+                            .toISOString(),
+                    erro:
+                        sucesso
+                            ? null
+                            : String(
+                                req.body?.error ||
+                                'Falha ao conectar ao eSocial.'
+                              )
+                };
+            }
+
+            return res.json({
+                success:
+                    true
+            });
+
+        } catch (
+            error
+        ) {
+            return res
+                .status(500)
+                .json({
+                    success:
+                        false,
+                    error:
+                        error?.message ||
+                        String(
+                            error
+                        )
+                });
+        }
+    }
+);
+
+
+// ============================================================
+// DEVOLVER TAREFAS QUANDO A SESSÃO EXPIRAR
+// Não conta como nova tentativa.
+// ============================================================
+
+router.post(
+    '/conector-local/devolver-tarefas',
+    async (req, res) => {
+        if (
+            !validarChaveConectorLocalEsocial(
+                req,
+                res
+            )
+        ) {
+            return;
+        }
+
+        try {
+            const ids =
+                Array.from(
+                    new Set(
+                        (
+                            Array.isArray(
+                                req.body?.ids
+                            )
+                                ? req.body.ids
+                                : []
+                        )
+                            .map(
+                                id =>
+                                    String(
+                                        id ||
+                                        ''
+                                    ).trim()
+                            )
+                            .filter(Boolean)
+                    )
+                )
+                    .slice(
+                        0,
+                        1000
+                    );
+
+            if (
+                !ids.length
+            ) {
+                return res.json({
+                    success:
+                        true,
+                    devolvidas:
+                        0
+                });
+            }
+
+            const {
+                data:
+                    linhas,
+                error:
+                    erroBusca
+            } =
+                await getSupabase()
+                    .from(
+                        'esocial_matriculas_pendentes'
+                    )
+                    .select(
+                        'id,tentativas,status'
+                    )
+                    .in(
+                        'id',
+                        ids
+                    );
+
+            if (
+                erroBusca
+            ) {
+                throw erroBusca;
+            }
+
+            let devolvidas =
+                0;
+
+            for (
+                const linha
+                of (
+                    Array.isArray(
+                        linhas
+                    )
+                        ? linhas
+                        : []
+                )
+            ) {
+                if (
+                    ![
+                        'processando_conector_local',
+                        'aguardando_conector_local',
+                        'erro_conector_local'
+                    ].includes(
+                        String(
+                            linha?.status ||
+                            ''
+                        )
+                    )
+                ) {
+                    continue;
+                }
+
+                const tentativas =
+                    Math.max(
+                        0,
+                        Number(
+                            linha?.tentativas ||
+                            0
+                        ) -
+                        (
+                            String(
+                                linha?.status ||
+                                ''
+                            ) ===
+                                'processando_conector_local'
+                                ? 1
+                                : 0
+                        )
+                    );
+
+                const {
+                    error:
+                        erroUpdate
+                } =
+                    await getSupabase()
+                        .from(
+                            'esocial_matriculas_pendentes'
+                        )
+                        .update({
+                            status:
+                                'aguardando_conector_local',
+                            motivo:
+                                'AGUARDANDO_RECONEXAO_CERTIFICADO',
+                            ultimo_erro:
+                                null,
+                            tentativas,
+                            proxima_tentativa_em:
+                                null,
+                            updated_at:
+                                new Date()
+                                    .toISOString()
+                        })
+                        .eq(
+                            'id',
+                            linha.id
+                        );
+
+                if (
+                    erroUpdate
+                ) {
+                    throw erroUpdate;
+                }
+
+                tarefasLiberadasConectorLocalEsocial
+                    .add(
+                        String(
+                            linha.id
+                        )
+                    );
+
+                devolvidas++;
+            }
+
+            return res.json({
+                success:
+                    true,
+                devolvidas
+            });
+
+        } catch (
+            error
+        ) {
+            return res
+                .status(500)
+                .json({
+                    success:
+                        false,
+                    error:
+                        error?.message ||
+                        String(
+                            error
+                        )
+                });
+        }
+    }
+);
+
+
+// ============================================================
+// PROGRESSO DE UMA CONSULTA DISPARADA PELA TELA
+// ============================================================
+
+router.post(
+    '/conector-local/progresso-tarefas',
+    async (req, res) => {
+        try {
+            const ids =
+                Array.from(
+                    new Set(
+                        (
+                            Array.isArray(
+                                req.body?.ids
+                            )
+                                ? req.body.ids
+                                : []
+                        )
+                            .map(
+                                id =>
+                                    String(
+                                        id ||
+                                        ''
+                                    ).trim()
+                            )
+                            .filter(Boolean)
+                    )
+                )
+                    .slice(
+                        0,
+                        1000
+                    );
+
+            if (
+                !ids.length
+            ) {
+                return res.json({
+                    success:
+                        true,
+                    total:
+                        0,
+                    finalizadas:
+                        0,
+                    aguardando:
+                        0,
+                    processando:
+                        0,
+                    naoLocalizados:
+                        0,
+                    resolvidos:
+                        0,
+                    semAutorizacao:
+                        0,
+                    erros:
+                        0,
+                    concluida:
+                        true,
+                    itens:
+                        []
+                });
+            }
+
+            const {
+                data,
+                error
+            } =
+                await getSupabase()
+                    .from(
+                        'esocial_matriculas_pendentes'
+                    )
+                    .select(
+                        'id,status,motivo,ultimo_erro,tentativas,updated_at'
+                    )
+                    .in(
+                        'id',
+                        ids
+                    );
+
+            if (
+                error
+            ) {
+                throw error;
+            }
+
+            const itens =
+                Array.isArray(
+                    data
+                )
+                    ? data
+                    : [];
+
+            const mapa =
+                new Map(
+                    itens.map(
+                        item => [
+                            String(
+                                item.id
+                            ),
+                            item
+                        ]
+                    )
+                );
+
+            const normalizados =
+                ids.map(
+                    id => {
+                        const item =
+                            mapa.get(
+                                id
+                            ) ||
+                            {
+                                id,
+                                status:
+                                    'aguardando_conector_local',
+                                motivo:
+                                    'AGUARDANDO_CONECTOR_LOCAL'
+                            };
+
+                        const status =
+                            String(
+                                item.status ||
+                                ''
+                            ).trim();
+
+                        const motivo =
+                            String(
+                                item.motivo ||
+                                ''
+                            ).trim();
+
+                        const tentativas =
+                            Number(
+                                item.tentativas ||
+                                0
+                            );
+
+                        const erroFinal =
+                            status ===
+                                'erro_conector_local' &&
+                            (
+                                tentativas >=
+                                    4 ||
+                                /FINAL/i.test(
+                                    motivo
+                                )
+                            );
+
+                        const terminal =
+                            [
+                                'resolvido',
+                                'nao_localizado_conector_local',
+                                'sem_autorizacao_conector_local'
+                            ].includes(
+                                status
+                            ) ||
+                            erroFinal;
+
+                        return {
+                            ...item,
+                            id,
+                            erroFinal,
+                            terminal
+                        };
+                    }
+                );
+
+            const contar =
+                predicado =>
+                    normalizados.filter(
+                        predicado
+                    ).length;
+
+            const resolvidos =
+                contar(
+                    item =>
+                        item.status ===
+                        'resolvido'
+                );
+
+            const naoLocalizados =
+                contar(
+                    item =>
+                        item.status ===
+                        'nao_localizado_conector_local'
+                );
+
+            const semAutorizacao =
+                contar(
+                    item =>
+                        item.status ===
+                        'sem_autorizacao_conector_local'
+                );
+
+            const erros =
+                contar(
+                    item =>
+                        item.erroFinal ===
+                        true
+                );
+
+            const finalizadas =
+                contar(
+                    item =>
+                        item.terminal ===
+                        true
+                );
+
+            const aguardando =
+                contar(
+                    item =>
+                        item.status ===
+                            'aguardando_conector_local' ||
+                        (
+                            item.status ===
+                                'erro_conector_local' &&
+                            item.erroFinal !==
+                                true
+                        )
+                );
+
+            const processando =
+                contar(
+                    item =>
+                        item.status ===
+                        'processando_conector_local'
+                );
+
+            return res.json({
+                success:
+                    true,
+                total:
+                    ids.length,
+                finalizadas,
+                aguardando,
+                processando,
+                naoLocalizados,
+                resolvidos,
+                semAutorizacao,
+                erros,
+                concluida:
+                    finalizadas >=
+                    ids.length,
+                sessaoAtiva:
+                    sessaoConectorLocalEsocialAtiva(),
+                estadoConector:
+                    ultimoConectorLocalEsocial?.estado ||
+                    null,
+                progressoConector:
+                    ultimoConectorLocalEsocial?.progresso ||
+                    null,
+                itens:
+                    normalizados
+            });
+
+        } catch (
+            error
+        ) {
+            return res
+                .status(500)
+                .json({
+                    success:
+                        false,
+                    error:
+                        error?.message ||
+                        String(
+                            error
+                        )
+                });
+        }
+    }
+);
+
 
 
 
@@ -54376,6 +55340,18 @@ router.get(
                 )
                     .filter(
                         item => {
+                            if (
+                                !tarefasLiberadasConectorLocalEsocial
+                                    .has(
+                                        String(
+                                            item?.id ||
+                                            ''
+                                        )
+                                    )
+                            ) {
+                                return false;
+                            }
+
                             const status =
                                 String(
                                     item?.status ||
@@ -56368,6 +57344,17 @@ router.post(
                     }
                 );
 
+                if (
+                    !podeReprocessar
+                ) {
+                    tarefasLiberadasConectorLocalEsocial
+                        .delete(
+                            String(
+                                pendencia.id
+                            )
+                        );
+                }
+
                 return res.json({
                     success:
                         true,
@@ -56395,6 +57382,13 @@ router.post(
                         proxima_tentativa_em: null
                     }
                 );
+
+                tarefasLiberadasConectorLocalEsocial
+                    .delete(
+                        String(
+                            pendencia.id
+                        )
+                    );
 
                 return res.json({
                     success: true,
@@ -56465,6 +57459,13 @@ router.post(
                     null
                 );
 
+            tarefasLiberadasConectorLocalEsocial
+                .delete(
+                    String(
+                        pendencia.id
+                    )
+                );
+
             return res.json({
                 success: true,
                 encontrado: true,
@@ -56486,6 +57487,11 @@ router.post(
             ).trim();
 
             if (tarefaId) {
+                tarefasLiberadasConectorLocalEsocial
+                    .delete(
+                        tarefaId
+                    );
+
                 try {
                     await atualizarPendenciaMatricula(
                         tarefaId,

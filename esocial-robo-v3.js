@@ -6,7 +6,7 @@
 (() => {
     'use strict';
 
-    window.ESOCIAL_FRONTEND_VERSION = 'CONECTOR_LOCAL_V3_20260917';
+    window.ESOCIAL_FRONTEND_VERSION = 'CONECTOR_LOCAL_V5_20260917';
     console.log('eSocial frontend:', window.ESOCIAL_FRONTEND_VERSION);
 
     // ============================================================
@@ -9696,9 +9696,22 @@ let timerStatusRoboRelatoriosEsocial =
 let timerStatusConectorLocalEsocial =
     null;
 
+let timerProgressoConsultaPcEsocial =
+    null;
+
 let ultimaAssinaturaStatusConectorLocalEsocial =
     '';
 
+let consultaPcEsocialAtual =
+    null;
+
+let statusConectorLocalEsocialAtual =
+    null;
+
+
+// ============================================================
+// CONECTOR LOCAL V5 - UI
+// ============================================================
 
 function garantirBadgeConectorLocalEsocial() {
     let badge =
@@ -9706,7 +9719,9 @@ function garantirBadgeConectorLocalEsocial() {
             'badgeConectorLocalEsocial'
         );
 
-    if (badge) {
+    if (
+        badge
+    ) {
         return badge;
     }
 
@@ -9730,7 +9745,7 @@ function garantirBadgeConectorLocalEsocial() {
         'badgeConectorLocalEsocial';
 
     badge.className =
-        'badge bg-secondary ms-2';
+        'badge bg-secondary ms-2 align-self-center';
 
     badge.textContent =
         'Conector: verificando...';
@@ -9742,7 +9757,6 @@ function garantirBadgeConectorLocalEsocial() {
 
     return badge;
 }
-
 
 
 function formatarCnpjConectorLocalEsocial(
@@ -9763,7 +9777,7 @@ function formatarCnpjConectorLocalEsocial(
     ) {
         return String(
             valor ||
-            '—'
+            ''
         );
     }
 
@@ -9791,12 +9805,12 @@ function garantirPainelCnpjsSemAutorizacaoEsocial() {
             'btnResolverMatriculasHolding'
         );
 
-    const container =
-        botao?.parentElement ||
-        null;
+    const cabecalho =
+        botao?.parentElement
+            ?.parentElement;
 
     if (
-        !container
+        !cabecalho
     ) {
         return null;
     }
@@ -9810,15 +9824,9 @@ function garantirPainelCnpjsSemAutorizacaoEsocial() {
         'painelCnpjsSemAutorizacaoEsocial';
 
     painel.className =
-        'alert alert-warning mt-3 mb-3 d-none';
+        'alert alert-warning mt-2 mb-3 d-none';
 
-    painel.style.maxWidth =
-        '900px';
-
-    painel.innerHTML =
-        '';
-
-    container.insertAdjacentElement(
+    cabecalho.insertAdjacentElement(
         'afterend',
         painel
     );
@@ -9828,7 +9836,7 @@ function garantirPainelCnpjsSemAutorizacaoEsocial() {
 
 
 function renderizarCnpjsSemAutorizacaoEsocial(
-    lista
+    itens
 ) {
     const painel =
         garantirPainelCnpjsSemAutorizacaoEsocial();
@@ -9839,15 +9847,15 @@ function renderizarCnpjsSemAutorizacaoEsocial(
         return;
     }
 
-    const itens =
+    const lista =
         Array.isArray(
-            lista
+            itens
         )
-            ? lista
+            ? itens
             : [];
 
     if (
-        !itens.length
+        !lista.length
     ) {
         painel.classList.add(
             'd-none'
@@ -9864,7 +9872,7 @@ function renderizarCnpjsSemAutorizacaoEsocial(
     );
 
     const linhas =
-        itens
+        lista
             .map(
                 item => {
                     const cnpj =
@@ -9877,7 +9885,7 @@ function renderizarCnpjsSemAutorizacaoEsocial(
                     return `
                         <span
                             class="badge bg-warning text-dark me-2 mb-2"
-                            style="font-size: .82rem;"
+                            style="font-size:.82rem;"
                         >
                             ${escaparHtml(cnpj)}
                         </span>
@@ -9896,8 +9904,8 @@ function renderizarCnpjsSemAutorizacaoEsocial(
                 </strong>
 
                 <div class="small mt-1 mb-2">
-                    O procurador não possui perfil com autorização de acesso à Web.
-                    Estes CNPJs não serão tentados novamente pelo conector.
+                    Estes CNPJs não serão consultados novamente
+                    enquanto permanecerem sem autorização.
                 </div>
 
                 <div>
@@ -9909,12 +9917,364 @@ function renderizarCnpjsSemAutorizacaoEsocial(
 }
 
 
+function garantirPainelProgressoConsultaPcEsocial() {
+    let painel =
+        document.getElementById(
+            'painelProgressoConsultaPcEsocial'
+        );
+
+    if (
+        painel
+    ) {
+        return painel;
+    }
+
+    const botao =
+        document.getElementById(
+            'btnResolverMatriculasHolding'
+        );
+
+    const cabecalho =
+        botao?.parentElement
+            ?.parentElement;
+
+    if (
+        !cabecalho
+    ) {
+        return null;
+    }
+
+    painel =
+        document.createElement(
+            'div'
+        );
+
+    painel.id =
+        'painelProgressoConsultaPcEsocial';
+
+    painel.className =
+        'card shadow-sm mb-3 d-none';
+
+    painel.innerHTML = `
+        <div class="card-body py-3">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <div>
+                    <strong>
+                        <i class="fas fa-desktop me-1"></i>
+                        Consulta eSocial pelo PC
+                    </strong>
+                </div>
+
+                <span
+                    class="badge bg-primary"
+                    id="statusProgressoConsultaPcEsocial"
+                >
+                    Preparando
+                </span>
+            </div>
+
+            <div
+                class="progress mb-2"
+                style="height:20px;"
+            >
+                <div
+                    id="barraProgressoConsultaPcEsocial"
+                    class="progress-bar progress-bar-striped progress-bar-animated"
+                    role="progressbar"
+                    style="width:0%;"
+                >
+                    0%
+                </div>
+            </div>
+
+            <div
+                id="textoProgressoConsultaPcEsocial"
+                class="small text-muted"
+            >
+                Preparando consulta...
+            </div>
+
+            <div
+                id="detalheProgressoConsultaPcEsocial"
+                class="small mt-1"
+            ></div>
+        </div>
+    `;
+
+    cabecalho.insertAdjacentElement(
+        'afterend',
+        painel
+    );
+
+    return painel;
+}
+
+
+function atualizarPainelProgressoConsultaPcEsocial({
+    processados = 0,
+    total = 0,
+    status = 'Consultando',
+    detalhe = '',
+    aviso = '',
+    concluida = false
+} = {}) {
+    const painel =
+        garantirPainelProgressoConsultaPcEsocial();
+
+    if (
+        !painel
+    ) {
+        return;
+    }
+
+    painel.classList.remove(
+        'd-none'
+    );
+
+    const percentual =
+        total >
+            0
+            ? Math.min(
+                100,
+                Math.round(
+                    processados /
+                    total *
+                    100
+                )
+              )
+            : (
+                concluida
+                    ? 100
+                    : 0
+              );
+
+    const barra =
+        document.getElementById(
+            'barraProgressoConsultaPcEsocial'
+        );
+
+    if (
+        barra
+    ) {
+        barra.style.width =
+            `${percentual}%`;
+
+        barra.textContent =
+            `${percentual}%`;
+
+        barra.classList.toggle(
+            'progress-bar-animated',
+            !concluida
+        );
+
+        barra.classList.toggle(
+            'bg-success',
+            concluida
+        );
+    }
+
+    const badge =
+        document.getElementById(
+            'statusProgressoConsultaPcEsocial'
+        );
+
+    if (
+        badge
+    ) {
+        badge.textContent =
+            status;
+
+        badge.className =
+            'badge ' +
+            (
+                concluida
+                    ? 'bg-success'
+                    : (
+                        aviso
+                            ? 'bg-warning text-dark'
+                            : 'bg-primary'
+                      )
+            );
+    }
+
+    const texto =
+        document.getElementById(
+            'textoProgressoConsultaPcEsocial'
+        );
+
+    if (
+        texto
+    ) {
+        texto.innerHTML = `
+            <strong>
+                ${processados} / ${total}
+            </strong>
+            colaborador(es) processado(s)
+        `;
+    }
+
+    const detalhes =
+        document.getElementById(
+            'detalheProgressoConsultaPcEsocial'
+        );
+
+    if (
+        detalhes
+    ) {
+        detalhes.innerHTML =
+            aviso
+                ? `
+                    <span class="text-warning-emphasis">
+                        <i class="fas fa-triangle-exclamation me-1"></i>
+                        ${escaparHtml(aviso)}
+                    </span>
+                  `
+                : escaparHtml(
+                    detalhe ||
+                    ''
+                  );
+    }
+}
+
+
+function garantirBotaoConectarCertificadoEsocial() {
+    let botao =
+        document.getElementById(
+            'btnConectarCertificadoEsocial'
+        );
+
+    if (
+        botao
+    ) {
+        return botao;
+    }
+
+    const consultar =
+        document.getElementById(
+            'btnResolverMatriculasHolding'
+        );
+
+    if (
+        !consultar?.parentElement
+    ) {
+        return null;
+    }
+
+    botao =
+        document.createElement(
+            'button'
+        );
+
+    botao.type =
+        'button';
+
+    botao.id =
+        'btnConectarCertificadoEsocial';
+
+    botao.className =
+        'btn btn-outline-primary btn-sm';
+
+    botao.innerHTML =
+        '<i class="fas fa-certificate me-1"></i> Conectar certificado';
+
+    botao.title =
+        'Abrir o Chrome para autenticar no eSocial com o certificado deste computador.';
+
+    consultar.insertAdjacentElement(
+        'beforebegin',
+        botao
+    );
+
+    return botao;
+}
+
+
+function atualizarBotoesConectorLocalEsocial(
+    status
+) {
+    const conectar =
+        garantirBotaoConectarCertificadoEsocial();
+
+    const consultar =
+        document.getElementById(
+            'btnResolverMatriculasHolding'
+        );
+
+    const online =
+        status?.online ===
+        true;
+
+    const sessaoAtiva =
+        status?.sessaoAtiva ===
+            true ||
+        status?.conector?.sessaoAtiva ===
+            true;
+
+    const consultaAtiva =
+        Boolean(
+            consultaPcEsocialAtual &&
+            consultaPcEsocialAtual.concluida !==
+                true
+        );
+
+    if (
+        conectar
+    ) {
+        if (
+            !online
+        ) {
+            conectar.disabled =
+                true;
+
+            conectar.className =
+                'btn btn-outline-secondary btn-sm';
+
+            conectar.innerHTML =
+                '<i class="fas fa-plug me-1"></i> Conector offline';
+
+        } else if (
+            sessaoAtiva
+        ) {
+            conectar.disabled =
+                true;
+
+            conectar.className =
+                'btn btn-outline-success btn-sm';
+
+            conectar.innerHTML =
+                '<i class="fas fa-check-circle me-1"></i> eSocial conectado';
+
+        } else {
+            conectar.disabled =
+                false;
+
+            conectar.className =
+                'btn btn-primary btn-sm';
+
+            conectar.innerHTML =
+                '<i class="fas fa-certificate me-1"></i> Conectar certificado';
+        }
+    }
+
+    if (
+        consultar
+    ) {
+        consultar.disabled =
+            !online ||
+            !sessaoAtiva ||
+            consultaAtiva;
+    }
+}
+
+
 async function atualizarStatusConectorLocalEsocial() {
     const badge =
         garantirBadgeConectorLocalEsocial();
 
-    if (!badge) {
-        return;
+    if (
+        !badge
+    ) {
+        return null;
     }
 
     try {
@@ -9923,69 +10283,86 @@ async function atualizarStatusConectorLocalEsocial() {
                 '/api/soc/conector-local/status'
             );
 
-        const fila =
-            Number(
-                status.aguardando ||
-                0
-            ) +
-            Number(
-                status.processando ||
-                0
-            );
+        statusConectorLocalEsocialAtual =
+            status;
 
         renderizarCnpjsSemAutorizacaoEsocial(
             status.cnpjsSemAutorizacao ||
             []
         );
 
+        const sessaoAtiva =
+            status.sessaoAtiva ===
+                true ||
+            status.conector?.sessaoAtiva ===
+                true;
+
         if (
+            status.online ===
+                true &&
+            sessaoAtiva
+        ) {
+            badge.className =
+                'badge bg-success ms-2 align-self-center';
+
+            badge.textContent =
+                status.conector?.ocupado
+                    ? 'Conector online • consultando eSocial'
+                    : 'Conector online • eSocial conectado';
+
+        } else if (
             status.online ===
                 true
         ) {
             badge.className =
-                'badge bg-success ms-2';
+                'badge bg-warning text-dark ms-2 align-self-center';
 
-            const semAutorizacao =
-                Number(
-                    status.semAutorizacao ||
-                    0
+            const estado =
+                String(
+                    status.estadoConector ||
+                    status.conector?.estado ||
+                    ''
                 );
 
             badge.textContent =
-                fila
-                    ? (
-                        `Conector online • ${fila} na fila` +
-                        (
-                            semAutorizacao
-                                ? ` • ${semAutorizacao} CNPJ(s) sem autorização`
-                                : ''
-                        )
-                    )
+                estado ===
+                    'aguardando_login'
+                    ? 'Conector online • aguardando login'
                     : (
-                        semAutorizacao
-                            ? `Conector online • ${semAutorizacao} CNPJ(s) sem autorização`
-                            : 'Conector online'
-                    );
+                        estado ===
+                            'sessao_expirada'
+                            ? 'Conector online • sessão expirada'
+                            : 'Conector online • certificado não conectado'
+                      );
 
         } else {
             badge.className =
-                'badge bg-secondary ms-2';
+                'badge bg-secondary ms-2 align-self-center';
 
             badge.textContent =
                 'Conector offline';
         }
+
+        atualizarBotoesConectorLocalEsocial(
+            status
+        );
 
         const assinatura =
             [
                 status.online
                     ? '1'
                     : '0',
-                status.aguardando ||
-                0,
-                status.processando ||
-                0,
+                sessaoAtiva
+                    ? '1'
+                    : '0',
+                status.estadoConector ||
+                '',
                 status.ultimaAtualizacaoFila ||
                 '',
+                Number(
+                    status.eventosConciliados ||
+                    0
+                ),
                 (
                     status.cnpjsSemAutorizacao ||
                     []
@@ -10006,7 +10383,8 @@ async function atualizarStatusConectorLocalEsocial() {
                 status.eventosConciliados ||
                 0
             ) >
-                0
+                0 &&
+            !consultaPcEsocialAtual
         ) {
             recarregarEventosESocial()
                 .catch(
@@ -10016,7 +10394,8 @@ async function atualizarStatusConectorLocalEsocial() {
         } else if (
             ultimaAssinaturaStatusConectorLocalEsocial &&
             assinatura !==
-                ultimaAssinaturaStatusConectorLocalEsocial
+                ultimaAssinaturaStatusConectorLocalEsocial &&
+            !consultaPcEsocialAtual
         ) {
             recarregarEventosESocial()
                 .catch(
@@ -10027,20 +10406,209 @@ async function atualizarStatusConectorLocalEsocial() {
         ultimaAssinaturaStatusConectorLocalEsocial =
             assinatura;
 
+        return status;
+
     } catch (
         error
     ) {
+        statusConectorLocalEsocialAtual =
+            null;
+
         badge.className =
-            'badge bg-danger ms-2';
+            'badge bg-danger ms-2 align-self-center';
 
         badge.textContent =
             'Conector indisponível';
+
+        atualizarBotoesConectorLocalEsocial({
+            online:
+                false,
+            sessaoAtiva:
+                false
+        });
+
+        return null;
     }
 }
 
 
+// ============================================================
+// CONECTAR CERTIFICADO
+// ============================================================
 
-function obterEmpresaSelecionadaNaTelaEsocial() {
+async function conectarCertificadoConectorLocalEsocial() {
+    const botao =
+        garantirBotaoConectarCertificadoEsocial();
+
+    const status =
+        await atualizarStatusConectorLocalEsocial();
+
+    if (
+        status?.online !==
+            true
+    ) {
+        mostrarAlertaESocial(
+            'O Conector eSocial não está online neste computador. Entre em contato com o suporte.',
+            'warning'
+        );
+
+        return;
+    }
+
+    if (
+        status?.sessaoAtiva ===
+            true
+    ) {
+        mostrarAlertaESocial(
+            'O eSocial já está conectado.',
+            'info'
+        );
+
+        return;
+    }
+
+    const htmlOriginal =
+        botao?.innerHTML ||
+        '';
+
+    if (
+        botao
+    ) {
+        botao.disabled =
+            true;
+
+        botao.innerHTML =
+            '<i class="fas fa-spinner fa-spin me-1"></i> Abrindo Chrome...';
+    }
+
+    try {
+        const token =
+            await obterTokenESocial();
+
+        const response =
+            await fetch(
+                apiUrl(
+                    '/api/soc/conector-local/solicitar-conexao'
+                ),
+                {
+                    method:
+                        'POST',
+                    headers:
+                        criarHeaders(
+                            token,
+                            true
+                        ),
+                    body:
+                        JSON.stringify({})
+                }
+            );
+
+        const resultado =
+            await lerRespostaJson(
+                response
+            );
+
+        if (
+            resultado.jaConectado
+        ) {
+            await atualizarStatusConectorLocalEsocial();
+
+            return;
+        }
+
+        mostrarAlertaESocial(
+            'Chrome aberto. Entre no eSocial com o certificado. Depois do login ele será minimizado automaticamente.',
+            'info'
+        );
+
+        if (
+            botao
+        ) {
+            botao.innerHTML =
+                '<i class="fas fa-spinner fa-spin me-1"></i> Aguardando login...';
+        }
+
+        const inicio =
+            Date.now();
+
+        while (
+            Date.now() -
+            inicio <
+            10 *
+            60 *
+            1000
+        ) {
+            await new Promise(
+                resolve =>
+                    setTimeout(
+                        resolve,
+                        2000
+                    )
+            );
+
+            const novoStatus =
+                await atualizarStatusConectorLocalEsocial();
+
+            if (
+                novoStatus?.sessaoAtiva ===
+                    true ||
+                novoStatus?.conector?.sessaoAtiva ===
+                    true
+            ) {
+                mostrarAlertaESocial(
+                    'Certificado validado. O eSocial está conectado e aguardando sua consulta.',
+                    'success'
+                );
+
+                return;
+            }
+
+            if (
+                novoStatus?.comando?.status ===
+                    'erro'
+            ) {
+                throw new Error(
+                    novoStatus.comando.erro ||
+                    'Não foi possível concluir a conexão com o eSocial.'
+                );
+            }
+        }
+
+        throw new Error(
+            'Tempo de autenticação esgotado. Clique novamente em "Conectar certificado".'
+        );
+
+    } catch (
+        error
+    ) {
+        mostrarAlertaESocial(
+            'Não foi possível conectar o certificado: ' +
+            error.message,
+            'danger'
+        );
+
+    } finally {
+        if (
+            botao
+        ) {
+            botao.disabled =
+                false;
+
+            botao.innerHTML =
+                htmlOriginal ||
+                '<i class="fas fa-certificate me-1"></i> Conectar certificado';
+        }
+
+        await atualizarStatusConectorLocalEsocial();
+    }
+}
+
+
+// ============================================================
+// ESCOPO HOLDING / UNIDADE
+// ============================================================
+
+function obterEscopoSelecionadoConectorLocalEsocial() {
     const holding =
         String(
             document.getElementById(
@@ -10057,177 +10625,150 @@ function obterEmpresaSelecionadaNaTelaEsocial() {
             ''
         ).trim();
 
-    if (!unidade) {
+    if (
+        !holding &&
+        !unidade
+    ) {
         return {
-            ok: false,
-            holding,
-            unidade,
+            ok:
+                false,
             erro:
-                'Selecione uma Unidade/CNPJ específico. "Todas as Unidades" não é permitido para Consultar pelo PC.'
+                'Selecione uma Holding ou uma Unidade antes de clicar em "Consultar pelo PC".'
         };
     }
 
     let candidatas =
-        empresasSocCache.filter(
-            empresa => {
-                const unidadeEmpresa =
-                    String(
-                        empresa?.unidade ||
-                        ''
-                    ).trim();
+        (
+            Array.isArray(
+                empresasSocCache
+            )
+                ? empresasSocCache
+                : []
+        )
+            .filter(
+                empresa => {
+                    const holdingEmpresa =
+                        String(
+                            empresa?.holding ||
+                            ''
+                        ).trim();
 
-                const holdingEmpresa =
-                    String(
-                        empresa?.holding ||
-                        ''
-                    ).trim();
+                    const unidadeEmpresa =
+                        String(
+                            empresa?.unidade ||
+                            ''
+                        ).trim();
 
-                return (
-                    unidadeEmpresa ===
-                        unidade &&
-                    (
-                        !holding ||
-                        holdingEmpresa ===
+                    if (
+                        holding &&
+                        holdingEmpresa !==
                             holding
-                    )
-                );
-            }
-        );
+                    ) {
+                        return false;
+                    }
 
-    // Se o nome da unidade não bastar, tenta resolver pelo CNPJ
-    // presente nos próprios eventos que estão aparecendo na tela.
-    if (
-        candidatas.length !==
-            1
-    ) {
-        const fonte =
-            eventosESocialHistorico.length
-                ? eventosESocialHistorico
-                : eventosESocialBase;
+                    if (
+                        unidade &&
+                        unidadeEmpresa !==
+                            unidade
+                    ) {
+                        return false;
+                    }
 
-        const cnpjsDaUnidade =
-            new Set(
-                fonte
-                    .filter(
-                        evento => {
-                            return (
-                                String(
-                                    evento?.unidade ||
-                                    evento?.nome_unidade ||
-                                    ''
-                                ).trim() ===
-                                    unidade &&
-                                (
-                                    !holding ||
-                                    String(
-                                        evento?.holding ||
-                                        ''
-                                    ).trim() ===
-                                        holding
-                                )
-                            );
-                        }
-                    )
-                    .map(
-                        evento =>
-                            String(
-                                evento?.cnpj_unidade ||
-                                evento?.cnpj ||
-                                ''
-                            ).replace(
-                                /\D/g,
-                                ''
-                            )
-                    )
-                    .filter(
-                        cnpj =>
-                            cnpj.length ===
-                            14
-                    )
-            );
-
-        if (
-            cnpjsDaUnidade.size ===
-                1
-        ) {
-            const cnpjExato =
-                Array.from(
-                    cnpjsDaUnidade
-                )[0];
-
-            candidatas =
-                empresasSocCache.filter(
-                    empresa =>
+                    return true;
+                }
+            )
+            .map(
+                empresa => ({
+                    ...empresa,
+                    empresaId:
+                        String(
+                            empresa?.id ??
+                            ''
+                        ).trim(),
+                    cnpjLimpo:
                         String(
                             empresa?.cnpj ||
                             ''
                         ).replace(
                             /\D/g,
                             ''
-                        ) ===
-                            cnpjExato
-                );
-        }
-    }
+                        )
+                })
+            )
+            .filter(
+                empresa =>
+                    empresa.empresaId &&
+                    empresa.cnpjLimpo.length ===
+                        14
+            );
 
+    /*
+     * Uma unidade sem holding pode ter nome repetido.
+     * Não adivinhamos qual CNPJ usar.
+     */
     if (
-        candidatas.length !==
+        unidade &&
+        !holding &&
+        candidatas.length >
             1
     ) {
         return {
-            ok: false,
-            holding,
-            unidade,
+            ok:
+                false,
             erro:
-                candidatas.length >
-                    1
-                    ? `A unidade "${unidade}" está duplicada no cadastro. Não vou escolher um CNPJ automaticamente.`
-                    : `Não consegui localizar o CNPJ cadastrado da unidade "${unidade}".`
+                `A unidade "${unidade}" existe em mais de uma holding. Selecione também a Holding.`
         };
     }
 
-    const empresa =
-        candidatas[0];
+    const unicas =
+        new Map();
 
-    const cnpj =
-        String(
-            empresa?.cnpj ||
-            ''
-        ).replace(
-            /\D/g,
-            ''
+    for (
+        const empresa
+        of candidatas
+    ) {
+        if (
+            !unicas.has(
+                empresa.cnpjLimpo
+            )
+        ) {
+            unicas.set(
+                empresa.cnpjLimpo,
+                empresa
+            );
+        }
+    }
+
+    candidatas =
+        Array.from(
+            unicas.values()
         );
 
     if (
-        cnpj.length !==
-            14
+        !candidatas.length
     ) {
         return {
-            ok: false,
-            holding,
-            unidade,
+            ok:
+                false,
             erro:
-                `A unidade "${unidade}" não possui CNPJ válido no cadastro.`
+                'Nenhuma unidade com CNPJ válido foi encontrada para o filtro selecionado.'
         };
     }
 
     return {
-        ok: true,
+        ok:
+            true,
         holding,
         unidade,
-        empresa,
-        empresaId:
-            String(
-                empresa?.id ??
-                ''
-            ),
-        cnpj
+        empresas:
+            candidatas
     };
 }
 
 
-function eventosPendentesParaConectorLocalEsocial(
-    selecao
+function eventosPendentesParaEmpresaConectorLocalEsocial(
+    empresa
 ) {
     const origem =
         (
@@ -10237,28 +10778,36 @@ function eventosPendentesParaConectorLocalEsocial(
             eventosESocialHistorico.length
         )
             ? eventosESocialHistorico
-            : eventosESocial;
+            : (
+                Array.isArray(
+                    eventosESocialBase
+                ) &&
+                eventosESocialBase.length
+                    ? eventosESocialBase
+                    : eventosESocial
+              );
 
-    const holding =
+    const cnpj =
         String(
-            selecao?.holding ||
-            ''
-        ).trim();
-
-    const unidade =
-        String(
-            selecao?.unidade ||
-            ''
-        ).trim();
-
-    const cnpjSelecionado =
-        String(
-            selecao?.cnpj ||
+            empresa?.cnpjLimpo ||
+            empresa?.cnpj ||
             ''
         ).replace(
             /\D/g,
             ''
         );
+
+    const holding =
+        String(
+            empresa?.holding ||
+            ''
+        ).trim();
+
+    const unidade =
+        String(
+            empresa?.unidade ||
+            ''
+        ).trim();
 
     return Array.from(
         new Map(
@@ -10271,35 +10820,6 @@ function eventosPendentesParaConectorLocalEsocial(
             )
                 .filter(
                     evento => {
-                        const holdingEvento =
-                            String(
-                                evento?.holding ||
-                                ''
-                            ).trim();
-
-                        const unidadeEvento =
-                            String(
-                                evento?.unidade ||
-                                evento?.nome_unidade ||
-                                ''
-                            ).trim();
-
-                        if (
-                            holding &&
-                            holdingEvento !==
-                                holding
-                        ) {
-                            return false;
-                        }
-
-                        if (
-                            unidade &&
-                            unidadeEvento !==
-                                unidade
-                        ) {
-                            return false;
-                        }
-
                         const cnpjEvento =
                             String(
                                 evento?.cnpj_unidade ||
@@ -10310,13 +10830,29 @@ function eventosPendentesParaConectorLocalEsocial(
                                 ''
                             );
 
-                        if (
-                            cnpjSelecionado.length ===
-                                14 &&
+                        const mesmaEmpresa =
                             cnpjEvento.length ===
-                                14 &&
-                            cnpjEvento !==
-                                cnpjSelecionado
+                                14
+                                ? (
+                                    cnpjEvento ===
+                                    cnpj
+                                  )
+                                : (
+                                    String(
+                                        evento?.holding ||
+                                        ''
+                                    ).trim() ===
+                                        holding &&
+                                    String(
+                                        evento?.unidade ||
+                                        evento?.nome_unidade ||
+                                        ''
+                                    ).trim() ===
+                                        unidade
+                                  );
+
+                        if (
+                            !mesmaEmpresa
                         ) {
                             return false;
                         }
@@ -10381,60 +10917,437 @@ function eventosPendentesParaConectorLocalEsocial(
     );
 }
 
-async function enfileirarEventosConectorLocalEsocial() {
-    const status =
-        await requisicaoJson(
-            '/api/soc/conector-local/status'
+
+function chaveColaboradorConectorLocalEsocial(
+    evento,
+    empresa
+) {
+    const cpf =
+        String(
+            evento?.cpf ||
+            ''
+        ).replace(
+            /\D/g,
+            ''
         );
 
+    return [
+        String(
+            empresa?.cnpjLimpo ||
+            ''
+        ),
+        cpf ||
+        String(
+            evento?.codigo_funcionario ||
+            evento?.codigoFuncionario ||
+            evento?.id ||
+            ''
+        )
+    ].join(
+        '|'
+    );
+}
+
+
+// ============================================================
+// PROGRESSO
+// ============================================================
+
+async function consultarProgressoTarefasConectorLocalEsocial(
+    ids
+) {
+    const token =
+        await obterTokenESocial();
+
+    const response =
+        await fetch(
+            apiUrl(
+                '/api/soc/conector-local/progresso-tarefas'
+            ),
+            {
+                method:
+                    'POST',
+                headers:
+                    criarHeaders(
+                        token,
+                        true
+                    ),
+                body:
+                    JSON.stringify({
+                        ids
+                    })
+            }
+        );
+
+    return lerRespostaJson(
+        response
+    );
+}
+
+
+async function acompanharConsultaPcEsocial() {
+    clearInterval(
+        timerProgressoConsultaPcEsocial
+    );
+
     if (
-        status.online !==
+        !consultaPcEsocialAtual
+    ) {
+        return;
+    }
+
+    const executar =
+        async () => {
+            const atual =
+                consultaPcEsocialAtual;
+
+            if (
+                !atual ||
+                atual.concluida ===
+                    true
+            ) {
+                return;
+            }
+
+            try {
+                const progresso =
+                    atual.tarefasIds.length
+                        ? await consultarProgressoTarefasConectorLocalEsocial(
+                            atual.tarefasIds
+                          )
+                        : {
+                            total:
+                                0,
+                            finalizadas:
+                                0,
+                            resolvidos:
+                                0,
+                            naoLocalizados:
+                                0,
+                            semAutorizacao:
+                                0,
+                            erros:
+                                0,
+                            concluida:
+                                true,
+                            sessaoAtiva:
+                                statusConectorLocalEsocialAtual?.sessaoAtiva ===
+                                    true
+                          };
+
+                const processados =
+                    Math.min(
+                        atual.totalColaboradores,
+                        atual.finalizadosImediatamente +
+                        Number(
+                            progresso.finalizadas ||
+                            0
+                        )
+                    );
+
+                const sessaoAtiva =
+                    progresso.sessaoAtiva ===
+                        true ||
+                    statusConectorLocalEsocialAtual?.sessaoAtiva ===
+                        true;
+
+                const detalheConector =
+                    progresso.progressoConector ||
+                    statusConectorLocalEsocialAtual?.conector?.progresso ||
+                    null;
+
+                let detalhe =
+                    '';
+
+                if (
+                    detalheConector?.cnpj
+                ) {
+                    detalhe =
+                        `CNPJ ${formatarCnpjConectorLocalEsocial(detalheConector.cnpj)}`;
+
+                    if (
+                        detalheConector.total
+                    ) {
+                        detalhe +=
+                            ` • ${detalheConector.atual || 0}/${detalheConector.total}`;
+
+                        if (
+                            detalheConector.cpf
+                        ) {
+                            detalhe +=
+                                ` • CPF ${detalheConector.cpf}`;
+                        }
+                    }
+                }
+
+                const concluiu =
+                    (
+                        atual.tarefasIds.length ===
+                            0 ||
+                        progresso.concluida ===
+                            true
+                    ) &&
+                    processados >=
+                        atual.totalColaboradores;
+
+                atualizarPainelProgressoConsultaPcEsocial({
+                    processados,
+                    total:
+                        atual.totalColaboradores,
+                    status:
+                        concluiu
+                            ? 'Finalizada'
+                            : (
+                                sessaoAtiva
+                                    ? 'Consultando'
+                                    : 'Pausada'
+                              ),
+                    detalhe,
+                    aviso:
+                        !concluiu &&
+                        !sessaoAtiva
+                            ? 'A sessão do eSocial expirou. Clique em "Conectar certificado" para continuar a mesma consulta.'
+                            : '',
+                    concluida:
+                        concluiu
+                });
+
+                if (
+                    concluiu
+                ) {
+                    atual.concluida =
+                        true;
+
+                    clearInterval(
+                        timerProgressoConsultaPcEsocial
+                    );
+
+                    timerProgressoConsultaPcEsocial =
+                        null;
+
+                    await recarregarEventosESocial();
+
+                    await atualizarStatusConectorLocalEsocial();
+
+                    const resolvidos =
+                        Number(
+                            progresso.resolvidos ||
+                            0
+                        );
+
+                    const naoLocalizados =
+                        Number(
+                            progresso.naoLocalizados ||
+                            0
+                        );
+
+                    const semAutorizacao =
+                        Number(
+                            progresso.semAutorizacao ||
+                            0
+                        );
+
+                    const erros =
+                        Number(
+                            progresso.erros ||
+                            0
+                        ) +
+                        Number(
+                            atual.errosEnfileiramento ||
+                            0
+                        );
+
+                    mostrarAlertaESocial(
+                        `Consulta eSocial finalizada. ` +
+                        `${atual.totalColaboradores} colaborador(es) processado(s). ` +
+                        `${resolvidos} vínculo(s) confirmado(s)` +
+                        (
+                            naoLocalizados
+                                ? `; ${naoLocalizados} não localizado(s)`
+                                : ''
+                        ) +
+                        (
+                            semAutorizacao
+                                ? `; ${semAutorizacao} sem autorização`
+                                : ''
+                        ) +
+                        (
+                            erros
+                                ? `; ${erros} com erro`
+                                : ''
+                        ) +
+                        '. A tabela foi atualizada e já mostra os eventos que precisam ser feitos.',
+                        erros
+                            ? 'warning'
+                            : 'success'
+                    );
+
+                    consultaPcEsocialAtual =
+                        null;
+
+                    atualizarBotoesConectorLocalEsocial(
+                        statusConectorLocalEsocialAtual ||
+                        {}
+                    );
+                }
+
+            } catch (
+                error
+            ) {
+                console.error(
+                    '❌ Erro acompanhando consulta pelo PC:',
+                    error
+                );
+            }
+        };
+
+    await executar();
+
+    if (
+        consultaPcEsocialAtual &&
+        consultaPcEsocialAtual.concluida !==
+            true
+    ) {
+        timerProgressoConsultaPcEsocial =
+            setInterval(
+                executar,
+                2000
+            );
+    }
+}
+
+
+// ============================================================
+// CONSULTAR PELO PC
+// ============================================================
+
+async function enfileirarEventosConectorLocalEsocial() {
+    const status =
+        await atualizarStatusConectorLocalEsocial();
+
+    if (
+        status?.online !==
             true
     ) {
         mostrarAlertaESocial(
-            'O Conector eSocial está offline. Abra o INICIAR-CONECTOR.bat neste computador e faça o login no eSocial.',
+            'O Conector eSocial está offline neste computador. Entre em contato com o suporte.',
             'warning'
         );
 
         return;
     }
 
-    const selecao =
-        obterEmpresaSelecionadaNaTelaEsocial();
-
     if (
-        !selecao.ok
+        status?.sessaoAtiva !==
+            true &&
+        status?.conector?.sessaoAtiva !==
+            true
     ) {
         mostrarAlertaESocial(
-            selecao.erro,
+            'Primeiro clique em "Conectar certificado" e entre no eSocial.',
             'warning'
         );
 
         return;
     }
 
-    const eventos =
-        eventosPendentesParaConectorLocalEsocial(
-            selecao
-        );
-
     if (
-        !eventos.length
+        consultaPcEsocialAtual &&
+        consultaPcEsocialAtual.concluida !==
+            true
     ) {
         mostrarAlertaESocial(
-            `Não há vínculos/matrículas pendentes para ${selecao.unidade}.`,
+            'Já existe uma consulta pelo PC em andamento.',
             'info'
         );
 
         return;
     }
 
-    const escopoConsulta =
-        `${selecao.unidade} (${formatarCnpjFiltroEsocial(selecao.cnpj)})`;
+    const escopo =
+        obterEscopoSelecionadoConectorLocalEsocial();
+
+    if (
+        !escopo.ok
+    ) {
+        mostrarAlertaESocial(
+            escopo.erro,
+            'warning'
+        );
+
+        return;
+    }
+
+    const grupos =
+        [];
+
+    const colaboradores =
+        new Set();
+
+    for (
+        const empresa
+        of escopo.empresas
+    ) {
+        const eventos =
+            eventosPendentesParaEmpresaConectorLocalEsocial(
+                empresa
+            );
+
+        if (
+            !eventos.length
+        ) {
+            continue;
+        }
+
+        grupos.push({
+            empresa,
+            eventos
+        });
+
+        for (
+            const evento
+            of eventos
+        ) {
+            colaboradores.add(
+                chaveColaboradorConectorLocalEsocial(
+                    evento,
+                    empresa
+                )
+            );
+        }
+    }
+
+    if (
+        !grupos.length ||
+        !colaboradores.size
+    ) {
+        mostrarAlertaESocial(
+            'Não há colaboradores pendentes de vínculo/matrícula/eventos no filtro selecionado.',
+            'info'
+        );
+
+        return;
+    }
+
+    const descricaoEscopo =
+        escopo.unidade
+            ? (
+                `${escopo.unidade}` +
+                (
+                    escopo.holding
+                        ? ` / ${escopo.holding}`
+                        : ''
+                )
+              )
+            : (
+                `Holding ${escopo.holding} • ${grupos.length} unidade(s)`
+              );
 
     const confirmou =
         window.confirm(
-            `Enviar ${eventos.length} consulta(s) de vínculo/matrícula/eventos de ${escopoConsulta} para o Conector eSocial deste computador?`
+            `Consultar ${colaboradores.size} colaborador(es) no eSocial?\n\n` +
+            `${descricaoEscopo}\n\n` +
+            'Nenhum evento será emitido automaticamente. Esta etapa somente valida vínculo, matrícula e existência de S-2220/S-2240.'
         );
 
     if (
@@ -10452,110 +11365,274 @@ async function enfileirarEventosConectorLocalEsocial() {
         botao?.innerHTML ||
         '';
 
-    if (botao) {
+    if (
+        botao
+    ) {
         botao.disabled =
             true;
 
         botao.innerHTML =
-            '<i class="fas fa-spinner fa-spin me-1"></i> Enfileirando...';
+            '<i class="fas fa-spinner fa-spin me-1"></i> Preparando consulta...';
     }
+
+    atualizarPainelProgressoConsultaPcEsocial({
+        processados:
+            0,
+        total:
+            colaboradores.size,
+        status:
+            'Preparando',
+        detalhe:
+            descricaoEscopo
+    });
 
     try {
         const token =
             await obterTokenESocial();
 
-        const response =
-            await fetch(
-                apiUrl(
-                    '/api/soc/conector-local/enfileirar-lote'
-                ),
-                {
-                    method:
-                        'POST',
-                    headers:
-                        criarHeaders(
-                            token,
-                            true
-                        ),
-                    body:
-                        JSON.stringify({
-                            ids:
-                                eventos.map(
-                                    item =>
-                                        item.id
-                                ),
-                            empresaId:
-                                selecao.empresaId,
-                            cnpjSelecionado:
-                                selecao.cnpj
-                        })
-                }
+        const tarefasIds =
+            new Set();
+
+        let totalSolicitados =
+            0;
+
+        let totalEnfileirados =
+            0;
+
+        let totalImediatos =
+            0;
+
+        let totalSemAutorizacao =
+            0;
+
+        let errosEnfileiramento =
+            0;
+
+        for (
+            let indice = 0;
+            indice <
+            grupos.length;
+            indice++
+        ) {
+            const {
+                empresa,
+                eventos
+            } =
+                grupos[indice];
+
+            atualizarPainelProgressoConsultaPcEsocial({
+                processados:
+                    0,
+                total:
+                    colaboradores.size,
+                status:
+                    'Preparando',
+                detalhe:
+                    `Enfileirando ${indice + 1}/${grupos.length}: ${empresa.unidade || formatarCnpjConectorLocalEsocial(empresa.cnpjLimpo)}`
+            });
+
+            const response =
+                await fetch(
+                    apiUrl(
+                        '/api/soc/conector-local/enfileirar-lote'
+                    ),
+                    {
+                        method:
+                            'POST',
+                        headers:
+                            criarHeaders(
+                                token,
+                                true
+                            ),
+                        body:
+                            JSON.stringify({
+                                ids:
+                                    eventos.map(
+                                        item =>
+                                            item.id
+                                    ),
+                                empresaId:
+                                    empresa.empresaId,
+                                cnpjSelecionado:
+                                    empresa.cnpjLimpo
+                            })
+                    }
+                );
+
+            const resultado =
+                await lerRespostaJson(
+                    response
+                );
+
+            (
+                Array.isArray(
+                    resultado.tarefasIds
+                )
+                    ? resultado.tarefasIds
+                    : []
+            )
+                .forEach(
+                    id =>
+                        tarefasIds.add(
+                            String(
+                                id
+                            )
+                        )
+                );
+
+            totalSolicitados +=
+                Number(
+                    resultado.colaboradores?.solicitados ||
+                    0
+                );
+
+            totalEnfileirados +=
+                Number(
+                    resultado.colaboradores?.enfileirados ||
+                    0
+                );
+
+            totalImediatos +=
+                Number(
+                    resultado.colaboradores?.resolvidosDoCache ||
+                    0
+                );
+
+            totalSemAutorizacao +=
+                Number(
+                    resultado.colaboradores?.semAutorizacao ||
+                    0
+                );
+
+            errosEnfileiramento +=
+                Array.isArray(
+                    resultado.erros
+                )
+                    ? resultado.erros.length
+                    : 0;
+        }
+
+        const totalColaboradores =
+            colaboradores.size;
+
+        /*
+         * Uma tarefa representa um colaborador dentro de um CNPJ.
+         * O que não gerou tarefa foi resolvido imediatamente,
+         * estava sem autorização ou apresentou falha na preparação.
+         */
+        const finalizadosImediatamente =
+            Math.max(
+                0,
+                totalColaboradores -
+                tarefasIds.size
             );
 
-        const resultado =
-            await lerRespostaJson(
-                response
-            );
+        consultaPcEsocialAtual = {
+            descricaoEscopo,
+            totalColaboradores,
+            tarefasIds:
+                Array.from(
+                    tarefasIds
+                ),
+            finalizadosImediatamente,
+            totalEnfileirados,
+            totalImediatos,
+            totalSemAutorizacao,
+            errosEnfileiramento,
+            concluida:
+                false
+        };
 
         mostrarAlertaESocial(
-            `${resultado.enfileirados || 0} consulta(s) enviada(s) ao conector` +
-            (
-                resultado.resolvidosDoCache
-                    ? `; ${resultado.resolvidosDoCache} já resolvida(s) pela base local`
-                    : ''
-            ) +
-            (
-                resultado.semAutorizacao
-                    ? `; ${resultado.semAutorizacao} ignorada(s) por CNPJ sem autorização`
-                    : ''
-            ) +
-            '.',
-            'success'
+            `Consulta iniciada para ${totalColaboradores} colaborador(es). ` +
+            'Você pode acompanhar o progresso nesta tela.',
+            'info'
         );
 
-        await atualizarStatusConectorLocalEsocial();
-
-        await recarregarEventosESocial();
+        await acompanharConsultaPcEsocial();
 
     } catch (
         error
     ) {
+        consultaPcEsocialAtual =
+            null;
+
         mostrarAlertaESocial(
-            'Não foi possível enfileirar as consultas: ' +
+            'Não foi possível iniciar a consulta pelo PC: ' +
             error.message,
             'danger'
         );
 
-    } finally {
-        if (botao) {
-            botao.disabled =
-                false;
+        atualizarPainelProgressoConsultaPcEsocial({
+            processados:
+                0,
+            total:
+                colaboradores.size,
+            status:
+                'Erro',
+            aviso:
+                error.message
+        });
 
+    } finally {
+        if (
+            botao
+        ) {
             botao.innerHTML =
-                htmlOriginal;
+                htmlOriginal ||
+                '<i class="fas fa-desktop me-1"></i> Consultar pelo PC';
         }
+
+        await atualizarStatusConectorLocalEsocial();
     }
 }
 
 
+// ============================================================
+// INSTALAR CONTROLES
+// ============================================================
+
 function instalarConectorLocalEsocial() {
-    const botao =
+    const consultar =
         document.getElementById(
             'btnResolverMatriculasHolding'
         );
 
-    if (botao) {
-        botao.className =
+    const conectar =
+        garantirBotaoConectarCertificadoEsocial();
+
+    if (
+        conectar
+    ) {
+        conectar.onclick =
+            function (
+                event
+            ) {
+                event.preventDefault();
+
+                conectarCertificadoConectorLocalEsocial();
+            };
+    }
+
+    if (
+        consultar
+    ) {
+        consultar.className =
             'btn btn-success btn-sm';
 
-        botao.title =
-            'Enviar vínculos/matrículas pendentes para o Conector eSocial instalado neste computador.';
+        consultar.title =
+            'Consultar no eSocial somente a Holding/Unidade selecionada na tela.';
 
-        botao.innerHTML =
+        consultar.innerHTML =
             '<i class="fas fa-desktop me-1"></i> Consultar pelo PC';
 
-        botao.onclick =
-            function (event) {
+        consultar.disabled =
+            true;
+
+        consultar.onclick =
+            function (
+                event
+            ) {
                 event.preventDefault();
 
                 enfileirarEventosConectorLocalEsocial();
@@ -10567,7 +11644,9 @@ function instalarConectorLocalEsocial() {
             'btnDiagnosticarRoboEsocial'
         );
 
-    if (diagnostico) {
+    if (
+        diagnostico
+    ) {
         diagnostico.classList.add(
             'd-none'
         );
@@ -10578,121 +11657,30 @@ function instalarConectorLocalEsocial() {
             'btnCancelarRoboEsocial'
         );
 
-    if (cancelar) {
+    if (
+        cancelar
+    ) {
         cancelar.classList.add(
             'd-none'
         );
     }
 
+    const resetAntigo =
+        document.getElementById(
+            'btnResetarMapeamentoConectorV38'
+        );
 
     if (
-        botao?.parentElement &&
-        !document.getElementById(
-            'btnResetarMapeamentoConectorV38'
-        )
+        resetAntigo
     ) {
-        const btnReset =
-            document.createElement(
-                'button'
-            );
-
-        btnReset.id =
-            'btnResetarMapeamentoConectorV38';
-
-        btnReset.type =
-            'button';
-
-        btnReset.className =
-            'btn btn-outline-danger btn-sm ms-2';
-
-        btnReset.innerHTML =
-            '<i class="fas fa-rotate-left me-1"></i> Resetar consultas PC';
-
-        btnReset.title =
-            'Use uma vez após instalar a V3.8 para invalidar consultas feitas com o mapeamento antigo de CNPJ.';
-
-        btnReset.onclick =
-            async function () {
-                const confirmou =
-                    window.confirm(
-                        'Isso vai invalidar a fila/resultados do Conector PC do mapeamento antigo, preservando eventos já enviados em produção e CNPJs sem autorização. Continuar?'
-                    );
-
-                if (!confirmou) {
-                    return;
-                }
-
-                const htmlOriginal =
-                    btnReset.innerHTML;
-
-                btnReset.disabled =
-                    true;
-
-                btnReset.innerHTML =
-                    '<i class="fas fa-spinner fa-spin me-1"></i> Resetando...';
-
-                try {
-                    const token =
-                        await obterTokenESocial();
-
-                    const response =
-                        await fetch(
-                            apiUrl(
-                                '/api/soc/conector-local/resetar-mapeamento-v38'
-                            ),
-                            {
-                                method:
-                                    'POST',
-                                headers:
-                                    criarHeaders(
-                                        token,
-                                        true
-                                    ),
-                                body:
-                                    JSON.stringify({})
-                            }
-                        );
-
-                    const resultado =
-                        await lerRespostaJson(
-                            response
-                        );
-
-                    mostrarAlertaESocial(
-                        `Reset concluído: ${resultado.pendenciasCanceladas || 0} tarefa(s) antigas canceladas, ` +
-                        `${resultado.vinculosPortalRemovidos || 0} vínculo(s) Portal SST removido(s), ` +
-                        `${resultado.eventosLimpos || 0} evento(s) liberado(s) para nova validação.`,
-                        'success'
-                    );
-
-                    await recarregarEventosESocial();
-                    await atualizarStatusConectorLocalEsocial();
-
-                    btnReset.style.display =
-                        'none';
-
-                } catch (error) {
-                    mostrarAlertaESocial(
-                        'Não foi possível resetar as consultas antigas: ' +
-                        error.message,
-                        'danger'
-                    );
-
-                    btnReset.disabled =
-                        false;
-
-                    btnReset.innerHTML =
-                        htmlOriginal;
-                }
-            };
-
-        botao.parentElement.appendChild(
-            btnReset
-        );
+        resetAntigo.remove();
     }
 
     garantirBadgeConectorLocalEsocial();
+
     garantirPainelCnpjsSemAutorizacaoEsocial();
+
+    garantirPainelProgressoConsultaPcEsocial();
 
     clearInterval(
         timerStatusConectorLocalEsocial
@@ -10701,7 +11689,7 @@ function instalarConectorLocalEsocial() {
     timerStatusConectorLocalEsocial =
         setInterval(
             atualizarStatusConectorLocalEsocial,
-            10000
+            5000
         );
 
     atualizarStatusConectorLocalEsocial();

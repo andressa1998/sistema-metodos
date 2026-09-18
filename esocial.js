@@ -3066,6 +3066,17 @@ const resumoColaborador =
     obterResumoColaboradorESocial(evento);
 
 
+const proximaAcaoEhEmissao =
+    [
+        'Emitir S-2220',
+        'Emitir S-2240'
+    ].includes(
+        String(
+            resumoColaborador?.proximaAcao?.texto ||
+            ''
+        ).trim()
+    );
+
 
             const persistido =
                 evento.persistido !==
@@ -3302,10 +3313,28 @@ const resumoColaborador =
                     }</td>
 
                     <td>
-                        <span class="badge bg-${resumoColaborador.proximaAcao.classe} esocial-next-action">
-                            <i class="fas ${resumoColaborador.proximaAcao.icone} me-1"></i>
-                            ${escaparHtml(resumoColaborador.proximaAcao.texto)}
-                        </span>
+                        ${
+                            proximaAcaoEhEmissao &&
+                            podeEnviar
+                                ? `
+                                    <button
+                                        type="button"
+                                        class="btn btn-sm btn-${resumoColaborador.proximaAcao.classe} btn-enviar-evento esocial-next-action"
+                                        data-id="${escaparHtml(evento.id)}"
+                                        data-acao="${escaparHtml(resumoColaborador.proximaAcao.texto)}"
+                                        title="Gerar XML, assinar, validar e enviar ${escaparHtml(resumoColaborador.proximaAcao.texto.replace('Emitir ', ''))}"
+                                    >
+                                        <i class="fas ${resumoColaborador.proximaAcao.icone} me-1"></i>
+                                        ${escaparHtml(resumoColaborador.proximaAcao.texto)}
+                                    </button>
+                                `
+                                : `
+                                    <span class="badge bg-${resumoColaborador.proximaAcao.classe} esocial-next-action">
+                                        <i class="fas ${resumoColaborador.proximaAcao.icone} me-1"></i>
+                                        ${escaparHtml(resumoColaborador.proximaAcao.texto)}
+                                    </span>
+                                `
+                        }
                     </td>
 
 
@@ -3480,7 +3509,8 @@ const resumoColaborador =
                             <!-- ENVIAR -->
 
                             ${
-                                podeEnviar
+                                podeEnviar &&
+                                !proximaAcaoEhEmissao
                                     ? `
                                         <button
                                             class="
@@ -6050,13 +6080,66 @@ async function verAso(
             return;
         }
 
+
+        const tipoEvento =
+            String(
+                evento.tipo_evento ||
+                ''
+            )
+                .trim()
+                .toUpperCase();
+
+
+        const colaborador =
+            String(
+                evento.colaborador ||
+                evento.nome_colaborador ||
+                evento.nomeFuncionario ||
+                'colaborador'
+            ).trim();
+
+
+        // ========================================================
+        // SEGURANÇA VISUAL
+        //
+        // O backend continua sendo a autoridade final:
+        // pode_emitir + confirmado_nao_emitido precisam estar true.
+        // ========================================================
+
+        if (
+            evento.pode_emitir !==
+                true ||
+            evento.confirmado_nao_emitido !==
+                true ||
+            evento.emitido_esocial ===
+                true ||
+            evento.ja_emitido ===
+                true
+        ) {
+            mostrarAlertaESocial(
+                `${tipoEvento || 'Evento'} ainda não está liberado para emissão. ` +
+                'É necessário ter matrícula oficial e confirmação de que o evento não existe no eSocial.',
+                'warning'
+            );
+
+            return;
+        }
+
+
+        const mensagem =
+            `Deseja criar e enviar ${tipoEvento} de ${colaborador}?\n\n` +
+            'O sistema irá gerar o XML, assinar com o certificado, validar o XSD, ' +
+            'transmitir ao eSocial e consultar o processamento.';
+
+
         if (
             !confirm(
-                'Deseja enviar este evento?'
+                mensagem
             )
         ) {
             return;
         }
+
 
         await enviarIds(
             [String(id)]
@@ -6644,7 +6727,7 @@ async function enviarIds(
 
         mostrarAlertaESocial(
             'Nenhum dos eventos selecionados está liberado para envio. ' +
-            'Eventos já emitidos ou aguardando verificação foram ignorados.',
+            'Só são enviados eventos com matrícula oficial e ausência confirmada no eSocial.',
             'warning'
         );
 
@@ -7974,8 +8057,8 @@ async function initESocial() {
         // ========================================================
         // 5b. BASE eSOCIAL POR RELATÓRIO GERENCIAL
         //
-        // O antigo botão de resolução em massa consumia BX. Agora
-        // ele importa a base oficial CSV/XLSX, sem consumir BX.
+        // O botão principal agora dispara o robô no backend.
+        // A importação manual continua disponível como contingência.
         // ========================================================
 
         const btnResolverMatriculasHolding =
@@ -7986,26 +8069,24 @@ async function initESocial() {
         if (btnResolverMatriculasHolding) {
 
             btnResolverMatriculasHolding.className =
-                'btn btn-outline-success btn-sm';
+                'btn btn-success btn-sm';
 
             btnResolverMatriculasHolding.title =
-                'Importar Relatório Gerencial do eSocial (CSV/XLS/XLSX). Não consome BX.';
+                'Percorrer automaticamente todos os CNPJs autorizados, baixar o Relatório Gerencial e atualizar a base local.';
 
             btnResolverMatriculasHolding.innerHTML =
-                '<i class="fas fa-file-excel me-1"></i> Importar base eSocial';
+                '<i class="fas fa-robot me-1"></i> Atualizar todas as empresas';
 
             btnResolverMatriculasHolding.onclick =
                 function (event) {
 
                     event.preventDefault();
 
-                    document
-                        .getElementById(
-                            'inputRelatorioGerencialEsocial'
-                        )
-                        ?.click();
+                    iniciarAtualizacaoAutomaticaRelatoriosEsocial();
                 };
         }
+
+        garantirControlesRoboRelatoriosEsocial();
 
 
         // ========================================================
@@ -9466,6 +9547,854 @@ function instalarExtrasEventosESocial() {
 }
 
 
+
+
+// ============================================================
+// ROBÔ - RELATÓRIOS GERENCIAIS DE TODOS OS CNPJs
+// ============================================================
+
+let timerStatusRoboRelatoriosEsocial =
+    null;
+
+
+function garantirControlesRoboRelatoriosEsocial() {
+
+    const botaoAuto =
+        document.getElementById(
+            'btnResolverMatriculasHolding'
+        );
+
+
+    if (
+        !botaoAuto?.parentElement
+    ) {
+        return null;
+    }
+
+
+    const container =
+        botaoAuto.parentElement;
+
+
+    let botaoManual =
+        document.getElementById(
+            'btnImportarBaseEsocialManual'
+        );
+
+
+    if (
+        !botaoManual
+    ) {
+
+        botaoManual =
+            document.createElement(
+                'button'
+            );
+
+
+        botaoManual.type =
+            'button';
+
+        botaoManual.id =
+            'btnImportarBaseEsocialManual';
+
+        botaoManual.className =
+            'btn btn-outline-success btn-sm';
+
+        botaoManual.title =
+            'Contingência: importar manualmente CSV/XLS/XLSX já baixado do eSocial.';
+
+        botaoManual.innerHTML =
+            '<i class="fas fa-file-excel me-1"></i> Importar arquivo';
+
+        botaoManual.onclick =
+            function (event) {
+
+                event.preventDefault();
+
+                garantirInputRelatorioGerencialEsocial()
+                    .click();
+            };
+
+
+        container.appendChild(
+            botaoManual
+        );
+    }
+
+
+    let botaoDiagnostico =
+        document.getElementById(
+            'btnDiagnosticarRoboEsocial'
+        );
+
+
+    if (
+        !botaoDiagnostico
+    ) {
+
+        botaoDiagnostico =
+            document.createElement(
+                'button'
+            );
+
+
+        botaoDiagnostico.type =
+            'button';
+
+        botaoDiagnostico.id =
+            'btnDiagnosticarRoboEsocial';
+
+        botaoDiagnostico.className =
+            'btn btn-outline-secondary btn-sm';
+
+        botaoDiagnostico.title =
+            'Testar login com certificado A1 e troca de perfil para uma empresa, sem solicitar relatório.';
+
+        botaoDiagnostico.innerHTML =
+            '<i class="fas fa-stethoscope me-1"></i> Testar acesso';
+
+        botaoDiagnostico.onclick =
+            function (event) {
+
+                event.preventDefault();
+
+                diagnosticarRoboRelatoriosEsocial();
+            };
+
+
+        container.appendChild(
+            botaoDiagnostico
+        );
+    }
+
+
+    let botaoCancelar =
+        document.getElementById(
+            'btnCancelarRoboEsocial'
+        );
+
+
+    if (
+        !botaoCancelar
+    ) {
+
+        botaoCancelar =
+            document.createElement(
+                'button'
+            );
+
+
+        botaoCancelar.type =
+            'button';
+
+        botaoCancelar.id =
+            'btnCancelarRoboEsocial';
+
+        botaoCancelar.className =
+            'btn btn-outline-danger btn-sm d-none';
+
+        botaoCancelar.innerHTML =
+            '<i class="fas fa-stop me-1"></i> Parar';
+
+        botaoCancelar.onclick =
+            function (event) {
+
+                event.preventDefault();
+
+                cancelarAtualizacaoAutomaticaRelatoriosEsocial();
+            };
+
+
+        container.appendChild(
+            botaoCancelar
+        );
+    }
+
+
+    let painel =
+        document.getElementById(
+            'painelRoboRelatoriosEsocial'
+        );
+
+
+    if (
+        !painel
+    ) {
+
+        painel =
+            document.createElement(
+                'div'
+            );
+
+
+        painel.id =
+            'painelRoboRelatoriosEsocial';
+
+        painel.className =
+            'card border-0 shadow-sm mt-2 d-none';
+
+        painel.innerHTML =
+            '<div class="card-body py-2 px-3"></div>';
+
+
+        const paiPainel =
+            container.closest(
+                '.card, .dashboard-content, .container-fluid'
+            ) ||
+            container.parentElement;
+
+
+        paiPainel?.insertBefore(
+            painel,
+            container.nextSibling
+        );
+    }
+
+
+    return {
+        botaoAuto,
+        botaoManual,
+        botaoDiagnostico,
+        botaoCancelar,
+        painel
+    };
+}
+
+
+function escaparHtmlRoboEsocial(
+    valor
+) {
+
+    return String(
+        valor ??
+        ''
+    )
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+
+function classeStatusItemRoboEsocial(
+    status
+) {
+
+    const mapa = {
+        concluido:
+            'bg-success',
+        processando:
+            'bg-primary',
+        pendente:
+            'bg-secondary',
+        sem_permissao:
+            'bg-warning text-dark',
+        erro:
+            'bg-danger'
+    };
+
+
+    return mapa[
+        String(
+            status ||
+            ''
+        )
+    ] ||
+    'bg-secondary';
+}
+
+
+function renderizarStatusRoboRelatoriosEsocial(
+    resultado
+) {
+
+    const controles =
+        garantirControlesRoboRelatoriosEsocial();
+
+
+    if (
+        !controles
+    ) {
+        return;
+    }
+
+
+    const {
+        botaoAuto,
+        botaoDiagnostico,
+        botaoCancelar,
+        painel
+    } =
+        controles;
+
+
+    const execucao =
+        resultado?.execucao ||
+        null;
+
+
+    if (
+        !execucao
+    ) {
+
+        painel.classList.add(
+            'd-none'
+        );
+
+        botaoAuto.disabled =
+            false;
+
+        botaoDiagnostico.disabled =
+            false;
+
+        botaoCancelar.classList.add(
+            'd-none'
+        );
+
+        return;
+    }
+
+
+    painel.classList.remove(
+        'd-none'
+    );
+
+
+    const total =
+        Number(
+            execucao.total_empresas ||
+            0
+        );
+
+
+    const processadas =
+        Number(
+            execucao.processadas ||
+            0
+        );
+
+
+    const percentual =
+        total > 0
+            ? Math.min(
+                100,
+                Math.round(
+                    processadas /
+                    total *
+                    100
+                )
+              )
+            : 0;
+
+
+    const emAndamento =
+        [
+            'pendente',
+            'processando'
+        ].includes(
+            execucao.status
+        );
+
+
+    botaoAuto.disabled =
+        emAndamento;
+
+    botaoDiagnostico.disabled =
+        emAndamento;
+
+    botaoCancelar.classList.toggle(
+        'd-none',
+        !emAndamento
+    );
+
+
+    const itens =
+        Array.isArray(
+            resultado?.itens
+        )
+            ? resultado.itens
+            : [];
+
+
+    const atuais =
+        itens
+            .filter(
+                item =>
+                    [
+                        'processando',
+                        'erro',
+                        'sem_permissao'
+                    ].includes(
+                        item.status
+                    )
+            )
+            .slice(
+                -8
+            );
+
+
+    const recentes =
+        atuais.length
+            ? atuais
+            : itens
+                .filter(
+                    item =>
+                        item.status ===
+                        'concluido'
+                )
+                .slice(
+                    -6
+                );
+
+
+    const linhas =
+        recentes
+            .map(
+                item =>
+                    `<div class="d-flex justify-content-between align-items-center border-top py-1 gap-2">` +
+                        `<div class="small text-truncate">` +
+                            `<strong>${escaparHtmlRoboEsocial(item.razao_social || item.unidade || item.cnpj)}</strong>` +
+                            ` <span class="text-muted">${escaparHtmlRoboEsocial(item.cnpj)}</span>` +
+                        `</div>` +
+                        `<span class="badge ${classeStatusItemRoboEsocial(item.status)}">` +
+                            `${escaparHtmlRoboEsocial(item.status)}` +
+                        `</span>` +
+                    `</div>`
+            )
+            .join('');
+
+
+    const corpo =
+        painel.querySelector(
+            '.card-body'
+        );
+
+
+    corpo.innerHTML =
+        `<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-1">` +
+            `<div>` +
+                `<strong><i class="fas fa-robot me-1"></i> Atualização automática eSocial</strong>` +
+                `<div class="small text-muted">${escaparHtmlRoboEsocial(execucao.etapa || execucao.status)}</div>` +
+            `</div>` +
+            `<div class="small">` +
+                `<span class="badge bg-success me-1">${Number(execucao.sucessos || 0)} OK</span>` +
+                `<span class="badge bg-danger me-1">${Number(execucao.erros || 0)} erro(s)</span>` +
+                `<strong>${processadas}/${total}</strong>` +
+            `</div>` +
+        `</div>` +
+        `<div class="progress mb-2" style="height: 8px;">` +
+            `<div class="progress-bar" role="progressbar" style="width:${percentual}%" aria-valuenow="${percentual}" aria-valuemin="0" aria-valuemax="100"></div>` +
+        `</div>` +
+        (execucao.mensagem
+            ? `<div class="small mb-1">${escaparHtmlRoboEsocial(execucao.mensagem)}</div>`
+            : '') +
+        (execucao.cnpj_atual
+            ? `<div class="small text-muted mb-1">CNPJ atual: ${escaparHtmlRoboEsocial(execucao.cnpj_atual)}</div>`
+            : '') +
+        linhas;
+}
+
+
+function controlarPollingRoboRelatoriosEsocial(
+    deveContinuar
+) {
+
+    if (
+        deveContinuar
+    ) {
+
+        if (
+            !timerStatusRoboRelatoriosEsocial
+        ) {
+
+            timerStatusRoboRelatoriosEsocial =
+                setInterval(
+                    atualizarStatusRoboRelatoriosEsocial,
+                    5000
+                );
+        }
+
+        return;
+    }
+
+
+    if (
+        timerStatusRoboRelatoriosEsocial
+    ) {
+
+        clearInterval(
+            timerStatusRoboRelatoriosEsocial
+        );
+
+        timerStatusRoboRelatoriosEsocial =
+            null;
+    }
+}
+
+
+async function atualizarStatusRoboRelatoriosEsocial() {
+
+    try {
+
+        const token =
+            await obterTokenESocial();
+
+
+        const response =
+            await fetch(
+                apiUrl(
+                    '/api/soc/relatorios-robo/status'
+                ),
+                {
+                    headers:
+                        criarHeaders(
+                            token
+                        )
+                }
+            );
+
+
+        const resultado =
+            await lerRespostaJson(
+                response
+            );
+
+
+        renderizarStatusRoboRelatoriosEsocial(
+            resultado
+        );
+
+
+        const status =
+            resultado?.execucao?.status ||
+            '';
+
+
+        const rodando =
+            [
+                'pendente',
+                'processando'
+            ].includes(
+                status
+            );
+
+
+        controlarPollingRoboRelatoriosEsocial(
+            rodando
+        );
+
+
+        if (
+            !rodando &&
+            [
+                'concluido',
+                'concluido_com_erros'
+            ].includes(
+                status
+            )
+        ) {
+
+            await atualizarStatusBaseRelatorioEsocial();
+        }
+
+    } catch (
+        error
+    ) {
+
+        console.warn(
+            '⚠️ Status do robô de relatórios indisponível:',
+            error
+        );
+
+        controlarPollingRoboRelatoriosEsocial(
+            false
+        );
+    }
+}
+
+
+async function diagnosticarRoboRelatoriosEsocial() {
+
+    const controles =
+        garantirControlesRoboRelatoriosEsocial();
+
+
+    if (
+        !controles
+    ) {
+        return;
+    }
+
+
+    const botao =
+        controles.botaoDiagnostico;
+
+
+    const htmlOriginal =
+        botao.innerHTML;
+
+
+    botao.disabled =
+        true;
+
+    botao.innerHTML =
+        '<i class="fas fa-spinner fa-spin me-1"></i> Testando...';
+
+
+    try {
+
+        const token =
+            await obterTokenESocial();
+
+
+        mostrarAlertaESocial(
+            'Testando login com o certificado A1 e troca de perfil. Nenhum relatório será solicitado.',
+            'info'
+        );
+
+
+        const response =
+            await fetch(
+                apiUrl(
+                    '/api/soc/relatorios-robo/diagnosticar'
+                ),
+                {
+                    method:
+                        'POST',
+                    headers:
+                        criarHeaders(
+                            token
+                        )
+                }
+            );
+
+
+        const resultado =
+            await lerRespostaJson(
+                response
+            );
+
+
+        mostrarAlertaESocial(
+            `Acesso automático confirmado${resultado.cnpjTestado ? ` para o CNPJ ${resultado.cnpjTestado}` : ''}.`,
+            'success'
+        );
+
+    } catch (
+        error
+    ) {
+
+        console.error(
+            '❌ Diagnóstico do robô eSocial:',
+            error
+        );
+
+
+        mostrarAlertaESocial(
+            'Teste automático falhou: ' +
+            error.message +
+            '. Se aparecer uma etapa/layout do portal que o robô ainda não reconhece, me envie a mensagem e a tela.',
+            'danger'
+        );
+
+    } finally {
+
+        botao.disabled =
+            false;
+
+        botao.innerHTML =
+            htmlOriginal;
+    }
+}
+
+
+async function iniciarAtualizacaoAutomaticaRelatoriosEsocial() {
+
+    const controles =
+        garantirControlesRoboRelatoriosEsocial();
+
+
+    if (
+        !controles
+    ) {
+        return;
+    }
+
+
+    try {
+
+        const token =
+            await obterTokenESocial();
+
+
+        const responseEmpresas =
+            await fetch(
+                apiUrl(
+                    '/api/soc/relatorios-robo/empresas'
+                ),
+                {
+                    headers:
+                        criarHeaders(
+                            token
+                        )
+                }
+            );
+
+
+        const empresas =
+            await lerRespostaJson(
+                responseEmpresas
+            );
+
+
+        const total =
+            Number(
+                empresas.total ||
+                0
+            );
+
+
+        if (
+            !total
+        ) {
+
+            mostrarAlertaESocial(
+                'Nenhuma empresa com eSocial autorizado e CNPJ válido foi encontrada.',
+                'warning'
+            );
+
+            return;
+        }
+
+
+        const confirmou =
+            window.confirm(
+                `Atualizar automaticamente a base eSocial de ${total} empregador(es)?\n\n` +
+                'O backend fará login com o A1, trocará o CNPJ e solicitará um Relatório Gerencial por empregador. O processo continua mesmo se você sair desta aba.'
+            );
+
+
+        if (
+            !confirmou
+        ) {
+            return;
+        }
+
+
+        controles.botaoAuto.disabled =
+            true;
+
+
+        const response =
+            await fetch(
+                apiUrl(
+                    '/api/soc/relatorios-robo/iniciar'
+                ),
+                {
+                    method:
+                        'POST',
+                    headers:
+                        criarHeaders(
+                            token
+                        )
+                }
+            );
+
+
+        const resultado =
+            await lerRespostaJson(
+                response
+            );
+
+
+        mostrarAlertaESocial(
+            `Atualização automática iniciada para ${resultado.totalEmpresas || total} empregador(es).`,
+            'success'
+        );
+
+
+        controlarPollingRoboRelatoriosEsocial(
+            true
+        );
+
+
+        await atualizarStatusRoboRelatoriosEsocial();
+
+    } catch (
+        error
+    ) {
+
+        console.error(
+            '❌ Falha iniciando robô de relatórios eSocial:',
+            error
+        );
+
+
+        mostrarAlertaESocial(
+            'Não foi possível iniciar a atualização automática: ' +
+            error.message,
+            'danger'
+        );
+
+
+        controles.botaoAuto.disabled =
+            false;
+    }
+}
+
+
+async function cancelarAtualizacaoAutomaticaRelatoriosEsocial() {
+
+    if (
+        !window.confirm(
+            'Parar a atualização automática após a etapa atual?'
+        )
+    ) {
+        return;
+    }
+
+
+    try {
+
+        const token =
+            await obterTokenESocial();
+
+
+        await fetch(
+            apiUrl(
+                '/api/soc/relatorios-robo/cancelar'
+            ),
+            {
+                method:
+                    'POST',
+                headers:
+                    criarHeaders(
+                        token
+                    )
+            }
+        );
+
+
+        mostrarAlertaESocial(
+            'Cancelamento solicitado. O robô vai parar ao terminar a etapa atual.',
+            'warning'
+        );
+
+    } catch (
+        error
+    ) {
+
+        mostrarAlertaESocial(
+            'Não foi possível solicitar o cancelamento: ' +
+            error.message,
+            'danger'
+        );
+    }
+}
+
+
 if (
     document.readyState ===
     'loading'
@@ -9957,9 +10886,8 @@ function instalarRelatorioGerencialEsocial() {
     }
 
 
-    // O botão já é ligado também na inicialização principal.
-    // Reaplicar aqui garante funcionamento mesmo se o HTML carregar
-    // depois do script.
+    // Botão principal = automação do portal.
+    // Importação manual permanece em botão secundário.
     const botao =
         document.getElementById(
             'btnResolverMatriculasHolding'
@@ -9971,15 +10899,15 @@ function instalarRelatorioGerencialEsocial() {
     ) {
 
         botao.className =
-            'btn btn-outline-success btn-sm';
+            'btn btn-success btn-sm';
 
 
         botao.title =
-            'Importar Relatório Gerencial do eSocial (CSV/XLS/XLSX). Não consome BX.';
+            'Atualizar automaticamente a base eSocial de todos os empregadores autorizados.';
 
 
         botao.innerHTML =
-            '<i class="fas fa-file-excel me-1"></i> Importar base eSocial';
+            '<i class="fas fa-robot me-1"></i> Atualizar todas as empresas';
 
 
         botao.onclick =
@@ -9987,12 +10915,14 @@ function instalarRelatorioGerencialEsocial() {
 
                 event.preventDefault();
 
-                input.click();
+                iniciarAtualizacaoAutomaticaRelatoriosEsocial();
             };
     }
 
 
+    garantirControlesRoboRelatoriosEsocial();
     atualizarStatusBaseRelatorioEsocial();
+    atualizarStatusRoboRelatoriosEsocial();
 }
 
 
