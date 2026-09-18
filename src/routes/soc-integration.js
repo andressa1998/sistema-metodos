@@ -25166,7 +25166,290 @@ async function criarOuAtualizarPendenciaMatriculaEsocial(
 
 
 // ============================================================
-// GARANTIR MATRÍCULA OFICIAL
+// RECONCILIAR VÍNCULO OFICIAL POR CPF + MATRÍCULA
+//
+// IMPORTANTE:
+// O evento local pode ter sido recriado/atualizado pelo SOC e,
+// nesse processo, manter uma matrícula oficial antiga ao mesmo
+// tempo em que o empregador foi recalculado pela unidade do SOC.
+//
+// Antes do envio, precisamos tratar CPF + matrícula como uma
+// identidade de vínculo oficial e recuperar também o empregador
+// correspondente em esocial_vinculos.
+//
+// Isso evita combinar:
+//   matrícula oficial correta + empregador incorreto
+// e receber o erro eSocial 1557.
+// ============================================================
+
+async function buscarVinculoOficialPorCpfMatriculaEsocial(
+    evento
+) {
+
+    if (
+        !evento ||
+        typeof evento !== 'object'
+    ) {
+
+        return null;
+    }
+
+
+    const cpf =
+        normalizarCpfEsocial(
+            evento.cpf ||
+            ''
+        );
+
+
+    const matricula =
+        String(
+            evento.matricula ||
+            ''
+        ).trim();
+
+
+    if (
+        cpf.length !== 11 ||
+        !matricula
+    ) {
+
+        return null;
+    }
+
+
+    const {
+        data,
+        error
+    } =
+        await getSupabase()
+            .from(
+                'esocial_vinculos'
+            )
+            .select(
+                '*'
+            )
+            .eq(
+                'cpf',
+                cpf
+            )
+            .eq(
+                'matricula_esocial',
+                matricula
+            )
+            .order(
+                'atualizado_em',
+                {
+                    ascending:
+                        false
+                }
+            )
+            .limit(
+                100
+            );
+
+
+    if (
+        error
+    ) {
+
+        throw error;
+    }
+
+
+    const candidatos =
+        Array.isArray(
+            data
+        )
+            ? data.filter(
+                item =>
+                    item &&
+                    typeof item === 'object'
+            )
+            : [];
+
+
+    if (
+        candidatos.length === 0
+    ) {
+
+        return null;
+    }
+
+
+    // ========================================================
+    // 1) MESMA DATA DE ADMISSÃO
+    //
+    // Se houver recontratação, a data é a melhor forma de
+    // distinguir vínculos com o mesmo CPF/matrícula.
+    // ========================================================
+
+    const dataAdmissaoEvento =
+        normalizarDataAdmissaoEsocial(
+            evento.data_admissao_esocial ||
+            evento.data_admissao ||
+            evento.dataAdmissao ||
+            ''
+        );
+
+
+    if (
+        dataAdmissaoEvento
+    ) {
+
+        const candidatosMesmaData =
+            candidatos.filter(
+                item =>
+                    normalizarDataAdmissaoEsocial(
+                        item?.data_admissao ||
+                        ''
+                    ) ===
+                    dataAdmissaoEvento
+            );
+
+
+        if (
+            candidatosMesmaData.length === 1
+        ) {
+
+            return candidatosMesmaData[0];
+        }
+
+
+        if (
+            candidatosMesmaData.length > 1
+        ) {
+
+            const empregadoresMesmaData =
+                new Set(
+                    candidatosMesmaData
+                        .map(
+                            item => {
+
+                                const tp =
+                                    String(
+                                        item?.tp_insc_empregador ||
+                                        item?.tpInscEmpregador ||
+                                        ''
+                                    ).trim();
+
+
+                                const nr =
+                                    normalizarNrInscEmpregadorEsocial(
+                                        tp,
+                                        item?.nr_insc_empregador ||
+                                        item?.nrInscEmpregador ||
+                                        ''
+                                    );
+
+
+                                return (
+                                    tp &&
+                                    nr
+                                )
+                                    ? `${tp}|${nr}`
+                                    : '';
+                            }
+                        )
+                        .filter(
+                            Boolean
+                        )
+                );
+
+
+            if (
+                empregadoresMesmaData.size === 1
+            ) {
+
+                return candidatosMesmaData[0];
+            }
+        }
+    }
+
+
+    // ========================================================
+    // 2) TODOS OS REGISTROS APONTAM PARA O MESMO EMPREGADOR
+    //
+    // É comum existir duplicidade histórica do mesmo vínculo
+    // por importações/cache. Se todos convergem para o mesmo
+    // empregador, não existe ambiguidade real.
+    // ========================================================
+
+    const empregadores =
+        new Set(
+            candidatos
+                .map(
+                    item => {
+
+                        const tp =
+                            String(
+                                item?.tp_insc_empregador ||
+                                item?.tpInscEmpregador ||
+                                ''
+                            ).trim();
+
+
+                        const nr =
+                            normalizarNrInscEmpregadorEsocial(
+                                tp,
+                                item?.nr_insc_empregador ||
+                                item?.nrInscEmpregador ||
+                                ''
+                            );
+
+
+                        return (
+                            tp &&
+                            nr
+                        )
+                            ? `${tp}|${nr}`
+                            : '';
+                    }
+                )
+                .filter(
+                    Boolean
+                )
+        );
+
+
+    if (
+        empregadores.size === 1
+    ) {
+
+        return candidatos[0];
+    }
+
+
+    // ========================================================
+    // 3) MAIS DE UM EMPREGADOR POSSÍVEL
+    //
+    // Não arriscar associar o trabalhador à empresa errada.
+    // ========================================================
+
+    console.warn(
+        '⚠️ Vínculo oficial ambíguo para CPF + matrícula:',
+        {
+            eventoId:
+                evento.id ||
+                null,
+            cpf,
+            matricula,
+            quantidadeCandidatos:
+                candidatos.length,
+            empregadores:
+                Array.from(
+                    empregadores
+                )
+        }
+    );
+
+
+    return null;
+}
+
+
+// ============================================================
+// GARANTIR MATRÍCULA + EMPREGADOR OFICIAIS
 // ============================================================
 
 async function garantirMatriculaOficialEvento(
@@ -25190,36 +25473,11 @@ async function garantirMatriculaOficialEvento(
     }
 
 
-    if (
-        matriculaEventoEhOficial(
-            evento
-        )
-    ) {
-
-        return {
-            encontrada:
-                true,
-            origem:
-                String(
-                    evento.matricula_origem ||
-                    ''
-                ),
-            matricula:
-                String(
-                    evento.matricula ||
-                    ''
-                ),
-            evento
-        };
-    }
-
-
     // ========================================================
     // DATA DE ADMISSÃO PRIMEIRO
     //
-    // A matrícula continua vindo SOMENTE do eSocial/BX/cache.
-    // O SOC é usado aqui apenas para obter a data de admissão
-    // e diferenciar corretamente vínculos/recontratações.
+    // Além de ajudar em recontratações, a data é usada para
+    // escolher o vínculo correto quando houver mais de um.
     // ========================================================
 
     const dataAdmissao =
@@ -25229,7 +25487,252 @@ async function garantirMatriculaOficialEvento(
 
 
     // ========================================================
-    // CACHE OFICIAL
+    // MATRÍCULA JÁ MARCADA COMO OFICIAL
+    //
+    // REGRA ANTIGA:
+    // retornava imediatamente e confiava no empregador já salvo
+    // no evento.
+    //
+    // REGRA NOVA:
+    // CPF + matrícula são usados para reencontrar o vínculo em
+    // esocial_vinculos e reconciliar TAMBÉM o empregador antes
+    // de qualquer S-2220/S-2240 ser transmitido.
+    // ========================================================
+
+    if (
+        matriculaEventoEhOficial(
+            evento
+        )
+    ) {
+
+        const vinculoPorCpfMatricula =
+            await buscarVinculoOficialPorCpfMatriculaEsocial(
+                evento
+            );
+
+
+        if (
+            vinculoPorCpfMatricula
+        ) {
+
+            const fonteVinculo =
+                String(
+                    vinculoPorCpfMatricula.fonte ||
+                    evento.matricula_origem ||
+                    'cache_esocial'
+                )
+                    .trim()
+                    .toLowerCase();
+
+
+            const origemAplicacao =
+                ESOCIAL_MATRICULA_ORIGENS_OFICIAIS.has(
+                    fonteVinculo
+                )
+                    ? fonteVinculo
+                    : 'cache_esocial';
+
+
+            const tpAntes =
+                String(
+                    evento.tp_insc_empregador ||
+                    evento.tpInscEmpregador ||
+                    ''
+                ).trim();
+
+
+            const nrAntes =
+                normalizarNrInscEmpregadorEsocial(
+                    tpAntes,
+                    evento.nr_insc_empregador ||
+                    evento.nrInscEmpregador ||
+                    ''
+                );
+
+
+            const aplicado =
+                await aplicarVinculoOficialNoEvento(
+                    evento,
+                    vinculoPorCpfMatricula,
+                    origemAplicacao
+                );
+
+
+            const tpDepois =
+                String(
+                    evento.tp_insc_empregador ||
+                    evento.tpInscEmpregador ||
+                    ''
+                ).trim();
+
+
+            const nrDepois =
+                normalizarNrInscEmpregadorEsocial(
+                    tpDepois,
+                    evento.nr_insc_empregador ||
+                    evento.nrInscEmpregador ||
+                    ''
+                );
+
+
+            if (
+                tpAntes !== tpDepois ||
+                nrAntes !== nrDepois
+            ) {
+
+                console.log(
+                    '🔁 Empregador do vínculo reconciliado antes do envio eSocial:',
+                    {
+                        eventoId:
+                            evento.id ||
+                            null,
+                        cpf:
+                            normalizarCpfEsocial(
+                                evento.cpf ||
+                                ''
+                            ),
+                        matricula:
+                            String(
+                                evento.matricula ||
+                                ''
+                            ).trim(),
+                        empregadorAnterior:
+                            tpAntes && nrAntes
+                                ? `${tpAntes}|${nrAntes}`
+                                : null,
+                        empregadorOficial:
+                            tpDepois && nrDepois
+                                ? `${tpDepois}|${nrDepois}`
+                                : null,
+                        origem:
+                            origemAplicacao
+                    }
+                );
+            }
+
+
+            return {
+                ...aplicado,
+                encontrada:
+                    true,
+                origem:
+                    origemAplicacao,
+                dataAdmissao:
+                    dataAdmissao ||
+                    null,
+                empregadorReconciliado:
+                    true,
+                evento
+            };
+        }
+
+
+        // ====================================================
+        // FALLBACK PELO EMPREGADOR ATUAL
+        //
+        // Útil para bases antigas em que o vínculo existe no
+        // cache oficial, mas ainda não foi encontrado pela
+        // consulta direta CPF + matrícula.
+        // ====================================================
+
+        const cacheMesmoEmpregador =
+            await buscarVinculoOficialCacheEsocial(
+                evento
+            );
+
+
+        if (
+            cacheMesmoEmpregador
+        ) {
+
+            const fonteCache =
+                String(
+                    cacheMesmoEmpregador.fonte ||
+                    'cache_esocial'
+                )
+                    .trim()
+                    .toLowerCase();
+
+
+            const origemCache =
+                ESOCIAL_MATRICULA_ORIGENS_OFICIAIS.has(
+                    fonteCache
+                )
+                    ? fonteCache
+                    : 'cache_esocial';
+
+
+            const aplicado =
+                await aplicarVinculoOficialNoEvento(
+                    evento,
+                    cacheMesmoEmpregador,
+                    origemCache
+                );
+
+
+            return {
+                ...aplicado,
+                encontrada:
+                    true,
+                origem:
+                    origemCache,
+                dataAdmissao:
+                    dataAdmissao ||
+                    null,
+                empregadorReconciliado:
+                    true,
+                evento
+            };
+        }
+
+
+        // ====================================================
+        // MATRÍCULA MARCADA COMO OFICIAL, MAS SEM VÍNCULO
+        // RECONCILIÁVEL.
+        //
+        // Não transmitir combinando uma matrícula real com um
+        // empregador possivelmente recalculado pelo SOC.
+        // ====================================================
+
+        if (
+            criarPendencia
+        ) {
+
+            await criarOuAtualizarPendenciaMatriculaEsocial(
+                evento
+            );
+        }
+
+
+        return {
+            encontrada:
+                false,
+            origem:
+                String(
+                    evento.matricula_origem ||
+                    ''
+                ) ||
+                null,
+            matricula:
+                String(
+                    evento.matricula ||
+                    ''
+                ) ||
+                null,
+            dataAdmissao:
+                dataAdmissao ||
+                null,
+            empregadorReconciliado:
+                false,
+            motivo:
+                'VINCULO_OFICIAL_NAO_RECONCILIADO',
+            evento
+        };
+    }
+
+
+    // ========================================================
+    // EVENTO AINDA SEM MATRÍCULA OFICIAL
     // ========================================================
 
     const cache =
@@ -25242,21 +25745,40 @@ async function garantirMatriculaOficialEvento(
         cache
     ) {
 
+        const fonteCache =
+            String(
+                cache.fonte ||
+                'cache_esocial'
+            )
+                .trim()
+                .toLowerCase();
+
+
+        const origemCache =
+            ESOCIAL_MATRICULA_ORIGENS_OFICIAIS.has(
+                fonteCache
+            )
+                ? fonteCache
+                : 'cache_esocial';
+
+
         const aplicado =
             await aplicarVinculoOficialNoEvento(
                 evento,
                 cache,
-                'cache_esocial'
+                origemCache
             );
 
 
         return {
             ...aplicado,
             origem:
-                'cache_esocial',
+                origemCache,
             dataAdmissao:
                 dataAdmissao ||
                 null,
+            empregadorReconciliado:
+                true,
             evento
         };
     }
@@ -25286,6 +25808,8 @@ async function garantirMatriculaOficialEvento(
         dataAdmissao:
             dataAdmissao ||
             null,
+        empregadorReconciliado:
+            false,
         motivo:
             dataAdmissao
                 ? 'MATRICULA_OFICIAL_PENDENTE'
@@ -25293,7 +25817,6 @@ async function garantirMatriculaOficialEvento(
         evento
     };
 }
-
 
 // ============================================================
 // BACKFILL SEM CONSUMIR BX
