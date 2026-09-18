@@ -11391,6 +11391,16 @@ async function acompanharConsultaPcEsocial() {
                     }
                 }
 
+                const totalContabilizado =
+                    Math.min(
+                        atual.totalColaboradores,
+                        processados +
+                        Number(
+                            atual.errosEnfileiramento ||
+                            0
+                        )
+                    );
+
                 const concluiu =
                     (
                         atual.tarefasIds.length ===
@@ -11398,7 +11408,7 @@ async function acompanharConsultaPcEsocial() {
                         progresso.concluida ===
                             true
                     ) &&
-                    processados >=
+                    totalContabilizado >=
                         atual.totalColaboradores;
 
                 atualizarPainelProgressoConsultaPcEsocial({
@@ -11468,9 +11478,19 @@ async function acompanharConsultaPcEsocial() {
                             0
                         );
 
+                    const realmenteProcessados =
+                        Math.min(
+                            atual.totalColaboradores,
+                            atual.finalizadosImediatamente +
+                            Number(
+                                progresso.finalizadas ||
+                                0
+                            )
+                        );
+
                     mostrarAlertaESocial(
                         `Consulta eSocial finalizada. ` +
-                        `${atual.totalColaboradores} colaborador(es) processado(s). ` +
+                        `${realmenteProcessados} colaborador(es) realmente processado(s) no fluxo; ` +
                         `${resolvidos} vínculo(s) confirmado(s)` +
                         (
                             naoLocalizados
@@ -11719,6 +11739,12 @@ async function enfileirarEventosConectorLocalEsocial() {
         let errosEnfileiramento =
             0;
 
+        const colaboradoresErroPreparacao =
+            new Set();
+
+        const errosDetalhesPreparacao =
+            [];
+
         for (
             let indice = 0;
             indice <
@@ -11823,12 +11849,67 @@ async function enfileirarEventosConectorLocalEsocial() {
                     0
                 );
 
-            errosEnfileiramento +=
+            const errosResultado =
                 Array.isArray(
                     resultado.erros
                 )
-                    ? resultado.erros.length
-                    : 0;
+                    ? resultado.erros
+                    : [];
+
+            for (
+                const erroItem
+                of errosResultado
+            ) {
+                const chaveErro =
+                    String(
+                        erroItem?.chaveColaborador ||
+                        ''
+                    ).trim();
+
+                if (
+                    chaveErro
+                ) {
+                    colaboradoresErroPreparacao
+                        .add(
+                            chaveErro
+                        );
+                }
+
+                if (
+                    errosDetalhesPreparacao.length <
+                        5
+                ) {
+                    errosDetalhesPreparacao.push(
+                        erroItem
+                    );
+                }
+            }
+
+            /*
+             * Usa a contagem de COLABORADORES retornada pelo backend.
+             * Não somamos S-2220 + S-2240 como se fossem duas pessoas.
+             */
+            const quantidadeErroGrupo =
+                Number(
+                    resultado.colaboradores?.comErro ||
+                    0
+                );
+
+            if (
+                quantidadeErroGrupo >
+                    0 &&
+                !errosResultado.length
+            ) {
+                errosEnfileiramento +=
+                    quantidadeErroGrupo;
+            }
+        }
+
+        if (
+            colaboradoresErroPreparacao.size
+        ) {
+            errosEnfileiramento =
+                colaboradoresErroPreparacao.size;
         }
 
         const totalColaboradores =
@@ -11839,11 +11920,25 @@ async function enfileirarEventosConectorLocalEsocial() {
          * O que não gerou tarefa foi resolvido imediatamente,
          * estava sem autorização ou apresentou falha na preparação.
          */
+        /*
+         * IMPORTANTE:
+         * "não gerou tarefa" NÃO significa "foi processado".
+         *
+         * Só contam como finalizados imediatamente os casos que o
+         * backend realmente resolveu pelo cache ou marcou como sem
+         * autorização. Falha de preparação fica separada.
+         */
         const finalizadosImediatamente =
-            Math.max(
-                0,
-                totalColaboradores -
-                tarefasIds.size
+            Math.min(
+                totalColaboradores,
+                Number(
+                    totalImediatos ||
+                    0
+                ) +
+                Number(
+                    totalSemAutorizacao ||
+                    0
+                )
             );
 
         consultaPcEsocialAtual = {
@@ -11858,9 +11953,55 @@ async function enfileirarEventosConectorLocalEsocial() {
             totalImediatos,
             totalSemAutorizacao,
             errosEnfileiramento,
+            errosDetalhesPreparacao,
             concluida:
                 false
         };
+
+        /*
+         * Se absolutamente nenhuma tarefa chegou ao conector e não houve
+         * resolução imediata, a consulta NÃO aconteceu no portal.
+         * Mostramos o erro real em vez de saltar para 100%.
+         */
+        if (
+            tarefasIds.size ===
+                0 &&
+            finalizadosImediatamente ===
+                0 &&
+            errosEnfileiramento >
+                0
+        ) {
+            const primeiroErro =
+                String(
+                    errosDetalhesPreparacao[0]?.error ||
+                    'Falha ao preparar os colaboradores para consulta.'
+                );
+
+            atualizarPainelProgressoConsultaPcEsocial({
+                processados:
+                    0,
+                total:
+                    totalColaboradores,
+                status:
+                    'Erro na preparação',
+                aviso:
+                    `${errosEnfileiramento} colaborador(es) não chegaram ao conector. ${primeiroErro}`,
+                concluida:
+                    false
+            });
+
+            mostrarAlertaESocial(
+                `A consulta NÃO chegou ao eSocial. ` +
+                `${errosEnfileiramento} colaborador(es) falharam antes de entrar na fila. ` +
+                `Primeiro erro: ${primeiroErro}`,
+                'danger'
+            );
+
+            consultaPcEsocialAtual =
+                null;
+
+            return;
+        }
 
         mostrarAlertaESocial(
             `Consulta iniciada para ${totalColaboradores} colaborador(es). ` +

@@ -54189,6 +54189,14 @@ router.post(
             const colaboradoresSolicitados =
                 new Set();
 
+            /*
+             * Um mesmo colaborador normalmente possui S-2220 e S-2240.
+             * Se houver erro de preparação nos dois registros, isso
+             * continua sendo UM colaborador com erro, não dois.
+             */
+            const colaboradoresComErro =
+                new Set();
+
             for (
                 const evento
                 of eventos
@@ -54225,7 +54233,25 @@ router.post(
                         );
                     }
 
+                    /*
+                     * Se o evento possui CNPJ completo e ele já foi
+                     * confirmado como o MESMO CNPJ da unidade escolhida,
+                     * esse é o vínculo mais forte e seguro.
+                     *
+                     * Nomes de holding/unidade podem variar entre SOC,
+                     * tabela precos e tela (abreviação, razão social,
+                     * acentos etc.). Não bloqueamos por nome quando o
+                     * CNPJ exato de 14 dígitos já coincidiu.
+                     *
+                     * Só usamos nome como trava quando o evento NÃO tem
+                     * CNPJ completo.
+                     */
+                    const eventoTemCnpjExato =
+                        cnpjEvento.length ===
+                        14;
+
                     if (
+                        !eventoTemCnpjExato &&
                         unidadeEvento &&
                         unidadeSelecionada &&
                         normalizarTextoComparacaoSoc(
@@ -54241,6 +54267,7 @@ router.post(
                     }
 
                     if (
+                        !eventoTemCnpjExato &&
                         holdingEvento &&
                         holdingSelecionada &&
                         normalizarTextoComparacaoSoc(
@@ -54327,8 +54354,29 @@ router.post(
                         enfileirados++;
                     }
                 } catch (errorItem) {
+                    const cpfErro =
+                        normalizarCpfEsocial(
+                            evento?.cpf ||
+                            ''
+                        );
+
+                    const chaveColaboradorErro =
+                        `${cnpjEmpresa}|${cpfErro || evento?.codigo_funcionario || evento?.id || ''}`;
+
+                    colaboradoresComErro
+                        .add(
+                            chaveColaboradorErro
+                        );
+
                     erros.push({
-                        id: evento?.id || null,
+                        id:
+                            evento?.id ||
+                            null,
+                        cpf:
+                            cpfErro ||
+                            null,
+                        chaveColaborador:
+                            chaveColaboradorErro,
                         error:
                             errorItem?.message ||
                             String(errorItem)
@@ -54357,7 +54405,9 @@ router.post(
                     resolvidosDoCache:
                         colaboradoresImediatos.size,
                     semAutorizacao:
-                        colaboradoresSemAutorizacao.size
+                        colaboradoresSemAutorizacao.size,
+                    comErro:
+                        colaboradoresComErro.size
                 },
                 erros
             });
