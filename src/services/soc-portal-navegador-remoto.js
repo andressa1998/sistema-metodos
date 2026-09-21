@@ -279,29 +279,55 @@ async function obterPaginaAtual() {
  * Assim que o login é concluído, a SPA troca de tela e esses campos
  * somem do DOM (a URL não muda, é tudo client-side routing).
  */
+let ultimoLogAutenticacaoSoc = 0;
+
 async function estaAutenticadoSoc() {
     const page = await obterPaginaAtual();
 
-    if (!page) return false;
+    const logar = Date.now() - ultimoLogAutenticacaoSoc > 10000;
+
+    if (logar) ultimoLogAutenticacaoSoc = Date.now();
+
+    if (!page) {
+        if (logar) console.log('🔎 [SOC remoto] estaAutenticadoSoc: nenhuma página encontrada.');
+        return false;
+    }
+
+    let urlAtual = '';
+    let tituloAtual = '';
+
+    try {
+        urlAtual = page.url();
+        tituloAtual = await page.title().catch(() => '');
+    } catch (_) {}
+
+    let aindaNaLogin = 0;
+    let visivel = false;
 
     try {
         const campoLogin = page.locator('#usu');
-        const aindaNaLogin = await campoLogin.count();
+        aindaNaLogin = await campoLogin.count();
 
         if (aindaNaLogin > 0) {
-            const visivel = await campoLogin.first().isVisible({ timeout: 500 }).catch(() => false);
-            if (visivel) return false;
+            visivel = await campoLogin.first().isVisible({ timeout: 500 }).catch(() => false);
         }
     } catch (_) {}
 
-    // Sinal positivo: algum elemento típico do menu principal pós-login.
-    try {
-        const menu = page.locator('[class*="menu"], nav, header').first();
-        if (await menu.count()) return true;
-    } catch (_) {}
+    if (logar) {
+        console.log('🔎 [SOC remoto] estaAutenticadoSoc:', {
+            url: urlAtual,
+            titulo: tituloAtual,
+            campoLoginEncontrado: aindaNaLogin,
+            campoLoginVisivel: visivel
+        });
+    }
 
-    // Se não achou nem a tela de login nem um sinal claro de menu,
-    // considera autenticado por exclusão (saiu da tela de login).
+    if (aindaNaLogin > 0 && visivel) {
+        return false;
+    }
+
+    // Se não achou o campo de login (ou ele não está visível), considera
+    // autenticado por exclusão (saiu da tela de login).
     return true;
 }
 
