@@ -204,9 +204,17 @@ function garantirBinario(nome) {
 }
 
 async function garantirInfraGrafica() {
+    console.log('🖥️ [SOC remoto] garantirInfraGrafica: checando binários...');
+
     garantirBinario('Xvfb');
     garantirBinario('x11vnc');
     garantirBinario('fluxbox');
+
+    console.log('🖥️ [SOC remoto] garantirInfraGrafica: binários OK.', {
+        xvfbVivo: processoVivo(infra.xvfb),
+        fluxboxVivo: processoVivo(infra.fluxbox),
+        x11vncVivo: processoVivo(infra.x11vnc)
+    });
 
     if (!processoVivo(infra.xvfb)) {
         infra.xvfb = spawnLogado(
@@ -217,6 +225,7 @@ async function garantirInfraGrafica() {
         );
 
         await aguardar(800);
+        console.log('🖥️ [SOC remoto] Xvfb iniciado.');
     }
 
     if (!processoVivo(infra.fluxbox)) {
@@ -228,6 +237,7 @@ async function garantirInfraGrafica() {
         );
 
         await aguardar(500);
+        console.log('🖥️ [SOC remoto] fluxbox iniciado.');
     }
 
     if (!processoVivo(infra.x11vnc)) {
@@ -256,6 +266,8 @@ async function garantirInfraGrafica() {
                 'O servidor VNC não iniciou na porta interna esperada.'
             );
         }
+
+        console.log('🖥️ [SOC remoto] x11vnc iniciado e respondendo na porta.', { vncPort: VNC_PORT });
     }
 }
 
@@ -427,6 +439,8 @@ async function encerrarNavegadorAtual({ manterSessao = true } = {}) {
  * (a cada 1.2s) até `pronta` virar true.
  */
 async function prepararNavegadorEmSegundoPlano(token) {
+    console.log('🖥️ [SOC remoto] prepararNavegadorEmSegundoPlano: iniciando...', { token: token.slice(0, 8) });
+
     try {
         await garantirInfraGrafica();
 

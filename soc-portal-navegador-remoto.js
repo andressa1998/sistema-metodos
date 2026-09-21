@@ -242,14 +242,28 @@ async function wtFecharModalSocRemote(cancelarServidor = true) {
     document.getElementById('wtSocRemoteModal')?.remove();
 }
 
-async function wtAguardarNavegadorProntoSoc(status, timeoutMs = 100000) {
+async function wtAguardarNavegadorProntoSoc(status, timeoutMs = 150000) {
     const inicio = Date.now();
 
     while (Date.now() - inicio < timeoutMs) {
-        const data = await wtSocRemoteFetchJson(
-            '/api/soc/portal-remoto/navegador-remoto/status?token=' +
-            encodeURIComponent(wtSocRemoteToken)
-        );
+        const segundos = Math.round((Date.now() - inicio) / 1000);
+
+        let data;
+
+        try {
+            data = await wtSocRemoteFetchJson(
+                '/api/soc/portal-remoto/navegador-remoto/status?token=' +
+                encodeURIComponent(wtSocRemoteToken)
+            );
+        } catch (erroConsulta) {
+            if (status) {
+                status.textContent = `[${segundos}s] Erro ao consultar status: ${erroConsulta.message}`;
+                status.style.color = '#dc3545';
+            }
+
+            await new Promise(resolve => setTimeout(resolve, 1500));
+            continue;
+        }
 
         if (data.erro) {
             throw new Error(data.erro);
@@ -260,14 +274,16 @@ async function wtAguardarNavegadorProntoSoc(status, timeoutMs = 100000) {
         }
 
         if (status) {
-            status.textContent = 'Abrindo navegador remoto no servidor... isso pode levar até 1 minuto.';
+            status.textContent =
+                `[${segundos}s] Abrindo navegador remoto no servidor... ` +
+                `(telaPronta: ${Boolean(data.telaPronta)}, pronta: ${Boolean(data.pronta)})`;
             status.style.color = '#555';
         }
 
         await new Promise(resolve => setTimeout(resolve, 1500));
     }
 
-    throw new Error('O navegador remoto demorou demais para abrir.');
+    throw new Error('O navegador remoto demorou demais para abrir (mais de ' + Math.round(timeoutMs / 1000) + 's).');
 }
 
 async function abrirNavegadorRemotoSoc() {
