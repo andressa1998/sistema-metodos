@@ -178,13 +178,13 @@ async function aguardarCdp(timeoutMs = 20000) {
                 }
             );
 
-            req.setTimeout(1000, () => { req.destroy(); resolve(false); });
+            req.setTimeout(2500, () => { req.destroy(); resolve(false); });
             req.on('error', () => resolve(false));
         });
 
         if (ok) return true;
 
-        await aguardar(350);
+        await aguardar(500);
     }
 
     return false;
@@ -449,7 +449,7 @@ async function prepararNavegadorEmSegundoPlano(token) {
 
         console.log('🖥️ [SOC remoto] Aguardando porta CDP...');
 
-        const cdpPronto = await aguardarCdp(25000);
+        const cdpPronto = await aguardarCdp(60000);
 
         if (!cdpPronto) {
             matarProcesso(chrome);

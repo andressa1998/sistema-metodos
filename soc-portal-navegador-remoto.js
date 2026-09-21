@@ -242,7 +242,7 @@ async function wtFecharModalSocRemote(cancelarServidor = true) {
     document.getElementById('wtSocRemoteModal')?.remove();
 }
 
-async function wtAguardarNavegadorProntoSoc(status, timeoutMs = 90000) {
+async function wtAguardarNavegadorProntoSoc(status, timeoutMs = 100000) {
     const inicio = Date.now();
 
     while (Date.now() - inicio < timeoutMs) {
