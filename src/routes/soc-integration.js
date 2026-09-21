@@ -56653,6 +56653,12 @@ router.get(
 
 
 
+const strikesSemAutorizacaoConectorLocalEsocial =
+    new Map();
+
+const JANELA_CONFIRMACAO_SEM_AUTORIZACAO_MS =
+    30 * 60 * 1000;
+
 router.post(
     '/conector-local/sem-autorizacao-lote',
     async (req, res) => {
@@ -56755,6 +56761,123 @@ router.post(
                             'Tarefas do lote não encontradas.'
                     });
             }
+
+            // ============================================================
+            // CONFIRMAÇÃO EM 2 RELATOS
+            // ============================================================
+            //
+            // O conector local às vezes reporta "sem autorização" de
+            // forma prematura (checagem no gov.br ainda não tinha
+            // terminado). Para não bloquear um CNPJ que na verdade tem
+            // autorização, só aplicamos o bloqueio de verdade no
+            // segundo relato consecutivo para o mesmo empregador,
+            // dentro de uma janela curta. No primeiro relato, só
+            // registramos o erro e deixamos a tarefa voltar pra fila
+            // (tentada de novo em breve).
+            //
+            // ============================================================
+
+            const chaveEmpregador =
+                String(
+                    primeira.codigo_empresa ||
+                    cnpj ||
+                    ''
+                ).trim();
+
+            const agoraMs =
+                Date.now();
+
+            const primeiroRelatoEm =
+                strikesSemAutorizacaoConectorLocalEsocial.get(
+                    chaveEmpregador
+                );
+
+            const dentroDaJanela =
+                primeiroRelatoEm &&
+                (
+                    agoraMs -
+                    primeiroRelatoEm
+                ) <
+                    JANELA_CONFIRMACAO_SEM_AUTORIZACAO_MS;
+
+            if (
+                !dentroDaJanela
+            ) {
+                // Primeiro relato (ou o anterior expirou): não bloqueia
+                // ainda, só registra o erro e agenda nova tentativa.
+                strikesSemAutorizacaoConectorLocalEsocial.set(
+                    chaveEmpregador,
+                    agoraMs
+                );
+
+                const {
+                    data:
+                        atualizadasPrimeiroRelato,
+                    error:
+                        erroPrimeiroRelato
+                } =
+                    await getSupabase()
+                        .from(
+                            'esocial_matriculas_pendentes'
+                        )
+                        .update({
+                            ultimo_erro:
+                                mensagem,
+                            proxima_tentativa_em:
+                                new Date(
+                                    agoraMs +
+                                    (5 * 60 * 1000)
+                                ).toISOString(),
+                            updated_at:
+                                agora
+                        })
+                        .eq(
+                            'codigo_empresa',
+                            primeira.codigo_empresa
+                        )
+                        .in(
+                            'status',
+                            [
+                                'aguardando_conector_local',
+                                'processando_conector_local',
+                                'erro_conector_local'
+                            ]
+                        )
+                        .select(
+                            'id'
+                        );
+
+                if (
+                    erroPrimeiroRelato
+                ) {
+                    throw erroPrimeiroRelato;
+                }
+
+                return res.json({
+                    success:
+                        true,
+                    cnpj:
+                        cnpj ||
+                        null,
+                    totalMarcado:
+                        0,
+                    tarefasReagendadas:
+                        Array.isArray(
+                            atualizadasPrimeiroRelato
+                        )
+                            ? atualizadasPrimeiroRelato.length
+                            : 0,
+                    status:
+                        'aguardando_confirmacao',
+                    motivo:
+                        'PROCURADOR_SEM_AUTORIZACAO_WEB_PRIMEIRO_RELATO'
+                });
+            }
+
+            // Segundo relato dentro da janela: confirma o bloqueio.
+            strikesSemAutorizacaoConectorLocalEsocial.delete(
+                chaveEmpregador
+            );
 
             // Marca todas as tarefas atuais do mesmo empregador,
             // evitando que outro CPF desse CNPJ seja tentado depois.
