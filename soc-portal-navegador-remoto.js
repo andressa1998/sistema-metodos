@@ -242,6 +242,34 @@ async function wtFecharModalSocRemote(cancelarServidor = true) {
     document.getElementById('wtSocRemoteModal')?.remove();
 }
 
+async function wtAguardarNavegadorProntoSoc(status, timeoutMs = 90000) {
+    const inicio = Date.now();
+
+    while (Date.now() - inicio < timeoutMs) {
+        const data = await wtSocRemoteFetchJson(
+            '/api/soc/portal-remoto/navegador-remoto/status?token=' +
+            encodeURIComponent(wtSocRemoteToken)
+        );
+
+        if (data.erro) {
+            throw new Error(data.erro);
+        }
+
+        if (data.pronta) {
+            return;
+        }
+
+        if (status) {
+            status.textContent = 'Abrindo navegador remoto no servidor... isso pode levar até 1 minuto.';
+            status.style.color = '#555';
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 1500));
+    }
+
+    throw new Error('O navegador remoto demorou demais para abrir.');
+}
+
 async function abrirNavegadorRemotoSoc() {
     const botao = document.getElementById('btnConectarSocRemoto');
 
@@ -261,6 +289,10 @@ async function abrirNavegadorRemotoSoc() {
         const modal = wtCriarModalSocRemote();
         const screen = modal.querySelector('#wtSocRemoteScreen');
         const status = modal.querySelector('#wtSocRemoteStatus');
+
+        modal.querySelector('#wtSocRemoteCancelar').onclick = () => wtFecharModalSocRemote(true);
+
+        await wtAguardarNavegadorProntoSoc(status);
 
         const { default: RFB } = await wtCarregarRfbSoc();
 
@@ -297,7 +329,6 @@ async function abrirNavegadorRemotoSoc() {
         });
 
         modal.querySelector('#wtSocRemoteSalvar').onclick = wtFinalizarSocRemote;
-        modal.querySelector('#wtSocRemoteCancelar').onclick = () => wtFecharModalSocRemote(true);
 
         clearInterval(wtSocRemoteTimer);
         wtSocRemoteTimer = setInterval(wtAtualizarStatusSocRemote, 1200);
@@ -306,6 +337,7 @@ async function abrirNavegadorRemotoSoc() {
 
     } catch (error) {
         alert('Não foi possível abrir o navegador remoto do SOC: ' + error.message);
+        wtFecharModalSocRemote(true);
 
     } finally {
         if (botao) {

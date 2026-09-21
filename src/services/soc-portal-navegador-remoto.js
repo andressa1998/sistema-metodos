@@ -380,83 +380,116 @@ async function encerrarNavegadorAtual({ manterSessao = true } = {}) {
     } catch (_) {}
 }
 
+/*
+ * Subir Xvfb + fluxbox + x11vnc + Chromium leva perto de 1 minuto,
+ * o que estoura o timeout do proxy do Render (~30s) se a gente
+ * esperar tudo terminar antes de responder o POST /iniciar.
+ *
+ * Por isso o fluxo é: responde o token na hora, e continua montando
+ * o navegador em segundo plano. O frontend fica consultando /status
+ * (a cada 1.2s) até `pronta` virar true.
+ */
+async function prepararNavegadorEmSegundoPlano(token) {
+    try {
+        await garantirInfraGrafica();
+
+        const { chromium } = require('playwright');
+
+        const chromiumPath = chromium.executablePath();
+
+        if (!chromiumPath || !fs.existsSync(chromiumPath)) {
+            throw criarErro(
+                'CHROMIUM_NAO_ENCONTRADO',
+                'O Chromium do Playwright não foi encontrado dentro do container Docker.'
+            );
+        }
+
+        const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'soc-portal-remote-'));
+        const homeDir = path.join(baseDir, 'home');
+        const profileDir = path.join(baseDir, 'profile');
+
+        fs.mkdirSync(homeDir, { recursive: true, mode: 0o700 });
+        fs.mkdirSync(profileDir, { recursive: true, mode: 0o700 });
+
+        const loginUrl = env('SOC_PORTAL_URL', 'https://sistema.soc.com.br/WebSoc/');
+
+        const args = [
+            `--user-data-dir=${profileDir}`,
+            `--remote-debugging-port=${CDP_PORT}`,
+            '--remote-debugging-address=127.0.0.1',
+            '--no-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-gpu',
+            '--no-first-run',
+            '--no-default-browser-check',
+            '--disable-session-crashed-bubble',
+            '--password-store=basic',
+            '--window-size=1500,900',
+            '--start-maximized',
+            loginUrl
+        ];
+
+        const chrome = spawnLogado(
+            'Chromium remoto SOC',
+            chromiumPath,
+            args,
+            { env: { ...process.env, DISPLAY, HOME: homeDir } }
+        );
+
+        const cdpPronto = await aguardarCdp(25000);
+
+        if (!cdpPronto) {
+            matarProcesso(chrome);
+            throw criarErro('CHROMIUM_CDP_NAO_INICIOU', 'O Chromium remoto abriu, mas a porta CDP não ficou disponível.');
+        }
+
+        // A sessão pode ter sido cancelada enquanto isso rodava em segundo plano.
+        if (!sessaoAtual || sessaoAtual.token !== token) {
+            matarProcesso(chrome);
+            return;
+        }
+
+        const cdpBrowser = await chromium.connectOverCDP(`http://127.0.0.1:${CDP_PORT}`);
+
+        sessaoAtual.baseDir = baseDir;
+        sessaoAtual.homeDir = homeDir;
+        sessaoAtual.profileDir = profileDir;
+        sessaoAtual.chrome = chrome;
+        sessaoAtual.cdpBrowser = cdpBrowser;
+        sessaoAtual.pronta = true;
+
+        console.log('🖥️ [SOC remoto] Navegador remoto pronto.', { display: DISPLAY, vncPort: VNC_PORT, cdpPort: CDP_PORT });
+
+        // Dá um tempo para a página carregar antes de tentar pré-preencher.
+        await aguardar(2500);
+        await preencherLoginAutomatico();
+
+    } catch (error) {
+        console.error('❌ [SOC remoto] Falha ao preparar o navegador remoto:', error.message);
+
+        if (sessaoAtual && sessaoAtual.token === token) {
+            sessaoAtual.pronta = true;
+            sessaoAtual.erro = error.message || String(error);
+        }
+    }
+}
+
 async function iniciarNavegadorRemoto() {
     if (sessaoAtual) {
         await encerrarNavegadorAtual({ manterSessao: false });
     }
 
-    await garantirInfraGrafica();
-
-    const { chromium } = require('playwright');
-
-    const chromiumPath = chromium.executablePath();
-
-    if (!chromiumPath || !fs.existsSync(chromiumPath)) {
-        throw criarErro(
-            'CHROMIUM_NAO_ENCONTRADO',
-            'O Chromium do Playwright não foi encontrado dentro do container Docker.'
-        );
-    }
-
     const token = crypto.randomBytes(32).toString('hex');
-
-    const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'soc-portal-remote-'));
-    const homeDir = path.join(baseDir, 'home');
-    const profileDir = path.join(baseDir, 'profile');
-
-    fs.mkdirSync(homeDir, { recursive: true, mode: 0o700 });
-    fs.mkdirSync(profileDir, { recursive: true, mode: 0o700 });
-
-    const loginUrl = env('SOC_PORTAL_URL', 'https://sistema.soc.com.br/WebSoc/');
-
-    const args = [
-        `--user-data-dir=${profileDir}`,
-        `--remote-debugging-port=${CDP_PORT}`,
-        '--remote-debugging-address=127.0.0.1',
-        '--no-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--no-first-run',
-        '--no-default-browser-check',
-        '--disable-session-crashed-bubble',
-        '--password-store=basic',
-        '--window-size=1500,900',
-        '--start-maximized',
-        loginUrl
-    ];
-
-    const chrome = spawnLogado(
-        'Chromium remoto SOC',
-        chromiumPath,
-        args,
-        { env: { ...process.env, DISPLAY, HOME: homeDir } }
-    );
-
-    const cdpPronto = await aguardarCdp(25000);
-
-    if (!cdpPronto) {
-        matarProcesso(chrome);
-        throw criarErro('CHROMIUM_CDP_NAO_INICIOU', 'O Chromium remoto abriu, mas a porta CDP não ficou disponível.');
-    }
-
-    const cdpBrowser = await chromium.connectOverCDP(`http://127.0.0.1:${CDP_PORT}`);
 
     sessaoAtual = {
         token,
         criadaEm: Date.now(),
-        baseDir,
-        homeDir,
-        profileDir,
-        chrome,
-        cdpBrowser,
+        pronta: false,
+        erro: null,
         autenticada: false
     };
 
-    console.log('🖥️ [SOC remoto] Navegador remoto pronto.', { display: DISPLAY, vncPort: VNC_PORT, cdpPort: CDP_PORT });
-
-    // Dá um tempo para a página carregar antes de tentar pré-preencher.
-    await aguardar(2500);
-    await preencherLoginAutomatico();
+    prepararNavegadorEmSegundoPlano(token);
 
     return {
         success: true,
@@ -474,6 +507,30 @@ async function statusNavegadorRemoto(token) {
         throw criarErro('SESSAO_REMOTA_INVALIDA', 'A sessão do navegador remoto não existe ou expirou.');
     }
 
+    if (!sessaoAtual.pronta) {
+        return {
+            success: true,
+            pronta: false,
+            erro: sessaoAtual.erro || null,
+            autenticada: false,
+            criadaEm: sessaoAtual.criadaEm,
+            pagina: { host: '', path: '', titulo: 'Abrindo navegador remoto no servidor...' },
+            sessaoRobo: statusSessaoSocPortal()
+        };
+    }
+
+    if (sessaoAtual.erro) {
+        return {
+            success: true,
+            pronta: true,
+            erro: sessaoAtual.erro,
+            autenticada: false,
+            criadaEm: sessaoAtual.criadaEm,
+            pagina: { host: '', path: '', titulo: 'Falha ao abrir o navegador remoto' },
+            sessaoRobo: statusSessaoSocPortal()
+        };
+    }
+
     let autenticada = Boolean(sessaoAtual.autenticada);
 
     if (!autenticada) {
@@ -488,6 +545,8 @@ async function statusNavegadorRemoto(token) {
 
     return {
         success: true,
+        pronta: true,
+        erro: null,
         autenticada,
         criadaEm: sessaoAtual.criadaEm,
         pagina: {
