@@ -157,11 +157,20 @@ async function aguardarPorta(host, porta, timeoutMs = 15000) {
     return false;
 }
 
+/*
+ * Retorna o webSocketDebuggerUrl real anunciado pelo Chromium (ou null).
+ *
+ * Importante: não confiamos no host que o Chromium coloca nessa URL -
+ * em alguns ambientes containerizados ele anuncia um hostname/IP que
+ * não é alcançável de dentro do próprio processo Node, mesmo respondendo
+ * normalmente no 127.0.0.1. Por isso sempre reescrevemos o host para
+ * 127.0.0.1 antes de usar.
+ */
 async function aguardarCdp(timeoutMs = 20000) {
     const inicio = Date.now();
 
     while (Date.now() - inicio < timeoutMs) {
-        const ok = await new Promise(resolve => {
+        const wsUrl = await new Promise(resolve => {
             const req = http.get(
                 `http://127.0.0.1:${CDP_PORT}/json/version`,
                 response => {
@@ -170,24 +179,36 @@ async function aguardarCdp(timeoutMs = 20000) {
                     response.on('end', () => {
                         try {
                             const data = JSON.parse(body);
-                            resolve(Boolean(data.webSocketDebuggerUrl));
+                            resolve(data.webSocketDebuggerUrl || null);
                         } catch (_) {
-                            resolve(false);
+                            resolve(null);
                         }
                     });
                 }
             );
 
-            req.setTimeout(2500, () => { req.destroy(); resolve(false); });
-            req.on('error', () => resolve(false));
+            req.setTimeout(2500, () => { req.destroy(); resolve(null); });
+            req.on('error', () => resolve(null));
         });
 
-        if (ok) return true;
+        if (wsUrl) {
+            try {
+                const reescrita = new URL(wsUrl);
+                reescrita.hostname = '127.0.0.1';
+                reescrita.port = String(CDP_PORT);
+
+                console.log('🖥️ [SOC remoto] webSocketDebuggerUrl original:', wsUrl, '-> reescrita:', reescrita.toString());
+
+                return reescrita.toString();
+            } catch (_) {
+                return wsUrl;
+            }
+        }
 
         await aguardar(500);
     }
 
-    return false;
+    return null;
 }
 
 function garantirBinario(nome) {
@@ -490,9 +511,9 @@ async function prepararNavegadorEmSegundoPlano(token) {
 
         console.log('🖥️ [SOC remoto] Aguardando porta CDP...');
 
-        const cdpPronto = await aguardarCdp(60000);
+        const wsEndpoint = await aguardarCdp(60000);
 
-        if (!cdpPronto) {
+        if (!wsEndpoint) {
             matarProcesso(chrome);
             throw criarErro('CHROMIUM_CDP_NAO_INICIOU', 'O Chromium remoto abriu, mas a porta CDP não ficou disponível.');
         }
@@ -520,7 +541,7 @@ async function prepararNavegadorEmSegundoPlano(token) {
         console.log('🖥️ [SOC remoto] Conectando via CDP (Playwright)...');
 
         const cdpBrowser = await comTimeout(
-            chromium.connectOverCDP(`http://127.0.0.1:${CDP_PORT}`),
+            chromium.connectOverCDP(wsEndpoint),
             15000,
             'connectOverCDP'
         );
