@@ -57558,8 +57558,12 @@ async function aplicarVinculoPortalSstNaEmpresaExata(
                 .update({
                     status:
                         'resolvido',
+                    // Motivo terminal (diferente do usado pela consulta
+                    // de reconciliarResultadosPortalSstV41): evita que
+                    // esta mesma pendência seja pega de novo na próxima
+                    // reconciliação e reprocessada pra sempre.
                     motivo:
-                        'VINCULO_CONFIRMADO_PORTAL_SST',
+                        'VINCULO_CONFIRMADO_PORTAL_SST_APLICADO',
                     ultimo_erro:
                         null,
                     proxima_tentativa_em:

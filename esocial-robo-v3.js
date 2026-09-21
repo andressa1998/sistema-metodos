@@ -11042,6 +11042,29 @@ function obterEscopoSelecionadoConectorLocalEsocial() {
             unicas.values()
         );
 
+    /*
+     * Mesmo com Holding selecionada, pode haver mais de um cadastro
+     * (CNPJs diferentes) com a mesma Holding + Unidade em `precos`
+     * (registro antigo/duplicado). Sem esse aviso, as duas empresas
+     * acabam sendo consultadas juntas, mesmo o usuário tendo filtrado
+     * por uma unidade só.
+     */
+    if (
+        unidade &&
+        holding &&
+        candidatas.length >
+            1
+    ) {
+        return {
+            ok:
+                false,
+            erro:
+                `A unidade "${unidade}" tem mais de um cadastro (CNPJ) ` +
+                `para a holding "${holding}". Verifique duplicidade no ` +
+                'cadastro de unidades antes de consultar.'
+        };
+    }
+
     if (
         !candidatas.length
     ) {
