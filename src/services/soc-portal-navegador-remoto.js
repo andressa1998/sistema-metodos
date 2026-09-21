@@ -120,6 +120,17 @@ function aguardar(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function comTimeout(promise, ms, label) {
+    return Promise.race([
+        promise,
+        new Promise((_, reject) => {
+            setTimeout(() => {
+                reject(criarErro('TIMEOUT', `Tempo esgotado esperando: ${label}.`));
+            }, ms);
+        })
+    ]);
+}
+
 async function aguardarPorta(host, porta, timeoutMs = 15000) {
     const inicio = Date.now();
 
@@ -436,6 +447,8 @@ async function prepararNavegadorEmSegundoPlano(token) {
             { env: { ...process.env, DISPLAY, HOME: homeDir } }
         );
 
+        console.log('🖥️ [SOC remoto] Aguardando porta CDP...');
+
         const cdpPronto = await aguardarCdp(25000);
 
         if (!cdpPronto) {
@@ -443,22 +456,43 @@ async function prepararNavegadorEmSegundoPlano(token) {
             throw criarErro('CHROMIUM_CDP_NAO_INICIOU', 'O Chromium remoto abriu, mas a porta CDP não ficou disponível.');
         }
 
+        console.log('🖥️ [SOC remoto] Porta CDP respondendo.');
+
         // A sessão pode ter sido cancelada enquanto isso rodava em segundo plano.
         if (!sessaoAtual || sessaoAtual.token !== token) {
             matarProcesso(chrome);
             return;
         }
 
-        const cdpBrowser = await chromium.connectOverCDP(`http://127.0.0.1:${CDP_PORT}`);
-
         sessaoAtual.baseDir = baseDir;
         sessaoAtual.homeDir = homeDir;
         sessaoAtual.profileDir = profileDir;
         sessaoAtual.chrome = chrome;
+
+        // A partir daqui o X11/VNC já tem o Chromium visível na tela - a
+        // pessoa já pode ver e usar o navegador remoto mesmo que o Playwright
+        // (CDP) ainda não tenha conectado. Não trava a tela nisso.
+        sessaoAtual.telaPronta = true;
+
+        console.log('🖥️ [SOC remoto] Tela pronta (VNC pode conectar).', { display: DISPLAY, vncPort: VNC_PORT });
+
+        console.log('🖥️ [SOC remoto] Conectando via CDP (Playwright)...');
+
+        const cdpBrowser = await comTimeout(
+            chromium.connectOverCDP(`http://127.0.0.1:${CDP_PORT}`),
+            15000,
+            'connectOverCDP'
+        );
+
+        if (!sessaoAtual || sessaoAtual.token !== token) {
+            try { await cdpBrowser.close(); } catch (_) {}
+            return;
+        }
+
         sessaoAtual.cdpBrowser = cdpBrowser;
         sessaoAtual.pronta = true;
 
-        console.log('🖥️ [SOC remoto] Navegador remoto pronto.', { display: DISPLAY, vncPort: VNC_PORT, cdpPort: CDP_PORT });
+        console.log('🖥️ [SOC remoto] Navegador remoto pronto (CDP conectado).', { display: DISPLAY, vncPort: VNC_PORT, cdpPort: CDP_PORT });
 
         // Dá um tempo para a página carregar antes de tentar pré-preencher.
         await aguardar(2500);
@@ -468,6 +502,7 @@ async function prepararNavegadorEmSegundoPlano(token) {
         console.error('❌ [SOC remoto] Falha ao preparar o navegador remoto:', error.message);
 
         if (sessaoAtual && sessaoAtual.token === token) {
+            sessaoAtual.telaPronta = true;
             sessaoAtual.pronta = true;
             sessaoAtual.erro = error.message || String(error);
         }
@@ -484,6 +519,7 @@ async function iniciarNavegadorRemoto() {
     sessaoAtual = {
         token,
         criadaEm: Date.now(),
+        telaPronta: false,
         pronta: false,
         erro: null,
         autenticada: false
@@ -511,6 +547,7 @@ async function statusNavegadorRemoto(token) {
         return {
             success: true,
             pronta: false,
+            telaPronta: Boolean(sessaoAtual.telaPronta),
             erro: sessaoAtual.erro || null,
             autenticada: false,
             criadaEm: sessaoAtual.criadaEm,

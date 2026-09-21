@@ -255,7 +255,7 @@ async function wtAguardarNavegadorProntoSoc(status, timeoutMs = 90000) {
             throw new Error(data.erro);
         }
 
-        if (data.pronta) {
+        if (data.pronta || data.telaPronta) {
             return;
         }
 
