@@ -468,6 +468,7 @@ async function prepararNavegadorEmSegundoPlano(token) {
             `--user-data-dir=${profileDir}`,
             `--remote-debugging-port=${CDP_PORT}`,
             '--remote-debugging-address=127.0.0.1',
+            '--remote-allow-origins=*',
             '--no-sandbox',
             '--disable-dev-shm-usage',
             '--disable-gpu',
