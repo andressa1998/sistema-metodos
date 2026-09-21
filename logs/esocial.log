@@ -1660,3 +1660,11 @@
 {"level":"info","message":"Ambiente: development","timestamp":"2026-09-14T20:29:42.622Z"}
 {"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-14T20:29:42.622Z"}
 {"level":"info","message":"GET /api/soc/debug-funcionario-cpf/1649454/12346050903 200 - 473ms - ::1","timestamp":"2026-09-14T20:29:47.921Z"}
+{"level":"info","message":"Servidor rodando na porta 3002","timestamp":"2026-09-21T13:46:15.322Z"}
+{"level":"info","message":"Ambiente: development","timestamp":"2026-09-21T13:46:15.324Z"}
+{"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-21T13:46:15.324Z"}
+{"level":"info","message":"Servidor rodando na porta 3002","timestamp":"2026-09-21T13:46:28.856Z"}
+{"level":"info","message":"Ambiente: development","timestamp":"2026-09-21T13:46:28.859Z"}
+{"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-21T13:46:28.859Z"}
+{"level":"info","message":"POST /api/soc/portal-remoto/navegador-remoto/iniciar 500 - 410ms - ::1","timestamp":"2026-09-21T13:46:31.305Z"}
+{"level":"info","message":"GET /health 200 - 1ms - ::1","timestamp":"2026-09-21T13:46:31.362Z"}

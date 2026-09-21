@@ -430,6 +430,19 @@ app.use(
     esocialNavegadorRemotoRoutes
 );
 
+// ------------------------------------------------------------
+// NAVEGADOR REMOTO PORTAL SOC
+// ------------------------------------------------------------
+
+const socPortalNavegadorRemotoRoutes = require(
+    './src/routes/soc-portal-navegador-remoto'
+);
+
+app.use(
+    '/api/soc',
+    socPortalNavegadorRemotoRoutes
+);
+
 // noVNC é instalado pelo Dockerfile em /usr/share/novnc.
 // O frontend importa /esocial-novnc/core/rfb.js.
 app.use(
@@ -519,6 +532,12 @@ const {
     './src/services/esocial-vnc-websocket'
 );
 
+const {
+    instalarVncWebSocketSocPortal
+} = require(
+    './src/services/soc-portal-vnc-websocket'
+);
+
 
 const server = app.listen(PORT, () => {
     logger.info(
@@ -601,6 +620,7 @@ const server = app.listen(PORT, () => {
 
 // WebSocket VNC usa o mesmo servidor/porta pública do Express.
 instalarVncWebSocket(server);
+instalarVncWebSocketSocPortal(server);
 
 // ============================================================
 // ENCERRAMENTO SEGURO

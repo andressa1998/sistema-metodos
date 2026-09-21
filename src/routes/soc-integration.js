@@ -29,6 +29,9 @@ const {
     validarXmlS2220ContraXsd,
     validarXmlS2240ContraXsd
 } = require('../services/esocial-xsd');
+const {
+    obterMedicoViaPdfAso
+} = require('../services/soc-portal-aso-pdf');
 // ============================================================
 // IMPORTAÇÃO DE HISTÓRICO E-SOCIAL POR ZIP
 // ============================================================
@@ -7503,6 +7506,137 @@ async function complementarEventosComGed1858(
 
 
     return eventosValidos;
+}
+
+// ============================================================
+// COMPLEMENTAR MÉDICO VIA PDF DO ASO (FALLBACK)
+// ============================================================
+//
+// O SOC às vezes tem o médico do ASO cadastrado como um registro
+// genérico ("Nome do Médico - RS", sem CRM), quando quem lançou a
+// ficha não selecionou o médico de verdade. Nesses casos, o único
+// lugar onde o nome e o CRM reais existem é na assinatura digital
+// no rodapé do PDF do ASO (ex: "Assinado digitalmente por: FULANO
+// DE TAL:***12345***").
+//
+// Esta função só funciona se houver uma sessão autenticada do
+// portal do SOC salva (via navegador remoto - ver
+// soc-portal-navegador-remoto.js). Se não houver sessão, ou se o
+// download/leitura do PDF falhar, o evento simplesmente fica sem
+// o complemento e segue com os dados que o ExportaDadosWs já deu -
+// nunca derruba o restante do lote por causa disso.
+//
+// ============================================================
+
+const REGEX_MEDICO_PLACEHOLDER_SOC =
+    /^nome do m[eé]dico\b/i;
+
+function medicoPareceGenericoSoc(nome, crm) {
+
+    const nomeTexto =
+        String(nome || '').trim();
+
+    const crmTexto =
+        String(crm || '').trim();
+
+    if (!nomeTexto) {
+        return true;
+    }
+
+    if (REGEX_MEDICO_PLACEHOLDER_SOC.test(nomeTexto)) {
+        return true;
+    }
+
+    if (!crmTexto || crmTexto === '0000') {
+        return true;
+    }
+
+    return false;
+}
+
+async function complementarMedicoComPdfAso(
+    eventos2220
+) {
+
+    if (
+        !Array.isArray(eventos2220) ||
+        eventos2220.length === 0
+    ) {
+
+        return eventos2220 || [];
+    }
+
+    for (
+        const evento
+        of eventos2220
+    ) {
+
+        if (
+            !evento ||
+            typeof evento !== 'object'
+        ) {
+
+            continue;
+        }
+
+        const precisaDeFallback =
+            medicoPareceGenericoSoc(
+                evento.medicoEmitente,
+                evento.medicoCrm
+            );
+
+        if (!precisaDeFallback) {
+            continue;
+        }
+
+        if (!evento.nomeArquivoGedAso) {
+            continue;
+        }
+
+        if (evento.asoAssinado === false) {
+            // Documento existe, mas confirmadamente não assinado
+            // ainda: não há assinatura digital pra ler.
+            continue;
+        }
+
+        try {
+
+            const medicoDoPdf =
+                await obterMedicoViaPdfAso({
+                    nomeArquivoGed:
+                        evento.nomeArquivoGedAso
+                });
+
+            if (!medicoDoPdf) {
+                continue;
+            }
+
+            evento.medicoEmitente =
+                medicoDoPdf.nome;
+
+            evento.medicoCrm =
+                medicoDoPdf.crm;
+
+            evento.medicoOrigem =
+                'pdf_assinatura_digital';
+
+            console.log(
+                `🩺 Médico complementado via PDF do ASO | ` +
+                `Ficha ${evento.idFicha || evento.id_ficha_soc} | ` +
+                `${medicoDoPdf.nome} (CRM ${medicoDoPdf.crm})`
+            );
+
+        } catch (error) {
+
+            console.warn(
+                `⚠️ Não foi possível complementar o médico via PDF | ` +
+                `Ficha ${evento.idFicha || evento.id_ficha_soc}:`,
+                error.message
+            );
+        }
+    }
+
+    return eventos2220;
 }
 
 function normalizarDataComparacaoSoc(
@@ -42901,12 +43035,24 @@ const eventos2220ComAssinatura =
 
 
 // ============================================================
+// 2.5. COMPLEMENTAR MÉDICO VIA PDF DO ASO (FALLBACK)
+// Quando o SOC devolve um médico genérico (sem nome/CRM reais),
+// tenta ler a assinatura digital do PDF do ASO.
+// ============================================================
+
+const eventos2220ComMedico =
+    await complementarMedicoComPdfAso(
+        eventos2220ComAssinatura
+    );
+
+
+// ============================================================
 // 3. APLICAR REGRA S-2220 / S-2240
 // ============================================================
 
 const eventosGerados =
     await aplicarRegraEventosEsocial(
-        eventos2220ComAssinatura
+        eventos2220ComMedico
     );
 
 
