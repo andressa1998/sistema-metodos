@@ -163,6 +163,14 @@ async function wtAtualizarStatusSocRemote() {
 
             if (salvar) salvar.disabled = false;
 
+        } else if (data.erro) {
+            if (status) {
+                status.textContent = `Falha: ${data.erro}`;
+                status.style.color = '#dc3545';
+            }
+
+            if (salvar) salvar.disabled = true;
+
         } else {
             if (status) {
                 status.textContent = data?.pagina?.titulo || 'Aguardando autenticação';
