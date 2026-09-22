@@ -1668,3 +1668,23 @@
 {"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-21T13:46:28.859Z"}
 {"level":"info","message":"POST /api/soc/portal-remoto/navegador-remoto/iniciar 500 - 410ms - ::1","timestamp":"2026-09-21T13:46:31.305Z"}
 {"level":"info","message":"GET /health 200 - 1ms - ::1","timestamp":"2026-09-21T13:46:31.362Z"}
+{"level":"info","message":"Servidor rodando na porta 3002","timestamp":"2026-09-21T14:09:05.738Z"}
+{"level":"info","message":"Ambiente: development","timestamp":"2026-09-21T14:09:05.740Z"}
+{"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-21T14:09:05.741Z"}
+{"level":"info","message":"POST /api/soc/portal-remoto/navegador-remoto/iniciar 200 - 418ms - ::1","timestamp":"2026-09-21T14:09:07.022Z"}
+{"level":"info","message":"GET /api/soc/portal-remoto/navegador-remoto/status?token=7cc89fc8e1e5c518de3c16a51243928f4b5add5cc14331680425f33edce9ea74 200 - 2ms - ::1","timestamp":"2026-09-21T14:09:16.315Z"}
+{"level":"info","message":"Servidor rodando na porta 3002","timestamp":"2026-09-21T20:04:23.286Z"}
+{"level":"info","message":"Ambiente: development","timestamp":"2026-09-21T20:04:23.287Z"}
+{"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-21T20:04:23.287Z"}
+{"level":"info","message":"Servidor rodando na porta 3002","timestamp":"2026-09-21T20:11:13.878Z"}
+{"level":"info","message":"Ambiente: development","timestamp":"2026-09-21T20:11:13.879Z"}
+{"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-21T20:11:13.879Z"}
+{"level":"info","message":"Servidor rodando na porta 3002","timestamp":"2026-09-22T14:02:27.222Z"}
+{"level":"info","message":"Ambiente: development","timestamp":"2026-09-22T14:02:27.224Z"}
+{"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-22T14:02:27.224Z"}
+{"level":"info","message":"Servidor rodando na porta 3002","timestamp":"2026-09-22T14:05:00.914Z"}
+{"level":"info","message":"Ambiente: development","timestamp":"2026-09-22T14:05:00.916Z"}
+{"level":"info","message":"eSocial Ambiente: 1","timestamp":"2026-09-22T14:05:00.916Z"}
+{"level":"info","message":"POST /api/soc/portal-remoto/login-interativo/iniciar 200 - 5987ms - ::1","timestamp":"2026-09-22T14:05:08.621Z"}
+{"level":"info","message":"GET /api/soc/portal-remoto/login-interativo/frame?token=89ce33d7459a1a6b59648eef8d4810e44450ffad5568bc8f 200 - 63ms - ::1","timestamp":"2026-09-22T14:06:12.438Z"}
+{"level":"info","message":"POST /api/soc/portal-remoto/login-interativo/fechar 200 - 70ms - ::1","timestamp":"2026-09-22T14:10:23.916Z"}

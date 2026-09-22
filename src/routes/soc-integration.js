@@ -7581,15 +7581,11 @@ async function complementarMedicoComPdfAso(
 
         const precisaDeFallback =
             medicoPareceGenericoSoc(
-                evento.medicoEmitente,
-                evento.medicoCrm
+                evento.medicoEmitente || evento.medico_emitente,
+                evento.medicoCrm || evento.medico_crm
             );
 
         if (!precisaDeFallback) {
-            continue;
-        }
-
-        if (!evento.nomeArquivoGedAso) {
             continue;
         }
 
@@ -7603,8 +7599,14 @@ async function complementarMedicoComPdfAso(
 
             const medicoDoPdf =
                 await obterMedicoViaPdfAso({
-                    nomeArquivoGed:
-                        evento.nomeArquivoGedAso
+                    holding:
+                        evento.holding,
+                    unidade:
+                        evento.unidade || evento.nome_unidade,
+                    nomeColaborador:
+                        evento.colaborador || evento.nome_colaborador || evento.nomeFuncionario,
+                    ufCrm:
+                        evento.medicoUfCrm || evento.medico_uf_crm
                 });
 
             if (!medicoDoPdf) {
@@ -7616,6 +7618,17 @@ async function complementarMedicoComPdfAso(
 
             evento.medicoCrm =
                 medicoDoPdf.crm;
+
+            evento.medico_emitente =
+                medicoDoPdf.nome;
+
+            evento.medico_crm =
+                medicoDoPdf.crm;
+
+            if (medicoDoPdf.uf) {
+                evento.medicoUfCrm = medicoDoPdf.uf;
+                evento.medico_uf_crm = medicoDoPdf.uf;
+            }
 
             evento.medicoOrigem =
                 'pdf_assinatura_digital';
@@ -40876,6 +40889,49 @@ if (
                                     .diagnostico
                         });
                 }
+            }
+
+
+            // ====================================================
+            // S-2220: COMPLEMENTAR MÉDICO PELO ASO DO SOC (CÓDIGO 611)
+            // ====================================================
+
+            if (
+                tipoEvento === 'S-2220' &&
+                medicoPareceGenericoSoc(
+                    eventoParaEnvio.medico_emitente || eventoParaEnvio.medicoEmitente,
+                    eventoParaEnvio.medico_crm || eventoParaEnvio.medicoCrm
+                )
+            ) {
+                await complementarMedicoComPdfAso([eventoParaEnvio]);
+
+                const crmExtraido = String(
+                    eventoParaEnvio.medico_crm || eventoParaEnvio.medicoCrm || ''
+                ).trim();
+
+                if (!crmExtraido) {
+                    return res.status(409).json({
+                        success: false,
+                        bloqueado: true,
+                        motivo: 'MEDICO_ASO_PENDENTE',
+                        error: 'Não foi possível obter o médico e o CRM na assinatura digital do ASO. Conecte o navegador remoto do SOC e tente novamente.'
+                    });
+                }
+
+                const atualizacaoMedico = {
+                    medico_emitente: eventoParaEnvio.medico_emitente || eventoParaEnvio.medicoEmitente,
+                    medico_crm: crmExtraido,
+                    medico_uf_crm: eventoParaEnvio.medico_uf_crm || eventoParaEnvio.medicoUfCrm,
+                    updated_at: new Date().toISOString()
+                };
+
+                const { error: erroAtualizarMedico } = await getSupabase()
+                    .from('esocial_eventos')
+                    .update(atualizacaoMedico)
+                    .eq('id', id);
+
+                if (erroAtualizarMedico) throw erroAtualizarMedico;
+                Object.assign(eventoParaEnvio, atualizacaoMedico);
             }
 
 

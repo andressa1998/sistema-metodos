@@ -1,167 +1,155 @@
 'use strict';
 
-/*
- * Baixa o PDF do ASO diretamente do portal do SOC (SOCGED), usando a
- * sessão autenticada salva pelo navegador remoto (soc-portal-session-store),
- * e extrai nome/CRM do médico a partir da assinatura digital no rodapé
- * do PDF (aso-assinatura-extrator.js), para usar como fallback quando o
- * ExportaDadosWs devolve um médico genérico/placeholder.
- *
- * NOTA: a navegação até a tela do SOCGED (busca por nome do arquivo,
- * abrir o popup "Download de Arquivos", disparar o download) foi
- * mapeada por observação manual da tela e ainda não foi validada
- * ponta a ponta contra uma sessão real — os seletores abaixo são o
- * melhor mapeamento possível a partir do que foi visto e podem
- * precisar de ajuste fino no primeiro teste ao vivo.
- */
-
+// Robô SOC código 611: empresa -> colaborador -> ASO -> ZIP -> PDF -> assinatura.
+const fs = require('fs');
+const AdmZip = require('adm-zip');
 const { obterStorageStateSocPortal } = require('./soc-portal-session-store');
 const { extrairAssinaturaDigitalDoPdf } = require('./aso-assinatura-extrator');
 
-function env(name, fallback = '') {
-    const value = process.env[name];
-    return value === undefined || value === null || value === ''
-        ? fallback
-        : String(value).trim();
+function erro(code, message) {
+    const e = new Error(message);
+    e.code = code;
+    return e;
 }
 
-function criarErro(code, message, details = null) {
-    const error = new Error(message);
-    error.code = code;
-    error.details = details;
-    return error;
+function scopes(page) {
+    return [page, ...page.frames().filter(f => f !== page.mainFrame())];
 }
 
-async function abrirPaginaComSessao() {
+async function visivel(page, factories, timeout = 15000) {
+    const limite = Date.now() + timeout;
+    while (Date.now() < limite) {
+        for (const scope of scopes(page)) {
+            for (const factory of factories) {
+                const locator = factory(scope);
+                const total = await locator.count().catch(() => 0);
+                for (let i = 0; i < total; i += 1) {
+                    const item = locator.nth(i);
+                    if (await item.isVisible().catch(() => false)) return item;
+                }
+            }
+        }
+        await page.waitForTimeout(250);
+    }
+    return null;
+}
+
+async function abrirSessao() {
     const storageState = obterStorageStateSocPortal();
-
-    if (!storageState) {
-        throw criarErro(
-            'SOC_PORTAL_SEM_SESSAO',
-            'Não há sessão autenticada do portal do SOC. Conecte o navegador remoto do SOC primeiro.'
-        );
-    }
-
+    if (!storageState) throw erro('SOC_SEM_SESSAO', 'Conecte e salve a sessão do SOC antes de buscar o ASO.');
     const { chromium } = require('playwright');
-
     const browser = await chromium.launch({ headless: true });
-    const context = await browser.newContext({ storageState });
+    const context = await browser.newContext({ storageState, acceptDownloads: true });
     const page = await context.newPage();
-
-    return { browser, context, page };
+    return { browser, page };
 }
 
-/*
- * Navega até a tela de busca do SOCGED (módulo de documentos).
- * Tenta uma URL direta configurável primeiro; se não configurada,
- * tenta o caminho padrão observado (cadIFrame!execute.action).
- */
-async function navegarAteSocged(page) {
-    const urlDireta = env('SOC_PORTAL_SOCGED_URL');
-    const urlBase = env('SOC_PORTAL_URL', 'https://sistema.soc.com.br/WebSoc/');
-
-    const destino = urlDireta || (urlBase.replace(/\/$/, '') + '/cadIFrame!execute.action');
-
-    await page.goto(destino, { waitUntil: 'networkidle', timeout: 30000 });
-}
-
-/*
- * Busca o documento no SOCGED pelo nome exato do arquivo (já conhecido
- * via ExportaDadosWs GED, campo NM_ARQUIVOS_GED) e abre o popup de
- * download, retornando o(s) link(s) "javascript:download(...)" achados.
- */
-async function buscarLinksDownload(page, nomeArquivo) {
-    // Seleciona o filtro de busca "Nome do Arquivo".
-    try {
-        await page.getByText('Nome do Arquivo', { exact: false }).first().click({ timeout: 5000 });
-    } catch (_) {
-        // Segue mesmo se não conseguir clicar no rótulo do radio; o campo de busca genérico pode bastar.
-    }
-
-    const campoBusca = page.locator('input[type="text"]').first();
-    await campoBusca.fill(nomeArquivo, { timeout: 10000 });
-    await campoBusca.press('Enter');
-
-    await page.waitForTimeout(1500);
-
-    // Abre o primeiro resultado da lista (linha da tabela de documentos).
-    const linhaResultado = page.getByText(nomeArquivo, { exact: false }).first();
-    await linhaResultado.click({ timeout: 10000 });
-
-    // Aguarda o popup "Download de Arquivos".
-    await page.getByText('Download de Arquivos', { exact: false }).waitFor({ timeout: 10000 });
-
-    const links = await page.locator('a[href^="javascript:download("]').evaluateAll(
-        elementos => elementos.map(el => ({
-            texto: el.textContent.trim(),
-            href: el.getAttribute('href')
-        }))
-    );
-
-    return links;
-}
-
-async function baixarViaEventoDeDownload(page, linkTexto) {
-    const [download] = await Promise.all([
-        page.waitForEvent('download', { timeout: 20000 }),
-        page.getByText(linkTexto, { exact: false }).first().click()
+async function selecionarEmpresa(page, holding, unidade) {
+    await page.goto(process.env.SOC_PORTAL_URL || 'https://sistema.soc.com.br/WebSoc/', {
+        waitUntil: 'domcontentloaded', timeout: 45000
+    });
+    const campo = await visivel(page, [
+        s => s.locator('input[placeholder*="Buscar empresa" i]'),
+        s => s.locator('input[placeholder*="empresa" i]')
     ]);
-
-    const streamPath = await download.path();
-
-    if (!streamPath) {
-        throw criarErro('SOC_PORTAL_DOWNLOAD_SEM_ARQUIVO', 'O download não gerou um arquivo local.');
-    }
-
-    const fs = require('fs');
-    return fs.readFileSync(streamPath);
+    if (!campo) throw erro('SOC_EMPRESA_CAMPO', 'Campo "Buscar empresa" não encontrado.');
+    await campo.fill(String(holding || unidade || '').trim());
+    await page.waitForTimeout(1200);
+    const alvo = await visivel(page, [
+        s => s.getByText(unidade || holding, { exact: false }),
+        s => s.locator('a, tr, li').filter({ hasText: holding })
+    ], 8000);
+    if (!alvo) throw erro('SOC_EMPRESA_NAO_ENCONTRADA', `Empresa da holding "${holding}" não encontrada.`);
+    await alvo.click();
+    await page.waitForTimeout(1200);
 }
 
-/*
- * Fluxo completo: dado o nome exato do arquivo do GED (já obtido via
- * ExportaDadosWs), baixa o PDF do SOCGED e extrai nome/CRM do médico
- * da assinatura digital.
- */
-async function obterMedicoViaPdfAso({ nomeArquivoGed }) {
-    if (!nomeArquivoGed) {
-        throw criarErro('SOC_PORTAL_ARQUIVO_NAO_INFORMADO', 'Nome do arquivo do GED não informado.');
-    }
+async function abrir611(page) {
+    const menu = await visivel(page, [
+        s => s.locator('[aria-label*="menu" i], .fa-bars, .glyphicon-menu-hamburger'),
+        s => s.locator('button:has(i.fa-bars), a:has(i.fa-bars)')
+    ]);
+    if (!menu) throw erro('SOC_MENU_NAO_ENCONTRADO', 'Menu lateral não encontrado.');
+    await menu.click();
+    const busca = await visivel(page, [
+        s => s.locator('input[placeholder*="pesquis" i]'),
+        s => s.locator('input[type="search"]'),
+        s => s.locator('input[type="text"]:visible').first()
+    ]);
+    if (!busca) throw erro('SOC_MENU_BUSCA', 'Pesquisa do menu não encontrada.');
+    await busca.fill('611');
+    await busca.press('Enter');
+    await page.waitForTimeout(800);
+    const socged = await visivel(page, [s => s.getByText('SOCGED', { exact: false })], 5000);
+    if (socged) await socged.click();
+    await page.waitForTimeout(1200);
+}
 
+async function pesquisar(page, nome) {
+    const radio = await visivel(page, [
+        s => s.getByLabel('Nome', { exact: true }),
+        s => s.locator('input[type="radio"][value*="nome" i]')
+    ], 5000);
+    if (radio) await radio.check().catch(() => radio.click());
+    const campo = await visivel(page, [
+        s => s.locator('input[name*="busca" i], input[id*="busca" i]'),
+        s => s.locator('input[type="text"]:visible').first()
+    ]);
+    if (!campo) throw erro('SOC_COLABORADOR_CAMPO', 'Campo de busca do colaborador não encontrado.');
+    await campo.fill(nome);
+    const lupa = await visivel(page, [
+        s => s.locator('[title*="pesquis" i], .fa-search, .glyphicon-search')
+    ], 3000);
+    if (lupa) await lupa.click(); else await campo.press('Enter');
+    await page.waitForTimeout(1400);
+}
+
+async function baixarAso(page) {
+    let linha = null;
+    for (const scope of scopes(page)) {
+        const candidatas = scope.locator('tr').filter({ hasText: 'Atestado de Saúde Ocupacional - ASO' });
+        if (await candidatas.count().catch(() => 0)) { linha = candidatas.first(); break; }
+    }
+    if (!linha) throw erro('SOC_ASO_NAO_ENCONTRADO', 'ASO não encontrado para o colaborador.');
+    await linha.locator('a, button, img, input[type="image"]').last().click();
+    const titulo = await visivel(page, [s => s.getByText('Download de Arquivos', { exact: false })], 10000);
+    if (!titulo) throw erro('SOC_DOWNLOAD_POPUP', 'A janela de download do ASO não abriu.');
+    const arquivo = await visivel(page, [
+        s => s.locator('a[href*="download" i]').first(),
+        s => s.locator('tr').filter({ hasText: '.pdf' }).first().locator('a, img').first()
+    ], 8000);
+    if (!arquivo) throw erro('SOC_DOWNLOAD_LINK', 'Nenhum PDF foi listado para download.');
+    const espera = page.waitForEvent('download', { timeout: 30000 });
+    await arquivo.click();
+    const download = await espera;
+    const caminho = await download.path();
+    if (!caminho) throw erro('SOC_DOWNLOAD_VAZIO', 'O download do SOC não gerou arquivo.');
+    return fs.readFileSync(caminho);
+}
+
+function extrairPdf(buffer) {
+    if (buffer.subarray(0, 4).toString() === '%PDF') return buffer;
+    const entrada = new AdmZip(buffer).getEntries()
+        .find(item => !item.isDirectory && /\.pdf$/i.test(item.entryName));
+    if (!entrada) throw erro('SOC_ZIP_SEM_PDF', 'O ZIP baixado não contém PDF.');
+    return entrada.getData();
+}
+
+async function obterMedicoViaPdfAso({ holding, unidade, nomeColaborador, ufCrm } = {}) {
+    if (!holding && !unidade) throw erro('SOC_EMPRESA_NAO_INFORMADA', 'Holding/unidade não informada.');
+    if (!nomeColaborador) throw erro('SOC_COLABORADOR_NAO_INFORMADO', 'Nome do colaborador não informado.');
     let sessao;
-
     try {
-        sessao = await abrirPaginaComSessao();
-
-        await navegarAteSocged(sessao.page);
-
-        const links = await buscarLinksDownload(sessao.page, nomeArquivoGed);
-
-        if (!links.length) {
-            throw criarErro('SOC_PORTAL_ARQUIVO_NAO_ENCONTRADO', `Nenhum arquivo encontrado no SOCGED para "${nomeArquivoGed}".`);
-        }
-
-        const alvo = links.find(l => l.texto.includes(nomeArquivoGed)) || links[0];
-
-        const bufferPdf = await baixarViaEventoDeDownload(sessao.page, alvo.texto);
-
-        const assinatura = await extrairAssinaturaDigitalDoPdf(bufferPdf);
-
-        if (!assinatura) {
-            return null;
-        }
-
-        return {
-            nome: assinatura.nome,
-            crm: assinatura.crm
-        };
-
+        sessao = await abrirSessao();
+        await selecionarEmpresa(sessao.page, holding, unidade);
+        await abrir611(sessao.page);
+        await pesquisar(sessao.page, nomeColaborador);
+        const assinatura = await extrairAssinaturaDigitalDoPdf(extrairPdf(await baixarAso(sessao.page)));
+        if (!assinatura) throw erro('SOC_ASSINATURA_NAO_ENCONTRADA', 'Nome e CRM não encontrados na assinatura do ASO.');
+        return { ...assinatura, uf: String(ufCrm || '').trim().toUpperCase() };
     } finally {
-        try {
-            if (sessao?.browser) await sessao.browser.close();
-        } catch (_) {}
+        try { await sessao?.browser?.close(); } catch (_) {}
     }
 }
 
-module.exports = {
-    obterMedicoViaPdfAso
-};
+module.exports = { obterMedicoViaPdfAso };
