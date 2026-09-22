@@ -431,16 +431,22 @@ app.use(
 );
 
 // ------------------------------------------------------------
-// NAVEGADOR REMOTO PORTAL SOC
+// LOGIN INTERATIVO PORTAL SOC
+// ------------------------------------------------------------
+//
+// Substituiu o navegador remoto via VNC (soc-portal-navegador-remoto),
+// que ficou instável (Xvfb/x11vnc/CDP). Mesmo padrão já usado no
+// eSocial (esocial-login-interativo): Chromium headless no servidor,
+// tela relayada por captura de imagem (JPEG) em vez de VNC.
 // ------------------------------------------------------------
 
-const socPortalNavegadorRemotoRoutes = require(
-    './src/routes/soc-portal-navegador-remoto'
+const socPortalLoginInterativoRoutes = require(
+    './src/routes/soc-portal-login-interativo'
 );
 
 app.use(
     '/api/soc',
-    socPortalNavegadorRemotoRoutes
+    socPortalLoginInterativoRoutes
 );
 
 // noVNC é instalado pelo Dockerfile em /usr/share/novnc.
@@ -532,12 +538,6 @@ const {
     './src/services/esocial-vnc-websocket'
 );
 
-const {
-    instalarVncWebSocketSocPortal
-} = require(
-    './src/services/soc-portal-vnc-websocket'
-);
-
 
 const server = app.listen(PORT, () => {
     logger.info(
@@ -620,7 +620,6 @@ const server = app.listen(PORT, () => {
 
 // WebSocket VNC usa o mesmo servidor/porta pública do Express.
 instalarVncWebSocket(server);
-instalarVncWebSocketSocPortal(server);
 
 // ============================================================
 // ENCERRAMENTO SEGURO
