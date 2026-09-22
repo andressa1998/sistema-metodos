@@ -107,7 +107,13 @@ async function abrirSoc(page) {
 
     await page.goto(loginUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
 
-    await page.waitForTimeout(900);
+    // Espera o campo de login aparecer de verdade (a SPA do SOC pode
+    // demorar mais que um tempo fixo pra renderizar, dependendo da
+    // rede/carga do servidor). Se não aparecer, pode já estar numa
+    // sessão autenticada de um profile antigo - segue em frente.
+    try {
+        await page.locator('#usu').waitFor({ state: 'visible', timeout: 15000 });
+    } catch (_) {}
 
     if (await estaAutenticadoSoc(page)) {
         return;
