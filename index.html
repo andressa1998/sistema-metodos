@@ -3818,6 +3818,9 @@ html body #esocialPage.esocial-wrapper .dashboard-content .btn-danger {
           <button class="btn btn-primary btn-sm" id="btnBuscarDadosSoc">
             <i class="fas fa-sync me-1"></i> Buscar Dados do SOC
           </button>
+          <button type="button" class="btn btn-outline-primary btn-sm" id="btnConectarSocLocal" title="Abrir o SOC em uma aba real do Chrome deste computador">
+            <i class="fas fa-window-maximize me-1"></i> Conectar SOC
+          </button>
           <button type="button" class="btn btn-primary btn-sm" id="btnConectarCertificadoEsocial" title="Abrir o Chrome para autenticar no eSocial com o certificado deste computador">
             <i class="fas fa-certificate me-1"></i> Conectar certificado
           </button>
@@ -4520,8 +4523,7 @@ html body #esocialPage.esocial-wrapper .dashboard-content .btn-danger {
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="app.js"></script>
-  <script src="esocial-robo-v3.js?v=20260917-1530-v5"></script>
-  <script src="soc-portal-login-interativo.js?v=20260922-2"></script>
+  <script src="esocial-robo-v3.js?v=20260924-soc-local-v1"></script>
   <script>
     (function iniciarLoginGiratorio() {
       const card = document.getElementById('authCard');
