@@ -54526,15 +54526,6 @@ router.post(
                 });
             }
 
-            if (sessaoConectorLocalSocAtiva()) {
-                return res.json({
-                    success: true,
-                    jaConectado: true,
-                    sessaoSocAtiva: true,
-                    message: 'A sessão do SOC já está conectada.'
-                });
-            }
-
             const conectorId = String(ultimoConectorLocalEsocial?.id || '').trim();
             if (!conectorId) {
                 return res.status(409).json({
