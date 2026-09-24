@@ -29,6 +29,9 @@ const {
     validarXmlS2220ContraXsd,
     validarXmlS2240ContraXsd
 } = require('../services/esocial-xsd');
+const {
+    obterMedicoViaPdfAso
+} = require('../services/soc-portal-aso-pdf');
 // ============================================================
 // IMPORTAÇÃO DE HISTÓRICO E-SOCIAL POR ZIP
 // ============================================================
@@ -7503,6 +7506,150 @@ async function complementarEventosComGed1858(
 
 
     return eventosValidos;
+}
+
+// ============================================================
+// COMPLEMENTAR MÉDICO VIA PDF DO ASO (FALLBACK)
+// ============================================================
+//
+// O SOC às vezes tem o médico do ASO cadastrado como um registro
+// genérico ("Nome do Médico - RS", sem CRM), quando quem lançou a
+// ficha não selecionou o médico de verdade. Nesses casos, o único
+// lugar onde o nome e o CRM reais existem é na assinatura digital
+// no rodapé do PDF do ASO (ex: "Assinado digitalmente por: FULANO
+// DE TAL:***12345***").
+//
+// Esta função só funciona se houver uma sessão autenticada do
+// portal do SOC salva (via navegador remoto - ver
+// soc-portal-navegador-remoto.js). Se não houver sessão, ou se o
+// download/leitura do PDF falhar, o evento simplesmente fica sem
+// o complemento e segue com os dados que o ExportaDadosWs já deu -
+// nunca derruba o restante do lote por causa disso.
+//
+// ============================================================
+
+const REGEX_MEDICO_PLACEHOLDER_SOC =
+    /^nome do m[eé]dico\b/i;
+
+function medicoPareceGenericoSoc(nome, crm) {
+
+    const nomeTexto =
+        String(nome || '').trim();
+
+    const crmTexto =
+        String(crm || '').trim();
+
+    if (!nomeTexto) {
+        return true;
+    }
+
+    if (REGEX_MEDICO_PLACEHOLDER_SOC.test(nomeTexto)) {
+        return true;
+    }
+
+    if (!crmTexto || crmTexto === '0000') {
+        return true;
+    }
+
+    return false;
+}
+
+async function complementarMedicoComPdfAso(
+    eventos2220
+) {
+
+    if (
+        !Array.isArray(eventos2220) ||
+        eventos2220.length === 0
+    ) {
+
+        return eventos2220 || [];
+    }
+
+    for (
+        const evento
+        of eventos2220
+    ) {
+
+        if (
+            !evento ||
+            typeof evento !== 'object'
+        ) {
+
+            continue;
+        }
+
+        const precisaDeFallback =
+            medicoPareceGenericoSoc(
+                evento.medicoEmitente || evento.medico_emitente,
+                evento.medicoCrm || evento.medico_crm
+            );
+
+        if (!precisaDeFallback) {
+            continue;
+        }
+
+        if (evento.asoAssinado === false) {
+            // Documento existe, mas confirmadamente não assinado
+            // ainda: não há assinatura digital pra ler.
+            continue;
+        }
+
+        try {
+
+            const medicoDoPdf =
+                await obterMedicoViaPdfAso({
+                    holding:
+                        evento.holding,
+                    unidade:
+                        evento.unidade || evento.nome_unidade,
+                    nomeColaborador:
+                        evento.colaborador || evento.nome_colaborador || evento.nomeFuncionario,
+                    ufCrm:
+                        evento.medicoUfCrm || evento.medico_uf_crm
+                });
+
+            if (!medicoDoPdf) {
+                continue;
+            }
+
+            evento.medicoEmitente =
+                medicoDoPdf.nome;
+
+            evento.medicoCrm =
+                medicoDoPdf.crm;
+
+            evento.medico_emitente =
+                medicoDoPdf.nome;
+
+            evento.medico_crm =
+                medicoDoPdf.crm;
+
+            if (medicoDoPdf.uf) {
+                evento.medicoUfCrm = medicoDoPdf.uf;
+                evento.medico_uf_crm = medicoDoPdf.uf;
+            }
+
+            evento.medicoOrigem =
+                'pdf_assinatura_digital';
+
+            console.log(
+                `🩺 Médico complementado via PDF do ASO | ` +
+                `Ficha ${evento.idFicha || evento.id_ficha_soc} | ` +
+                `${medicoDoPdf.nome} (CRM ${medicoDoPdf.crm})`
+            );
+
+        } catch (error) {
+
+            console.warn(
+                `⚠️ Não foi possível complementar o médico via PDF | ` +
+                `Ficha ${evento.idFicha || evento.id_ficha_soc}:`,
+                error.message
+            );
+        }
+    }
+
+    return eventos2220;
 }
 
 function normalizarDataComparacaoSoc(
@@ -25166,7 +25313,290 @@ async function criarOuAtualizarPendenciaMatriculaEsocial(
 
 
 // ============================================================
-// GARANTIR MATRÍCULA OFICIAL
+// RECONCILIAR VÍNCULO OFICIAL POR CPF + MATRÍCULA
+//
+// IMPORTANTE:
+// O evento local pode ter sido recriado/atualizado pelo SOC e,
+// nesse processo, manter uma matrícula oficial antiga ao mesmo
+// tempo em que o empregador foi recalculado pela unidade do SOC.
+//
+// Antes do envio, precisamos tratar CPF + matrícula como uma
+// identidade de vínculo oficial e recuperar também o empregador
+// correspondente em esocial_vinculos.
+//
+// Isso evita combinar:
+//   matrícula oficial correta + empregador incorreto
+// e receber o erro eSocial 1557.
+// ============================================================
+
+async function buscarVinculoOficialPorCpfMatriculaEsocial(
+    evento
+) {
+
+    if (
+        !evento ||
+        typeof evento !== 'object'
+    ) {
+
+        return null;
+    }
+
+
+    const cpf =
+        normalizarCpfEsocial(
+            evento.cpf ||
+            ''
+        );
+
+
+    const matricula =
+        String(
+            evento.matricula ||
+            ''
+        ).trim();
+
+
+    if (
+        cpf.length !== 11 ||
+        !matricula
+    ) {
+
+        return null;
+    }
+
+
+    const {
+        data,
+        error
+    } =
+        await getSupabase()
+            .from(
+                'esocial_vinculos'
+            )
+            .select(
+                '*'
+            )
+            .eq(
+                'cpf',
+                cpf
+            )
+            .eq(
+                'matricula_esocial',
+                matricula
+            )
+            .order(
+                'atualizado_em',
+                {
+                    ascending:
+                        false
+                }
+            )
+            .limit(
+                100
+            );
+
+
+    if (
+        error
+    ) {
+
+        throw error;
+    }
+
+
+    const candidatos =
+        Array.isArray(
+            data
+        )
+            ? data.filter(
+                item =>
+                    item &&
+                    typeof item === 'object'
+            )
+            : [];
+
+
+    if (
+        candidatos.length === 0
+    ) {
+
+        return null;
+    }
+
+
+    // ========================================================
+    // 1) MESMA DATA DE ADMISSÃO
+    //
+    // Se houver recontratação, a data é a melhor forma de
+    // distinguir vínculos com o mesmo CPF/matrícula.
+    // ========================================================
+
+    const dataAdmissaoEvento =
+        normalizarDataAdmissaoEsocial(
+            evento.data_admissao_esocial ||
+            evento.data_admissao ||
+            evento.dataAdmissao ||
+            ''
+        );
+
+
+    if (
+        dataAdmissaoEvento
+    ) {
+
+        const candidatosMesmaData =
+            candidatos.filter(
+                item =>
+                    normalizarDataAdmissaoEsocial(
+                        item?.data_admissao ||
+                        ''
+                    ) ===
+                    dataAdmissaoEvento
+            );
+
+
+        if (
+            candidatosMesmaData.length === 1
+        ) {
+
+            return candidatosMesmaData[0];
+        }
+
+
+        if (
+            candidatosMesmaData.length > 1
+        ) {
+
+            const empregadoresMesmaData =
+                new Set(
+                    candidatosMesmaData
+                        .map(
+                            item => {
+
+                                const tp =
+                                    String(
+                                        item?.tp_insc_empregador ||
+                                        item?.tpInscEmpregador ||
+                                        ''
+                                    ).trim();
+
+
+                                const nr =
+                                    normalizarNrInscEmpregadorEsocial(
+                                        tp,
+                                        item?.nr_insc_empregador ||
+                                        item?.nrInscEmpregador ||
+                                        ''
+                                    );
+
+
+                                return (
+                                    tp &&
+                                    nr
+                                )
+                                    ? `${tp}|${nr}`
+                                    : '';
+                            }
+                        )
+                        .filter(
+                            Boolean
+                        )
+                );
+
+
+            if (
+                empregadoresMesmaData.size === 1
+            ) {
+
+                return candidatosMesmaData[0];
+            }
+        }
+    }
+
+
+    // ========================================================
+    // 2) TODOS OS REGISTROS APONTAM PARA O MESMO EMPREGADOR
+    //
+    // É comum existir duplicidade histórica do mesmo vínculo
+    // por importações/cache. Se todos convergem para o mesmo
+    // empregador, não existe ambiguidade real.
+    // ========================================================
+
+    const empregadores =
+        new Set(
+            candidatos
+                .map(
+                    item => {
+
+                        const tp =
+                            String(
+                                item?.tp_insc_empregador ||
+                                item?.tpInscEmpregador ||
+                                ''
+                            ).trim();
+
+
+                        const nr =
+                            normalizarNrInscEmpregadorEsocial(
+                                tp,
+                                item?.nr_insc_empregador ||
+                                item?.nrInscEmpregador ||
+                                ''
+                            );
+
+
+                        return (
+                            tp &&
+                            nr
+                        )
+                            ? `${tp}|${nr}`
+                            : '';
+                    }
+                )
+                .filter(
+                    Boolean
+                )
+        );
+
+
+    if (
+        empregadores.size === 1
+    ) {
+
+        return candidatos[0];
+    }
+
+
+    // ========================================================
+    // 3) MAIS DE UM EMPREGADOR POSSÍVEL
+    //
+    // Não arriscar associar o trabalhador à empresa errada.
+    // ========================================================
+
+    console.warn(
+        '⚠️ Vínculo oficial ambíguo para CPF + matrícula:',
+        {
+            eventoId:
+                evento.id ||
+                null,
+            cpf,
+            matricula,
+            quantidadeCandidatos:
+                candidatos.length,
+            empregadores:
+                Array.from(
+                    empregadores
+                )
+        }
+    );
+
+
+    return null;
+}
+
+
+// ============================================================
+// GARANTIR MATRÍCULA + EMPREGADOR OFICIAIS
 // ============================================================
 
 async function garantirMatriculaOficialEvento(
@@ -25190,36 +25620,11 @@ async function garantirMatriculaOficialEvento(
     }
 
 
-    if (
-        matriculaEventoEhOficial(
-            evento
-        )
-    ) {
-
-        return {
-            encontrada:
-                true,
-            origem:
-                String(
-                    evento.matricula_origem ||
-                    ''
-                ),
-            matricula:
-                String(
-                    evento.matricula ||
-                    ''
-                ),
-            evento
-        };
-    }
-
-
     // ========================================================
     // DATA DE ADMISSÃO PRIMEIRO
     //
-    // A matrícula continua vindo SOMENTE do eSocial/BX/cache.
-    // O SOC é usado aqui apenas para obter a data de admissão
-    // e diferenciar corretamente vínculos/recontratações.
+    // Além de ajudar em recontratações, a data é usada para
+    // escolher o vínculo correto quando houver mais de um.
     // ========================================================
 
     const dataAdmissao =
@@ -25229,7 +25634,252 @@ async function garantirMatriculaOficialEvento(
 
 
     // ========================================================
-    // CACHE OFICIAL
+    // MATRÍCULA JÁ MARCADA COMO OFICIAL
+    //
+    // REGRA ANTIGA:
+    // retornava imediatamente e confiava no empregador já salvo
+    // no evento.
+    //
+    // REGRA NOVA:
+    // CPF + matrícula são usados para reencontrar o vínculo em
+    // esocial_vinculos e reconciliar TAMBÉM o empregador antes
+    // de qualquer S-2220/S-2240 ser transmitido.
+    // ========================================================
+
+    if (
+        matriculaEventoEhOficial(
+            evento
+        )
+    ) {
+
+        const vinculoPorCpfMatricula =
+            await buscarVinculoOficialPorCpfMatriculaEsocial(
+                evento
+            );
+
+
+        if (
+            vinculoPorCpfMatricula
+        ) {
+
+            const fonteVinculo =
+                String(
+                    vinculoPorCpfMatricula.fonte ||
+                    evento.matricula_origem ||
+                    'cache_esocial'
+                )
+                    .trim()
+                    .toLowerCase();
+
+
+            const origemAplicacao =
+                ESOCIAL_MATRICULA_ORIGENS_OFICIAIS.has(
+                    fonteVinculo
+                )
+                    ? fonteVinculo
+                    : 'cache_esocial';
+
+
+            const tpAntes =
+                String(
+                    evento.tp_insc_empregador ||
+                    evento.tpInscEmpregador ||
+                    ''
+                ).trim();
+
+
+            const nrAntes =
+                normalizarNrInscEmpregadorEsocial(
+                    tpAntes,
+                    evento.nr_insc_empregador ||
+                    evento.nrInscEmpregador ||
+                    ''
+                );
+
+
+            const aplicado =
+                await aplicarVinculoOficialNoEvento(
+                    evento,
+                    vinculoPorCpfMatricula,
+                    origemAplicacao
+                );
+
+
+            const tpDepois =
+                String(
+                    evento.tp_insc_empregador ||
+                    evento.tpInscEmpregador ||
+                    ''
+                ).trim();
+
+
+            const nrDepois =
+                normalizarNrInscEmpregadorEsocial(
+                    tpDepois,
+                    evento.nr_insc_empregador ||
+                    evento.nrInscEmpregador ||
+                    ''
+                );
+
+
+            if (
+                tpAntes !== tpDepois ||
+                nrAntes !== nrDepois
+            ) {
+
+                console.log(
+                    '🔁 Empregador do vínculo reconciliado antes do envio eSocial:',
+                    {
+                        eventoId:
+                            evento.id ||
+                            null,
+                        cpf:
+                            normalizarCpfEsocial(
+                                evento.cpf ||
+                                ''
+                            ),
+                        matricula:
+                            String(
+                                evento.matricula ||
+                                ''
+                            ).trim(),
+                        empregadorAnterior:
+                            tpAntes && nrAntes
+                                ? `${tpAntes}|${nrAntes}`
+                                : null,
+                        empregadorOficial:
+                            tpDepois && nrDepois
+                                ? `${tpDepois}|${nrDepois}`
+                                : null,
+                        origem:
+                            origemAplicacao
+                    }
+                );
+            }
+
+
+            return {
+                ...aplicado,
+                encontrada:
+                    true,
+                origem:
+                    origemAplicacao,
+                dataAdmissao:
+                    dataAdmissao ||
+                    null,
+                empregadorReconciliado:
+                    true,
+                evento
+            };
+        }
+
+
+        // ====================================================
+        // FALLBACK PELO EMPREGADOR ATUAL
+        //
+        // Útil para bases antigas em que o vínculo existe no
+        // cache oficial, mas ainda não foi encontrado pela
+        // consulta direta CPF + matrícula.
+        // ====================================================
+
+        const cacheMesmoEmpregador =
+            await buscarVinculoOficialCacheEsocial(
+                evento
+            );
+
+
+        if (
+            cacheMesmoEmpregador
+        ) {
+
+            const fonteCache =
+                String(
+                    cacheMesmoEmpregador.fonte ||
+                    'cache_esocial'
+                )
+                    .trim()
+                    .toLowerCase();
+
+
+            const origemCache =
+                ESOCIAL_MATRICULA_ORIGENS_OFICIAIS.has(
+                    fonteCache
+                )
+                    ? fonteCache
+                    : 'cache_esocial';
+
+
+            const aplicado =
+                await aplicarVinculoOficialNoEvento(
+                    evento,
+                    cacheMesmoEmpregador,
+                    origemCache
+                );
+
+
+            return {
+                ...aplicado,
+                encontrada:
+                    true,
+                origem:
+                    origemCache,
+                dataAdmissao:
+                    dataAdmissao ||
+                    null,
+                empregadorReconciliado:
+                    true,
+                evento
+            };
+        }
+
+
+        // ====================================================
+        // MATRÍCULA MARCADA COMO OFICIAL, MAS SEM VÍNCULO
+        // RECONCILIÁVEL.
+        //
+        // Não transmitir combinando uma matrícula real com um
+        // empregador possivelmente recalculado pelo SOC.
+        // ====================================================
+
+        if (
+            criarPendencia
+        ) {
+
+            await criarOuAtualizarPendenciaMatriculaEsocial(
+                evento
+            );
+        }
+
+
+        return {
+            encontrada:
+                false,
+            origem:
+                String(
+                    evento.matricula_origem ||
+                    ''
+                ) ||
+                null,
+            matricula:
+                String(
+                    evento.matricula ||
+                    ''
+                ) ||
+                null,
+            dataAdmissao:
+                dataAdmissao ||
+                null,
+            empregadorReconciliado:
+                false,
+            motivo:
+                'VINCULO_OFICIAL_NAO_RECONCILIADO',
+            evento
+        };
+    }
+
+
+    // ========================================================
+    // EVENTO AINDA SEM MATRÍCULA OFICIAL
     // ========================================================
 
     const cache =
@@ -25242,21 +25892,40 @@ async function garantirMatriculaOficialEvento(
         cache
     ) {
 
+        const fonteCache =
+            String(
+                cache.fonte ||
+                'cache_esocial'
+            )
+                .trim()
+                .toLowerCase();
+
+
+        const origemCache =
+            ESOCIAL_MATRICULA_ORIGENS_OFICIAIS.has(
+                fonteCache
+            )
+                ? fonteCache
+                : 'cache_esocial';
+
+
         const aplicado =
             await aplicarVinculoOficialNoEvento(
                 evento,
                 cache,
-                'cache_esocial'
+                origemCache
             );
 
 
         return {
             ...aplicado,
             origem:
-                'cache_esocial',
+                origemCache,
             dataAdmissao:
                 dataAdmissao ||
                 null,
+            empregadorReconciliado:
+                true,
             evento
         };
     }
@@ -25286,6 +25955,8 @@ async function garantirMatriculaOficialEvento(
         dataAdmissao:
             dataAdmissao ||
             null,
+        empregadorReconciliado:
+            false,
         motivo:
             dataAdmissao
                 ? 'MATRICULA_OFICIAL_PENDENTE'
@@ -25293,7 +25964,6 @@ async function garantirMatriculaOficialEvento(
         evento
     };
 }
-
 
 // ============================================================
 // BACKFILL SEM CONSUMIR BX
@@ -40223,6 +40893,49 @@ if (
 
 
             // ====================================================
+            // S-2220: COMPLEMENTAR MÉDICO PELO ASO DO SOC (CÓDIGO 611)
+            // ====================================================
+
+            if (
+                tipoEvento === 'S-2220' &&
+                medicoPareceGenericoSoc(
+                    eventoParaEnvio.medico_emitente || eventoParaEnvio.medicoEmitente,
+                    eventoParaEnvio.medico_crm || eventoParaEnvio.medicoCrm
+                )
+            ) {
+                await complementarMedicoComPdfAso([eventoParaEnvio]);
+
+                const crmExtraido = String(
+                    eventoParaEnvio.medico_crm || eventoParaEnvio.medicoCrm || ''
+                ).trim();
+
+                if (!crmExtraido) {
+                    return res.status(409).json({
+                        success: false,
+                        bloqueado: true,
+                        motivo: 'MEDICO_ASO_PENDENTE',
+                        error: 'Não foi possível obter o médico e o CRM na assinatura digital do ASO. Conecte o navegador remoto do SOC e tente novamente.'
+                    });
+                }
+
+                const atualizacaoMedico = {
+                    medico_emitente: eventoParaEnvio.medico_emitente || eventoParaEnvio.medicoEmitente,
+                    medico_crm: crmExtraido,
+                    medico_uf_crm: eventoParaEnvio.medico_uf_crm || eventoParaEnvio.medicoUfCrm,
+                    updated_at: new Date().toISOString()
+                };
+
+                const { error: erroAtualizarMedico } = await getSupabase()
+                    .from('esocial_eventos')
+                    .update(atualizacaoMedico)
+                    .eq('id', id);
+
+                if (erroAtualizarMedico) throw erroAtualizarMedico;
+                Object.assign(eventoParaEnvio, atualizacaoMedico);
+            }
+
+
+            // ====================================================
             // GERAR XML NOVO
             //
             // Não reutiliza xml_gerado/xml_assinado antigo.
@@ -42378,12 +43091,24 @@ const eventos2220ComAssinatura =
 
 
 // ============================================================
+// 2.5. COMPLEMENTAR MÉDICO VIA PDF DO ASO (FALLBACK)
+// Quando o SOC devolve um médico genérico (sem nome/CRM reais),
+// tenta ler a assinatura digital do PDF do ASO.
+// ============================================================
+
+const eventos2220ComMedico =
+    await complementarMedicoComPdfAso(
+        eventos2220ComAssinatura
+    );
+
+
+// ============================================================
 // 3. APLICAR REGRA S-2220 / S-2240
 // ============================================================
 
 const eventosGerados =
     await aplicarRegraEventosEsocial(
-        eventos2220ComAssinatura
+        eventos2220ComMedico
     );
 
 
@@ -52507,13 +53232,6 @@ function sessaoConectorLocalEsocialAtiva() {
     );
 }
 
-function sessaoConectorLocalSocAtiva() {
-    return (
-        conectorLocalEsocialOnline() &&
-        ultimoConectorLocalEsocial?.sessaoSocAtiva === true
-    );
-}
-
 function criarIdComandoConectorLocalEsocial() {
     return [
         'cmd',
@@ -53475,9 +54193,6 @@ router.get(
                 sessaoAtiva:
                     ultimoConectorLocalEsocial?.sessaoAtiva ===
                         true,
-                sessaoSocAtiva:
-                    ultimoConectorLocalEsocial?.sessaoSocAtiva ===
-                        true,
                 estadoConector:
                     ultimoConectorLocalEsocial?.estado ||
                     (
@@ -53859,82 +54574,29 @@ router.post(
                     });
             }
 
-            const empresaId =
+            let empresaId =
                 String(
                     req.body?.empresaId ||
                     ''
                 ).trim();
 
-            const cnpjSelecionado =
+            let cnpjSelecionado =
                 normalizarCnpj(
                     req.body?.cnpjSelecionado ||
                     ''
                 );
 
-            if (!empresaId) {
-                return res
-                    .status(400)
-                    .json({
-                        success: false,
-                        error:
-                            'Selecione uma Unidade/CNPJ específico antes de consultar pelo PC.'
-                    });
-            }
-
-            const empresasSelecionadas =
-                await buscarEmpresasSupabase({
-                    empresaId
-                });
-
-            const empresaSelecionada =
-                (
-                    Array.isArray(
-                        empresasSelecionadas
-                    )
-                        ? empresasSelecionadas
-                        : []
-                )[0] ||
-                null;
-
-            if (!empresaSelecionada) {
-                return res
-                    .status(400)
-                    .json({
-                        success: false,
-                        error:
-                            'A unidade selecionada não foi encontrada.'
-                    });
-            }
-
-            const cnpjEmpresa =
-                normalizarCnpj(
-                    empresaSelecionada?.cnpj ||
+            const holdingSelecionadaTela =
+                String(
+                    req.body?.holdingSelecionada ||
                     ''
-                );
+                ).trim();
 
-            if (cnpjEmpresa.length !== 14) {
-                return res
-                    .status(400)
-                    .json({
-                        success: false,
-                        error:
-                            'A unidade selecionada não possui CNPJ válido cadastrado.'
-                    });
-            }
-
-            if (
-                cnpjSelecionado &&
-                cnpjSelecionado !==
-                    cnpjEmpresa
-            ) {
-                return res
-                    .status(409)
-                    .json({
-                        success: false,
-                        error:
-                            'O CNPJ enviado pela tela não corresponde ao cadastro da unidade.'
-                    });
-            }
+            const unidadeSelecionadaTela =
+                String(
+                    req.body?.unidadeSelecionada ||
+                    ''
+                ).trim();
 
             const ids = Array.from(
                 new Set(
@@ -53965,6 +54627,273 @@ router.post(
 
             if (error) throw error;
 
+            const eventos =
+                Array.isArray(data)
+                    ? data
+                    : [];
+
+            const cnpjsDosEventos =
+                Array.from(
+                    new Set(
+                        eventos
+                            .map(
+                                evento =>
+                                    normalizarCnpj(
+                                        evento?.cnpj_unidade ||
+                                        evento?.cnpj ||
+                                        ''
+                                    )
+                            )
+                            .filter(
+                                cnpj =>
+                                    cnpj.length ===
+                                        14
+                            )
+                    )
+                );
+
+            if (
+                cnpjsDosEventos.length >
+                    1
+            ) {
+                return res
+                    .status(409)
+                    .json({
+                        success:
+                            false,
+                        error:
+                            'Os eventos enviados pertencem a mais de um CNPJ. A consulta foi bloqueada para evitar mistura entre unidades.'
+                    });
+            }
+
+            if (
+                cnpjSelecionado.length !==
+                    14 &&
+                cnpjsDosEventos.length ===
+                    1
+            ) {
+                cnpjSelecionado =
+                    cnpjsDosEventos[0];
+            }
+
+            let empresaSelecionada =
+                null;
+
+            if (
+                empresaId
+            ) {
+                const empresasPorId =
+                    await buscarEmpresasSupabase({
+                        empresaId
+                    });
+
+                empresaSelecionada =
+                    (
+                        Array.isArray(
+                            empresasPorId
+                        )
+                            ? empresasPorId
+                            : []
+                    )[0] ||
+                    null;
+            }
+
+            /*
+             * Fallback seguro para cadastros antigos:
+             * resolve primeiro por CNPJ exato. Se a tabela precos não
+             * tiver CNPJ, aceita holding+unidade apenas quando o resultado
+             * for único. Nunca escolhe filial pela raiz do CNPJ.
+             */
+            if (
+                !empresaSelecionada ||
+                normalizarCnpj(
+                    empresaSelecionada?.cnpj ||
+                    ''
+                ).length !==
+                    14
+            ) {
+                const todasEmpresas =
+                    await buscarEmpresasSupabase({});
+
+                if (
+                    cnpjSelecionado.length ===
+                        14
+                ) {
+                    const porCnpj =
+                        todasEmpresas.filter(
+                            empresa =>
+                                normalizarCnpj(
+                                    empresa?.cnpj ||
+                                    ''
+                                ) ===
+                                cnpjSelecionado
+                        );
+
+                    if (
+                        porCnpj.length ===
+                            1
+                    ) {
+                        empresaSelecionada =
+                            porCnpj[0];
+                    }
+                }
+
+                if (
+                    !empresaSelecionada ||
+                    normalizarCnpj(
+                        empresaSelecionada?.cnpj ||
+                        ''
+                    ).length !==
+                        14
+                ) {
+                    const holdingReferencia =
+                        normalizarTextoComparacaoSoc(
+                            holdingSelecionadaTela ||
+                            eventos[0]?.holding ||
+                            empresaSelecionada?.holding ||
+                            ''
+                        );
+
+                    const unidadeReferencia =
+                        normalizarTextoComparacaoSoc(
+                            unidadeSelecionadaTela ||
+                            eventos[0]?.unidade ||
+                            eventos[0]?.nome_unidade ||
+                            empresaSelecionada?.unidade ||
+                            ''
+                        );
+
+                    const porNome =
+                        todasEmpresas.filter(
+                            empresa => {
+                                const holdingEmpresa =
+                                    normalizarTextoComparacaoSoc(
+                                        empresa?.holding ||
+                                        ''
+                                    );
+
+                                const unidadeEmpresa =
+                                    normalizarTextoComparacaoSoc(
+                                        empresa?.unidade ||
+                                        ''
+                                    );
+
+                                if (
+                                    holdingReferencia &&
+                                    holdingEmpresa !==
+                                        holdingReferencia
+                                ) {
+                                    return false;
+                                }
+
+                                if (
+                                    unidadeReferencia &&
+                                    unidadeEmpresa !==
+                                        unidadeReferencia
+                                ) {
+                                    return false;
+                                }
+
+                                return Boolean(
+                                    holdingReferencia ||
+                                    unidadeReferencia
+                                );
+                            }
+                        );
+
+                    if (
+                        porNome.length ===
+                            1
+                    ) {
+                        empresaSelecionada =
+                            porNome[0];
+                    }
+                }
+            }
+
+            if (!empresaSelecionada) {
+                return res
+                    .status(400)
+                    .json({
+                        success: false,
+                        error:
+                            'Não foi possível vincular a unidade filtrada a um cadastro único de empresa. Nenhuma consulta foi iniciada.'
+                    });
+            }
+
+            empresaId =
+                String(
+                    empresaSelecionada?.id ||
+                    empresaId ||
+                    ''
+                ).trim();
+
+            const cnpjCadastro =
+                normalizarCnpj(
+                    empresaSelecionada?.cnpj ||
+                    ''
+                );
+
+            if (
+                cnpjCadastro.length ===
+                    14 &&
+                cnpjSelecionado.length ===
+                    14 &&
+                cnpjCadastro !==
+                    cnpjSelecionado
+            ) {
+                return res
+                    .status(409)
+                    .json({
+                        success: false,
+                        error:
+                            'O CNPJ encontrado para a unidade não corresponde ao CNPJ dos eventos selecionados. A consulta foi bloqueada.'
+                    });
+            }
+
+            const cnpjEmpresa =
+                cnpjCadastro.length ===
+                    14
+                    ? cnpjCadastro
+                    : (
+                        cnpjSelecionado.length ===
+                            14
+                            ? cnpjSelecionado
+                            : (
+                                cnpjsDosEventos.length ===
+                                    1
+                                    ? cnpjsDosEventos[0]
+                                    : ''
+                              )
+                      );
+
+            if (
+                cnpjEmpresa.length !==
+                    14
+            ) {
+                return res
+                    .status(400)
+                    .json({
+                        success: false,
+                        error:
+                            'A unidade foi encontrada, mas não há CNPJ completo de 14 dígitos disponível no cadastro nem nos eventos. Nenhuma consulta foi iniciada.'
+                    });
+            }
+
+            const unidadeSelecionada =
+                String(
+                    empresaSelecionada?.unidade ||
+                    unidadeSelecionadaTela ||
+                    ''
+                ).trim();
+
+            const holdingSelecionada =
+                String(
+                    empresaSelecionada?.holding ||
+                    holdingSelecionadaTela ||
+                    ''
+                ).trim();
+
             let enfileirados = 0;
             let imediatos = 0;
             let semAutorizacao = 0;
@@ -53985,13 +54914,17 @@ router.post(
             const colaboradoresSolicitados =
                 new Set();
 
+            /*
+             * Um mesmo colaborador normalmente possui S-2220 e S-2240.
+             * Se houver erro de preparação nos dois registros, isso
+             * continua sendo UM colaborador com erro, não dois.
+             */
+            const colaboradoresComErro =
+                new Set();
+
             for (
                 const evento
-                of (
-                    Array.isArray(data)
-                        ? data
-                        : []
-                )
+                of eventos
             ) {
                 try {
                     const cnpjEvento =
@@ -54014,18 +54947,6 @@ router.post(
                             ''
                         ).trim();
 
-                    const unidadeSelecionada =
-                        String(
-                            empresaSelecionada?.unidade ||
-                            ''
-                        ).trim();
-
-                    const holdingSelecionada =
-                        String(
-                            empresaSelecionada?.holding ||
-                            ''
-                        ).trim();
-
                     if (
                         cnpjEvento.length ===
                             14 &&
@@ -54037,11 +54958,33 @@ router.post(
                         );
                     }
 
+                    /*
+                     * Se o evento possui CNPJ completo e ele já foi
+                     * confirmado como o MESMO CNPJ da unidade escolhida,
+                     * esse é o vínculo mais forte e seguro.
+                     *
+                     * Nomes de holding/unidade podem variar entre SOC,
+                     * tabela precos e tela (abreviação, razão social,
+                     * acentos etc.). Não bloqueamos por nome quando o
+                     * CNPJ exato de 14 dígitos já coincidiu.
+                     *
+                     * Só usamos nome como trava quando o evento NÃO tem
+                     * CNPJ completo.
+                     */
+                    const eventoTemCnpjExato =
+                        cnpjEvento.length ===
+                        14;
+
                     if (
+                        !eventoTemCnpjExato &&
                         unidadeEvento &&
                         unidadeSelecionada &&
-                        unidadeEvento !==
+                        normalizarTextoComparacaoSoc(
+                            unidadeEvento
+                        ) !==
+                        normalizarTextoComparacaoSoc(
                             unidadeSelecionada
+                        )
                     ) {
                         throw new Error(
                             `Evento ${evento?.id || ''} pertence à unidade "${unidadeEvento}", mas foi selecionada "${unidadeSelecionada}".`
@@ -54049,10 +54992,15 @@ router.post(
                     }
 
                     if (
+                        !eventoTemCnpjExato &&
                         holdingEvento &&
                         holdingSelecionada &&
-                        holdingEvento !==
+                        normalizarTextoComparacaoSoc(
+                            holdingEvento
+                        ) !==
+                        normalizarTextoComparacaoSoc(
                             holdingSelecionada
+                        )
                     ) {
                         throw new Error(
                             `Evento ${evento?.id || ''} pertence à holding "${holdingEvento}", mas foi selecionada "${holdingSelecionada}".`
@@ -54131,8 +55079,29 @@ router.post(
                         enfileirados++;
                     }
                 } catch (errorItem) {
+                    const cpfErro =
+                        normalizarCpfEsocial(
+                            evento?.cpf ||
+                            ''
+                        );
+
+                    const chaveColaboradorErro =
+                        `${cnpjEmpresa}|${cpfErro || evento?.codigo_funcionario || evento?.id || ''}`;
+
+                    colaboradoresComErro
+                        .add(
+                            chaveColaboradorErro
+                        );
+
                     erros.push({
-                        id: evento?.id || null,
+                        id:
+                            evento?.id ||
+                            null,
+                        cpf:
+                            cpfErro ||
+                            null,
+                        chaveColaborador:
+                            chaveColaboradorErro,
                         error:
                             errorItem?.message ||
                             String(errorItem)
@@ -54161,7 +55130,9 @@ router.post(
                     resolvidosDoCache:
                         colaboradoresImediatos.size,
                     semAutorizacao:
-                        colaboradoresSemAutorizacao.size
+                        colaboradoresSemAutorizacao.size,
+                    comErro:
+                        colaboradoresComErro.size
                 },
                 erros
             });
@@ -54370,9 +55341,6 @@ router.post(
             sessaoAtiva:
                 req.body?.sessaoAtiva ===
                     true,
-            sessaoSocAtiva:
-                req.body?.sessaoSocAtiva ===
-                    true,
             navegadorAberto:
                 req.body?.navegadorAberto ===
                     true,
@@ -54510,131 +55478,6 @@ router.post(
     }
 );
 
-// ============================================================
-// SOLICITAR ABERTURA DO SOC NO CHROME LOCAL
-// ============================================================
-
-router.post(
-    '/conector-local/solicitar-conexao-soc',
-    async (req, res) => {
-        try {
-            if (!conectorLocalEsocialOnline()) {
-                return res.status(409).json({
-                    success: false,
-                    code: 'CONECTOR_OFFLINE',
-                    error: 'O conector local não está online neste computador.'
-                });
-            }
-
-            if (sessaoConectorLocalSocAtiva()) {
-                return res.json({
-                    success: true,
-                    jaConectado: true,
-                    sessaoSocAtiva: true,
-                    message: 'A sessão do SOC já está conectada.'
-                });
-            }
-
-            const conectorId = String(ultimoConectorLocalEsocial?.id || '').trim();
-            if (!conectorId) {
-                return res.status(409).json({
-                    success: false,
-                    code: 'CONECTOR_SEM_ID',
-                    error: 'O conector está online, mas ainda não informou sua identificação.'
-                });
-            }
-
-            comandoConectorLocalEsocial = {
-                id: criarIdComandoConectorLocalEsocial(),
-                tipo: 'conectar_soc',
-                conectorId,
-                status: 'pendente',
-                criadoEm: new Date().toISOString(),
-                recebidoEm: null,
-                concluidoEm: null,
-                erro: null,
-                dados: null,
-                resultado: null
-            };
-
-            return res.json({
-                success: true,
-                comandoId: comandoConectorLocalEsocial.id,
-                message: 'Comando enviado. O Chrome será aberto no SOC.'
-            });
-        } catch (error) {
-            return res.status(500).json({
-                success: false,
-                error: error?.message || String(error)
-            });
-        }
-    }
-);
-
-router.post(
-    '/conector-local/buscar-medico-aso/:id',
-    async (req, res) => {
-        try {
-            if (!conectorLocalEsocialOnline()) {
-                return res.status(409).json({
-                    success: false,
-                    code: 'CONECTOR_OFFLINE',
-                    error: 'O conector local não está online neste computador.'
-                });
-            }
-
-            const evento = await carregarEventoConectorLocalEsocial(req.params.id);
-            if (!evento) {
-                return res.status(404).json({ success: false, error: 'Evento não encontrado.' });
-            }
-
-            const conectorId = String(ultimoConectorLocalEsocial?.id || '').trim();
-            comandoConectorLocalEsocial = {
-                id: criarIdComandoConectorLocalEsocial(),
-                tipo: 'buscar_medico_soc',
-                conectorId,
-                status: 'pendente',
-                criadoEm: new Date().toISOString(),
-                recebidoEm: null,
-                concluidoEm: null,
-                erro: null,
-                resultado: null,
-                dados: {
-                    eventoId: String(evento.id),
-                    holding: evento.holding || '',
-                    unidade: evento.unidade || evento.nome_unidade || '',
-                    nomeColaborador:
-                        evento.colaborador ||
-                        evento.nome_colaborador ||
-                        evento.nome_funcionario ||
-                        evento.nomeFuncionario ||
-                        '',
-                    ufCrm:
-                        evento.medico_uf_crm ||
-                        evento.medicoUfCrm ||
-                        String(
-                            evento.medico_emitente ||
-                            evento.medicoEmitente ||
-                            ''
-                        ).match(/-\s*([A-Z]{2})\s*$/i)?.[1] ||
-                        ''
-                }
-            };
-
-            return res.json({
-                success: true,
-                comandoId: comandoConectorLocalEsocial.id,
-                message: 'Busca do ASO enviada ao conector.'
-            });
-        } catch (error) {
-            return res.status(500).json({
-                success: false,
-                error: error?.message || String(error)
-            });
-        }
-    }
-);
-
 
 // ============================================================
 // CONECTOR BUSCA COMANDO PENDENTE
@@ -54711,10 +55554,7 @@ router.get(
                     tipo:
                         comando.tipo,
                     criadoEm:
-                        comando.criadoEm,
-                    dados:
-                        comando.dados ||
-                        null
+                        comando.criadoEm
                 }
             });
 
@@ -54783,39 +55623,8 @@ router.post(
                             : String(
                                 req.body?.error ||
                                 'Falha ao conectar ao eSocial.'
-                              ),
-                    resultado:
-                        sucesso && req.body?.resultado && typeof req.body.resultado === 'object'
-                            ? req.body.resultado
-                            : null
+                              )
                 };
-
-                if (
-                    sucesso &&
-                    comandoConectorLocalEsocial.tipo === 'buscar_medico_soc' &&
-                    comandoConectorLocalEsocial.dados?.eventoId
-                ) {
-                    const resultado = comandoConectorLocalEsocial.resultado || {};
-                    const nome = String(resultado.nome || '').trim();
-                    const crm = String(resultado.crm || '').replace(/\D+/g, '');
-                    const uf = String(resultado.uf || comandoConectorLocalEsocial.dados.ufCrm || '').trim().toUpperCase();
-
-                    if (!nome || !crm) {
-                        throw new Error('O conector concluiu a busca, mas não retornou nome e CRM válidos.');
-                    }
-
-                    const { error: erroAtualizacao } = await getSupabase()
-                        .from('esocial_eventos')
-                        .update({
-                            medico_emitente: nome,
-                            medico_crm: crm,
-                            medico_uf_crm: uf || null,
-                            updated_at: new Date().toISOString()
-                        })
-                        .eq('id', comandoConectorLocalEsocial.dados.eventoId);
-
-                    if (erroAtualizacao) throw erroAtualizacao;
-                }
             }
 
             return res.json({
@@ -55900,6 +56709,12 @@ router.get(
 
 
 
+const strikesSemAutorizacaoConectorLocalEsocial =
+    new Map();
+
+const JANELA_CONFIRMACAO_SEM_AUTORIZACAO_MS =
+    30 * 60 * 1000;
+
 router.post(
     '/conector-local/sem-autorizacao-lote',
     async (req, res) => {
@@ -56002,6 +56817,123 @@ router.post(
                             'Tarefas do lote não encontradas.'
                     });
             }
+
+            // ============================================================
+            // CONFIRMAÇÃO EM 2 RELATOS
+            // ============================================================
+            //
+            // O conector local às vezes reporta "sem autorização" de
+            // forma prematura (checagem no gov.br ainda não tinha
+            // terminado). Para não bloquear um CNPJ que na verdade tem
+            // autorização, só aplicamos o bloqueio de verdade no
+            // segundo relato consecutivo para o mesmo empregador,
+            // dentro de uma janela curta. No primeiro relato, só
+            // registramos o erro e deixamos a tarefa voltar pra fila
+            // (tentada de novo em breve).
+            //
+            // ============================================================
+
+            const chaveEmpregador =
+                String(
+                    primeira.codigo_empresa ||
+                    cnpj ||
+                    ''
+                ).trim();
+
+            const agoraMs =
+                Date.now();
+
+            const primeiroRelatoEm =
+                strikesSemAutorizacaoConectorLocalEsocial.get(
+                    chaveEmpregador
+                );
+
+            const dentroDaJanela =
+                primeiroRelatoEm &&
+                (
+                    agoraMs -
+                    primeiroRelatoEm
+                ) <
+                    JANELA_CONFIRMACAO_SEM_AUTORIZACAO_MS;
+
+            if (
+                !dentroDaJanela
+            ) {
+                // Primeiro relato (ou o anterior expirou): não bloqueia
+                // ainda, só registra o erro e agenda nova tentativa.
+                strikesSemAutorizacaoConectorLocalEsocial.set(
+                    chaveEmpregador,
+                    agoraMs
+                );
+
+                const {
+                    data:
+                        atualizadasPrimeiroRelato,
+                    error:
+                        erroPrimeiroRelato
+                } =
+                    await getSupabase()
+                        .from(
+                            'esocial_matriculas_pendentes'
+                        )
+                        .update({
+                            ultimo_erro:
+                                mensagem,
+                            proxima_tentativa_em:
+                                new Date(
+                                    agoraMs +
+                                    (5 * 60 * 1000)
+                                ).toISOString(),
+                            updated_at:
+                                agora
+                        })
+                        .eq(
+                            'codigo_empresa',
+                            primeira.codigo_empresa
+                        )
+                        .in(
+                            'status',
+                            [
+                                'aguardando_conector_local',
+                                'processando_conector_local',
+                                'erro_conector_local'
+                            ]
+                        )
+                        .select(
+                            'id'
+                        );
+
+                if (
+                    erroPrimeiroRelato
+                ) {
+                    throw erroPrimeiroRelato;
+                }
+
+                return res.json({
+                    success:
+                        true,
+                    cnpj:
+                        cnpj ||
+                        null,
+                    totalMarcado:
+                        0,
+                    tarefasReagendadas:
+                        Array.isArray(
+                            atualizadasPrimeiroRelato
+                        )
+                            ? atualizadasPrimeiroRelato.length
+                            : 0,
+                    status:
+                        'aguardando_confirmacao',
+                    motivo:
+                        'PROCURADOR_SEM_AUTORIZACAO_WEB_PRIMEIRO_RELATO'
+                });
+            }
+
+            // Segundo relato dentro da janela: confirma o bloqueio.
+            strikesSemAutorizacaoConectorLocalEsocial.delete(
+                chaveEmpregador
+            );
 
             // Marca todas as tarefas atuais do mesmo empregador,
             // evitando que outro CPF desse CNPJ seja tentado depois.
@@ -56805,8 +57737,12 @@ async function aplicarVinculoPortalSstNaEmpresaExata(
                 .update({
                     status:
                         'resolvido',
+                    // Motivo terminal (diferente do usado pela consulta
+                    // de reconciliarResultadosPortalSstV41): evita que
+                    // esta mesma pendência seja pega de novo na próxima
+                    // reconciliação e reprocessada pra sempre.
                     motivo:
-                        'VINCULO_CONFIRMADO_PORTAL_SST',
+                        'VINCULO_CONFIRMADO_PORTAL_SST_APLICADO',
                     ultimo_erro:
                         null,
                     proxima_tentativa_em:
